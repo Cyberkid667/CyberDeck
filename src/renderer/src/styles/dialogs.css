@@ -306,6 +306,10 @@
 .banner.set-confirm .btn svg.i { margin-top: 0; color: var(--tx-2); }
 .banner.set-confirm .btn-danger svg.i { color: var(--err); }
 .dialog[data-dialog='settings'] .dfoot { margin-top: 24px; }
+/* état des mises à jour sous l'interrupteur : phrase à gauche, boutons à droite */
+.dialog[data-dialog='settings'] .set-update { display: flex; align-items: center; gap: 12px; margin: 8px 0 0 30px; }
+.dialog[data-dialog='settings'] .set-update .hint { flex: 1; min-width: 0; margin: 0; }
+.dialog[data-dialog='settings'] .set-update .row-btns { display: flex; gap: 8px; flex: none; }
 .dfoot .set-ver { margin-right: auto; white-space: nowrap; }
 .dfoot .set-ver b { font-weight: 500; color: var(--tx-2); }
 

@@ -14,7 +14,8 @@ import type {
   SettingsPatch,
   Snapshot,
   ToEngine,
-  TorrentFileInfo
+  TorrentFileInfo,
+  UpdateState
 } from '../shared/types'
 import {
   addGame,
@@ -52,6 +53,7 @@ import {
   syncPlatforms,
   testSteamKey
 } from './platformSync'
+import { fetchUpdate, openReleasePage } from './updates'
 
 /** Nom public de l'app (fenêtre, journal, Gestionnaire des tâches). */
 const APP_NAME = 'CyberDeck'
@@ -182,6 +184,11 @@ let settings: Settings
 let lastSnapshot: Snapshot | null = null
 let nextRequestId = 1
 let onShutdownDone: (() => void) | null = null
+/** Version comparée aux Releases (tests : CYBERDECK_TEST_VERSION fait passer l'app pour plus ancienne). */
+const currentVersion = (): string => process.env.CYBERDECK_TEST_VERSION || app.getVersion()
+let update: UpdateState = { status: 'idle', current: '', latest: null, url: null, checkedAt: null, error: null }
+let updateCheck: Promise<UpdateState> | null = null
+const UPDATE_PERIOD = 12 * 3600_000
 const pendingAdds = new Map<number, (r: AddResult) => void>()
 /** Garde-fou : un fichier plus gros ne peut pas être un vrai .torrent (les plus gros font quelques dizaines de Mo). */
 const MAX_TORRENT_FILE = 200 * 1024 * 1024
@@ -235,7 +242,8 @@ function loadSettings(): Settings {
     defaultSavePath: downloadsDir(),
     port: 20000 + Math.floor(Math.random() * 40000),
     torrentsEnabled: false,
-    gamesFolder: null
+    gamesFolder: null,
+    checkUpdates: true
   }
   let saved: Partial<Settings> | null = null
   let text: string | null = null
@@ -264,6 +272,8 @@ function loadSettings(): Settings {
   if (typeof merged.defaultSavePath !== 'string' || !merged.defaultSavePath) merged.defaultSavePath = defaults.defaultSavePath
   if (typeof merged.gamesFolder !== 'string' || !merged.gamesFolder) merged.gamesFolder = null
   if (!Number.isInteger(merged.port) || merged.port < 1024 || merged.port > 65535) merged.port = defaults.port
+  // réglage apparu en 0.5.7 : activé pour les profils d'avant
+  if (typeof merged.checkUpdates !== 'boolean') merged.checkUpdates = true
   const known = typeof saved?.torrentsEnabled === 'boolean'
   if (!known) {
     // Nouvelle installation : torrents désactivés. Profil d'une version d'avant les torrents
@@ -280,6 +290,27 @@ function loadSettings(): Settings {
     }
   }
   return merged
+}
+
+/**
+ * Vérifie s'il existe une version plus récente sur GitHub. Automatique : seulement si le réglage
+ * est activé ; manuelle (bouton de Réglages) : toujours. Une seule vérification à la fois.
+ */
+function checkUpdates(manual: boolean): Promise<UpdateState> {
+  if (!manual && !settings.checkUpdates) return Promise.resolve(update)
+  if (updateCheck) return updateCheck
+  update = { ...update, status: 'checking', current: currentVersion() }
+  send('update', update)
+  updateCheck = fetchUpdate(currentVersion())
+    .then((u) => {
+      update = u
+      if (u.status === 'available') log(`Mise à jour disponible : ${u.latest} (installée : ${u.current})`)
+      else if (u.status === 'error') log(`Vérification des mises à jour impossible : ${u.error}`)
+      send('update', update)
+      return update
+    })
+    .finally(() => (updateCheck = null))
+  return updateCheck
 }
 
 function saveSettings(): void {
@@ -523,6 +554,11 @@ function registerIpc(): void {
       toEngine({ type: 'set-default-path', path: p.defaultSavePath })
     }
     if (p.gamesFolder === null || (typeof p.gamesFolder === 'string' && p.gamesFolder.trim())) settings.gamesFolder = p.gamesFolder
+    if (typeof p.checkUpdates === 'boolean' && p.checkUpdates !== settings.checkUpdates) {
+      settings.checkUpdates = p.checkUpdates
+      log(`Vérification des mises à jour ${settings.checkUpdates ? 'activée' : 'désactivée'}`)
+      if (settings.checkUpdates && update.status === 'idle') void checkUpdates(false)
+    }
     const toggled = typeof p.torrentsEnabled === 'boolean' && p.torrentsEnabled !== settings.torrentsEnabled
     if (toggled) {
       settings.torrentsEnabled = p.torrentsEnabled!
@@ -668,6 +704,10 @@ function registerIpc(): void {
   ipcMain.handle('steam:refresh-owned', () => refreshSteamOwned())
   ipcMain.on('steam:open-key-page', () => void shell.openExternal('https://steamcommunity.com/dev/apikey'))
 
+  ipcMain.handle('update:get', () => update)
+  ipcMain.handle('update:check', () => checkUpdates(true))
+  ipcMain.on('update:open', () => openReleasePage(update))
+
   ipcMain.handle('dialog:exe', async (_e, defaultPath?: string) => {
     const res = await dialog.showOpenDialog(win!, {
       title: 'Choisir le programme du jeu',
@@ -745,6 +785,10 @@ app.whenReady().then(() => {
   else log('Torrents désactivés : moteur torrent non démarré')
   // Jeux des plateformes (Steam, Epic…) : première lecture juste après l'ouverture.
   setTimeout(() => void syncPlatforms({ full: true }), 1500)
+  // Mises à jour : une vérification peu après l'ouverture, puis toutes les 12 h (si activé)
+  update = { ...update, current: currentVersion() }
+  setTimeout(() => void checkUpdates(false), 6000)
+  setInterval(() => void checkUpdates(false), UPDATE_PERIOD)
 })
 
 app.on('before-quit', (e) => {

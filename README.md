@@ -18,7 +18,7 @@ Gratuit, sans publicité, sans compte, sans télémétrie. Pour Windows 10 et 11
 
 Pas besoin d'être administrateur : l'app s'installe seulement pour ton compte Windows.
 
-**Mettre à jour** : télécharge la nouvelle version sur la même page et lance-la. Ta bibliothèque est gardée.
+**Mettre à jour** : quand une nouvelle version sort, CyberDeck te prévient (message et bouton « Mise à jour » en haut de la fenêtre). Clique sur **Télécharger**, puis lance le nouvel installateur : ta bibliothèque est gardée.
 
 **Désinstaller** : Paramètres Windows › Applications › CyberDeck › Désinstaller. Tes données restent dans `%APPDATA%\CyberDeck` : supprime ce dossier pour tout effacer.
 
@@ -45,7 +45,8 @@ Un jeu manque ? Ajoute-le à la main avec **Ajouter un jeu**, ou ouvre une *issu
 
 ## Confidentialité
 
-- **Aucune télémétrie** : pas de mise à jour automatique, pas de rapport de plantage, pas de mesure d'audience.
+- **Aucune télémétrie** : pas de rapport de plantage, pas de mesure d'audience.
+- **Mises à jour** : au démarrage puis toutes les 12 h, CyberDeck demande à GitHub (`api.github.com`) le numéro de la dernière version publiée. Rien n'est téléchargé ni installé sans toi. Désactivable dans Réglages.
 - Pour trouver les jaquettes, le **nom des jeux** est envoyé à la boutique Steam, puis à Wikipédia si Steam ne trouve rien. Les jaquettes Epic sont lues dans le cache du lanceur Epic.
 - **Seulement si tu entres ta clé d'API Steam** : la clé et ton SteamID sont envoyés à Valve pour lire la liste de tes jeux. La clé est chiffrée sur le disque par Windows.
 - Les autres plateformes sont lues **sur ton PC uniquement**.
@@ -95,7 +96,7 @@ Free, no ads, no account, no telemetry. For Windows 10 and 11 (64-bit). The inte
 
 No administrator rights needed: the app installs for your Windows account only.
 
-**Update**: download the new version from the same page and run it. Your library is kept.
+**Update**: when a new version is out, CyberDeck tells you (a message and a "Mise à jour" button at the top of the window). Click **Télécharger** (Download), then run the new installer: your library is kept.
 
 **Uninstall**: Windows Settings › Apps › CyberDeck › Uninstall. Your data stays in `%APPDATA%\CyberDeck`: delete that folder to remove everything.
 
@@ -122,7 +123,8 @@ A game is missing? Add it by hand with **Ajouter un jeu** (Add a game), or open 
 
 ## Privacy
 
-- **No telemetry**: no auto-update, no crash reports, no analytics.
+- **No telemetry**: no crash reports, no analytics.
+- **Updates**: at startup and every 12 hours, CyberDeck asks GitHub (`api.github.com`) for the latest published version number. Nothing is downloaded or installed without you. Can be turned off in Settings (*Réglages*).
 - To find covers, **game names** are sent to the Steam store, then to Wikipedia if Steam finds nothing. Epic covers are read from the Epic launcher's cache.
 - **Only if you enter your Steam API key**: the key and your SteamID are sent to Valve to read your game list. The key is encrypted on disk by Windows.
 - Other platforms are read **on your PC only**.

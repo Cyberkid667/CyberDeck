@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { EssaimApi, InstallResult, LibraryState, Notice, PlatformsState, Settings, Snapshot } from '../shared/types'
+import type { EssaimApi, InstallResult, LibraryState, Notice, PlatformsState, Settings, Snapshot, UpdateState } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (value: T) => void): () => void {
   const listener = (_e: unknown, value: T): void => cb(value)
@@ -52,7 +52,12 @@ const api: EssaimApi = {
   testSteamApiKey: (key) => ipcRenderer.invoke('steam:test-key', key),
   clearSteamApiKey: () => ipcRenderer.invoke('steam:clear-key'),
   refreshSteamOwned: () => ipcRenderer.invoke('steam:refresh-owned'),
-  openSteamApiKeyPage: () => ipcRenderer.send('steam:open-key-page')
+  openSteamApiKeyPage: () => ipcRenderer.send('steam:open-key-page'),
+
+  getUpdate: () => ipcRenderer.invoke('update:get'),
+  onUpdate: (cb) => subscribe<UpdateState>('update', cb),
+  checkUpdate: () => ipcRenderer.invoke('update:check'),
+  openUpdate: () => ipcRenderer.send('update:open')
 }
 
 contextBridge.exposeInMainWorld('essaim', api)

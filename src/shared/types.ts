@@ -133,10 +133,26 @@ export interface Settings {
   torrentsEnabled: boolean
   /** dossier proposé par « Importer un dossier » ; null = C:\Games s'il existe, sinon Documents */
   gamesFolder: string | null
+  /** vérifier au démarrage (puis toutes les 12 h) si une nouvelle version est publiée sur GitHub */
+  checkUpdates: boolean
 }
 
 /** Réglages modifiables depuis la fenêtre « Réglages » (le reste est géré par l'app). */
-export type SettingsPatch = Partial<Pick<Settings, 'torrentsEnabled' | 'defaultSavePath' | 'gamesFolder'>>
+export type SettingsPatch = Partial<Pick<Settings, 'torrentsEnabled' | 'defaultSavePath' | 'gamesFolder' | 'checkUpdates'>>
+
+/** Dernière vérification des mises à jour (Release la plus récente du dépôt GitHub). */
+export interface UpdateState {
+  /** 'idle' : pas encore vérifié ; 'available' : une version plus récente est publiée */
+  status: 'idle' | 'checking' | 'current' | 'available' | 'error'
+  /** version installée */
+  current: string
+  /** dernière version publiée (sans « v ») ; null si inconnue */
+  latest: string | null
+  /** page de la Release à ouvrir pour télécharger */
+  url: string | null
+  checkedAt: number | null
+  error: string | null
+}
 
 // ---------- Plateformes de jeux ----------
 
@@ -451,4 +467,12 @@ export interface EssaimApi {
   refreshSteamOwned(): Promise<SteamAccountState>
   /** ouvre https://steamcommunity.com/dev/apikey dans le navigateur */
   openSteamApiKeyPage(): void
+
+  // ---- Mises à jour (Release la plus récente sur GitHub) ----
+  getUpdate(): Promise<UpdateState>
+  onUpdate(cb: (u: UpdateState) => void): () => void
+  /** vérifie maintenant, même si la vérification automatique est désactivée */
+  checkUpdate(): Promise<UpdateState>
+  /** ouvre la page de téléchargement dans le navigateur */
+  openUpdate(): void
 }

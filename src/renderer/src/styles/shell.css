@@ -40,6 +40,13 @@
 .tb-side:hover { background: rgba(255,255,255,.07); color: var(--tx-1); }
 .tb-side:focus-visible { box-shadow: var(--focus-ring); }
 .tb-side svg.i { width: 17px; height: 17px; }
+/* « Mise à jour 0.5.7 » à côté du numéro de version : ouvre la page de téléchargement (accent blanc, SPEC) */
+.tb-update { -webkit-app-region: no-drag; flex: none; display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px 0 8px;
+  border: 1px solid rgba(255,255,255,.5); border-radius: 999px; font: 500 10.5px/1 var(--font-mono); letter-spacing: .06em; color: var(--tx-1);
+  box-shadow: var(--glow-sm); transition: background-color .12s, border-color .12s; }
+.tb-update:hover { background: rgba(255,255,255,.1); border-color: #fff; }
+.tb-update:focus-visible { box-shadow: var(--focus-ring); }
+.tb-update svg.i { width: 13px; height: 13px; }
 /* Barre latérale repliée : la bibliothèque prend toute la largeur, le fil d'Ariane de la bande dit où l'on est */
 .app.side-closed { --side-w: 0px; }
 .app.side-closed .sidebar { display: none; }

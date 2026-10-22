@@ -1,9 +1,9 @@
-import { Copy, FolderOpen, Gamepad2, LoaderCircle, Package, PanelLeftClose, PanelLeftOpen, Pause, Play, Plus, Trash2, X } from 'lucide-react'
+import { ArrowDownToLine, Copy, FolderOpen, Gamepad2, LoaderCircle, Package, PanelLeftClose, PanelLeftOpen, Pause, Play, Plus, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { version as APP_VERSION } from '../../../package.json'
 import { cleanGameName } from '../../shared/gameName'
 import { PLATFORM_INFO } from '../../shared/platforms'
-import type { Game, GamePlatform, LibraryState, PlatformsState, Settings, SettingsPatch, Snapshot, TorrentSummary } from '../../shared/types'
+import type { Game, GamePlatform, LibraryState, PlatformsState, Settings, SettingsPatch, Snapshot, TorrentSummary, UpdateState } from '../../shared/types'
 import { AddDialog, readMagnet, type AddPreset } from './components/AddDialog'
 import { ContextMenu, type MenuItem } from './components/ContextMenu'
 import { DetailsPanel } from './components/DetailsPanel'
@@ -173,6 +173,9 @@ export function App(): React.JSX.Element {
   const [lastSnapAt, setLastSnapAt] = useState(0)
   const [now, setNow] = useState(Date.now())
   const [settings, setSettings] = useState<Settings | null>(null)
+  // dernière vérification des mises à jour ; le toast n'apparaît qu'une fois par nouvelle version
+  const [update, setUpdate] = useState<UpdateState | null>(null)
+  const updateToasted = useRef<string | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<Sort>({ key: 'addedAt', dir: 1 })
@@ -292,8 +295,11 @@ export function App(): React.JSX.Element {
           : 'Installation terminée, mais je n’ai pas trouvé le jeu installé. Choisis son programme (.exe) avec Parcourir.'
       })
     })
+    api.getUpdate().then(setUpdate)
+    const offUpdate = api.onUpdate(setUpdate)
     const timer = setInterval(() => setNow(Date.now()), 1000)
     return () => {
+      offUpdate()
       offSettings()
       offSnap()
       offNotice()
@@ -303,6 +309,19 @@ export function App(): React.JSX.Element {
       clearInterval(timer)
     }
   }, [toast])
+
+  // Nouvelle version publiée : un toast (une fois par version) avec « Télécharger » ; l'étiquette
+  // de la bande du haut reste ensuite visible.
+  useEffect(() => {
+    if (update?.status !== 'available' || !update.latest || updateToasted.current === update.latest) return
+    updateToasted.current = update.latest
+    toast('info', `CyberDeck ${update.latest} est disponible.`, {
+      title: 'Mise à jour',
+      detail: `Tu as la version ${update.current}. Télécharge le nouvel installateur et lance-le : ta bibliothèque est gardée.`,
+      detailKind: 'text',
+      action: { label: 'Télécharger', onClick: () => api.openUpdate(), testId: 'toast-update' }
+    })
+  }, [update, toast])
 
   // ---------- Plateformes : un toast par lecture qui change quelque chose ----------
   // Jeux trouvés (« 3 nouveaux jeux trouvés sur Steam »), jeux possédés ajoutés, téléchargements
@@ -938,6 +957,18 @@ export function App(): React.JSX.Element {
         <MarkSmall />
         <span className="wordmark">CYBERDECK</span>
         <span className="ver">{VERSION}</span>
+        {update?.status === 'available' && (
+          <button
+            type="button"
+            className="tb-update"
+            data-testid="titlebar-update"
+            title={`CyberDeck ${update.latest} est disponible (tu as la ${update.current}) · ouvrir la page de téléchargement`}
+            onClick={() => api.openUpdate()}
+          >
+            <ArrowDownToLine />
+            <span>Mise à jour {update.latest}</span>
+          </button>
+        )}
         <span className="crumb">
           {!showTorrents ? (
             <span className="cap">
@@ -1107,6 +1138,8 @@ export function App(): React.JSX.Element {
           onChange={changeSettings}
           onClose={closeSettings}
           onToast={toast}
+          update={update}
+          onCheckUpdate={() => api.checkUpdate()}
         />
       )}
       {removeIds && (
