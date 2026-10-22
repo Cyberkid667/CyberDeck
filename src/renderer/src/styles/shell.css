@@ -1,0 +1,294 @@
+/* ==========================================================================
+   CyberDeck — coquille : gabarit, bande de titre, barre latérale (+ rail
+   et oscilloscope), barre d'outils, barre d'état, menu contextuel, toasts,
+   glisser-déposer, démarrage, états vides.
+   ========================================================================== */
+
+.app {
+  display: grid;
+  grid-template-columns: var(--side-w) minmax(0, 1fr);
+  grid-template-rows: var(--strip-h) minmax(0, 1fr) var(--status-h);
+  height: 100vh;
+}
+/* La barre d'état n'existe que dans la vue Torrents : ailleurs (bibliothèque, torrents désactivés),
+   la zone principale et la barre latérale descendent jusqu'en bas de la fenêtre. */
+.app.no-status { grid-template-rows: var(--strip-h) minmax(0, 1fr); }
+
+/* ---------- Bande de titre (44 px, zone de glisser, 150 px libres à droite) ---------- */
+.titlebar {
+  grid-column: 1 / -1; position: relative;
+  display: flex; align-items: center; gap: 12px;
+  padding-left: 18px; padding-right: var(--wc-w);
+  background: var(--bg-0); border-bottom: 1px solid var(--hair);
+  -webkit-app-region: drag; user-select: none;
+}
+.titlebar::after {   /* règle graduée sous la bande, arrêtée avant les boutons natifs */
+  content: ''; position: absolute; left: var(--side-w); right: var(--wc-w); bottom: 0; height: 6px; pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,.16) 0 1px, transparent 1px 96px) bottom / 100% 6px no-repeat,
+    repeating-linear-gradient(90deg, rgba(255,255,255,.07) 0 1px, transparent 1px 12px) bottom / 100% 3px no-repeat;
+}
+/* Logo 20 px : le centre de la sphère (y = 9 sur 20) tombe sur le milieu des capitales du mot-symbole */
+.logo-mark { width: 20px; height: 20px; flex: none; color: #f4f5f7; margin-top: 2px; }
+.wordmark { font: 500 12px/1 var(--font-mono); letter-spacing: 0.26em; margin-right: -0.26em; color: var(--tx-1); white-space: nowrap; }
+.ver { font: 400 10px/1 var(--font-mono); letter-spacing: 0.08em; color: var(--tx-3); padding-left: 12px; border-left: 1px solid var(--line); }
+.crumb { display: none; align-items: center; gap: 8px; margin-left: 14px; padding-left: 14px; border-left: 1px solid var(--line); white-space: nowrap; }
+.crumb .cap b { color: var(--tx-1); font-weight: 500; }
+/* Bouton qui replie la barre latérale (comme dans Claude) : tout à gauche de la bande, hors zone de glisser */
+.tb-side { -webkit-app-region: no-drag; flex: none; display: grid; place-items: center; width: 28px; height: 28px; margin-left: -8px; margin-right: -2px;
+  border-radius: var(--r-2); color: var(--tx-3); transition: background-color .12s, color .12s; }
+.tb-side:hover { background: rgba(255,255,255,.07); color: var(--tx-1); }
+.tb-side:focus-visible { box-shadow: var(--focus-ring); }
+.tb-side svg.i { width: 17px; height: 17px; }
+/* Barre latérale repliée : la bibliothèque prend toute la largeur, le fil d'Ariane de la bande dit où l'on est */
+.app.side-closed { --side-w: 0px; }
+.app.side-closed .sidebar { display: none; }
+.app.side-closed .crumb { display: flex; }
+
+/* ---------- Barre latérale : faux verre (aucun backdrop-filter) ---------- */
+.sidebar {
+  grid-row: 2; position: relative; z-index: var(--z-side);
+  display: flex; flex-direction: column; min-height: 0;
+  padding: 18px 10px 14px;
+  background:
+    radial-gradient(130% 55% at 0% 0%, rgba(255,255,255,.055), transparent 62%),
+    linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.008) 70%, rgba(255,255,255,.02)),
+    var(--bg-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+.sidebar::before {   /* arête de verre : bord droit, vif en haut, éteint en bas */
+  content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 1px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,.30), rgba(255,255,255,.07) 30%, rgba(255,255,255,.05) 70%, rgba(255,255,255,.10));
+}
+.side-sec { display: flex; align-items: center; gap: 8px; padding: 0 10px; margin: 2px 0 8px; }
+.side-sec .idx { color: var(--tx-4); }
+.side-sec .rule { flex: 1; height: 1px; background: var(--hair); }
+.nav {
+  position: relative; display: flex; align-items: center; gap: 11px;
+  height: 34px; padding: 0 10px; margin-bottom: 2px; width: 100%;
+  border-radius: var(--r-2); text-align: left;
+  font: 400 12.5px/1 var(--font-mono); color: var(--tx-2);
+  transition: background-color .12s, color .12s;
+}
+.nav svg.i { color: var(--tx-3); transition: color .12s; }
+.nav .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav .count { margin-left: auto; font: 400 11px/1 var(--font-mono); color: var(--tx-3); }
+.nav:hover { background: rgba(255,255,255,.045); color: var(--tx-1); }
+.nav:hover svg.i { color: var(--tx-1); }
+.nav:focus-visible { box-shadow: var(--focus-ring); }
+.nav.on { color: var(--tx-1); background: linear-gradient(90deg, rgba(255,255,255,.095), rgba(255,255,255,.018)); }
+.nav.on svg.i, .nav.on .count { color: var(--tx-1); }
+.nav.on::before { content: ''; position: absolute; left: -10px; top: 9px; bottom: 9px; width: 2px; border-radius: 0 2px 2px 0; background: #fff; box-shadow: var(--glow-sm); }
+.nav .live-dot { margin-left: auto; }
+.nav .live-dot + .count { margin-left: 10px; }
+.side-gap { height: 18px; flex: none; }
+.side-fill { flex: 1; min-height: 12px; }
+/* Liste de navigation : défile si la fenêtre est trop basse (barre invisible, fondu en bas tant qu'il en reste).
+   Elle déborde sur la marge de la barre latérale pour que la barre blanche de l'élément actif (à −10 px) ne soit pas rognée. */
+.side-nav { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; scrollbar-width: none;
+  margin: -4px -10px 0; padding: 4px 10px; }
+.side-nav::-webkit-scrollbar { width: 0; height: 0; }
+.side-nav > * { flex-shrink: 0; }     /* la liste défile ; ses éléments ne s'écrasent jamais */
+.side-nav.scrolls:not(.at-end) { -webkit-mask-image: linear-gradient(#000 calc(100% - 28px), transparent); mask-image: linear-gradient(#000 calc(100% - 28px), transparent); }
+/* Filtres de plateforme sous « Mes jeux » : logo de la plateforme (Simple Icons, en couleur de marque) centré sous
+   l'icône de la manette, noms alignés sur « Mes jeux ». Même dessin pour les filtres des torrents (↓ ✓ ↑). */
+.side-tree { display: flex; flex-direction: column; margin: -1px 0 2px; }
+.nav.sub { height: 32px; margin-bottom: 0; gap: 10px; padding: 0 10px 0 9px; font-size: 12px; }
+.nav.sub svg.plogo { flex: none; width: 18px; height: 18px; color: var(--tx-2); transition: color .12s, transform .12s; }
+.nav.sub:hover svg.plogo, .nav.sub.on svg.plogo { color: var(--tx-1); }
+.nav.sub:hover svg.plogo { transform: scale(1.08); }
+.nav.sub.on::before { top: 8px; bottom: 8px; }
+/* « Plateformes » : ouvre la fenêtre des lanceurs (ce n'est pas un filtre) ; hors de la liste qui défile, toujours visible.
+   « Réglages » juste dessous, même dessin. */
+.plat-nav { flex: none; margin-top: 6px; }
+.plat-nav.set-nav { margin-top: 0; }
+
+/* Oscilloscope « TRAFIC · 60 S » : canevas redessiné une fois par seconde, à l'arrivée de l'instantané.
+   Vue Torrents seulement : masqué dans la bibliothèque (le canevas garde ses 60 s d'historique). */
+.scope { flex: none; padding: 0 10px; }
+.sidebar.lib-view .scope { display: none; }
+.scope .side-sec { padding: 0; margin-bottom: 10px; }
+.scope .vals { display: flex; justify-content: space-between; margin: 2px 0 8px; font: 400 11px/1 var(--font-mono); color: var(--tx-2); }
+.scope .vals b { font-weight: 400; color: var(--tx-1); }
+.scope-frame { position: relative; height: 78px; border: 1px solid var(--hair); border-radius: 3px; background: rgba(0,0,0,.35); overflow: hidden; }
+.scope-frame canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.scope-frame .scale { position: absolute; left: 6px; top: 5px; font: 500 10px/1 var(--font-mono); letter-spacing: .06em; color: var(--tx-3); }
+.scope .axis { display: flex; justify-content: space-between; margin-top: 6px; }
+.side-foot { flex: none; margin-top: 14px; padding: 12px 10px 0; border-top: 1px dashed var(--line); display: flex; flex-direction: column; gap: 4px; }
+.side-foot .cap:first-child { color: var(--tx-2); }
+
+/* Rail (< 1100 px) */
+@media (max-width: 1099px) {
+  .sidebar { padding: 14px 7px; align-items: center; }
+  .side-sec { padding: 0; margin: 6px 0; width: 100%; }
+  .side-sec .cap { display: none; }
+  .nav { width: 46px; height: 46px; padding: 0; flex-direction: column; justify-content: center; gap: 4px; }
+  .nav .label { display: none; }
+  .nav .count { margin: 0; font-size: 10px; }
+  .nav.on::before { left: -7px; }
+  .nav .live-dot { position: absolute; top: 6px; right: 8px; margin: 0; width: 5px; height: 5px; }
+  .nav .live-dot + .count { margin: 0; }
+  .scope, .side-foot { display: none; }
+  .side-nav { align-self: stretch; align-items: center; margin: -4px -7px 0; padding: 4px 7px; }
+  /* plateformes : logo seul, nom et nombre dans la bulle */
+  .side-tree { align-items: center; margin: 0 0 2px; }
+  .nav.sub { width: 46px; height: 34px; margin-bottom: 2px; padding: 0; flex-direction: row; justify-content: center; gap: 0; }
+  .nav.sub .label, .nav.sub .count { display: none; }
+  .nav.sub svg.plogo { width: 20px; height: 20px; }
+  .nav.sub.on::before { left: -7px; top: 8px; bottom: 8px; }
+  .plat-nav { margin-top: 4px; }
+  .plat-nav.set-nav { margin-top: 0; }
+}
+/* Fenêtre basse avec des filtres de plateforme : le pied (décor) laisse sa place, pour que tous
+   les filtres restent visibles sans défiler (l'oscilloscope, lui, n'est jamais dans la bibliothèque). */
+@media (max-height: 799px) {
+  .sidebar.has-tree .side-foot { display: none; }
+}
+/* Plus de 5 filtres de plateforme sous 820 px de haut : même chose plutôt que de faire défiler la navigation */
+@media (max-height: 879px) {
+  .sidebar.many-tree .side-foot { display: none; }
+}
+
+/* ---------- Zone principale ---------- */
+/* overflow: hidden : rien ne déborde jamais sur la barre d'état */
+.app > .main { grid-row: 2; grid-column: 2; display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; overflow: hidden; background: var(--bg-1); }
+
+/* Barre d'outils : libellés toujours visibles (ils tiennent jusqu'à 960 px), le grand titre disparaît sous 1360 px */
+.toolbar {
+  flex: none; height: var(--toolbar-h);
+  display: flex; align-items: center; gap: 4px;
+  padding: 0 16px 0 20px;
+  border-bottom: 1px solid var(--hair); background: var(--bg-1);
+}
+/* largeur fixe = le titre le plus large (« En partage » + compteur à 3 chiffres, 176 px mesurés) :
+   Ajouter et les autres boutons ne bougent pas d'un filtre à l'autre, ni vers la bibliothèque */
+.vtitle { display: flex; flex-direction: column; justify-content: center; gap: 4px; margin-right: 22px; min-width: 176px; }
+.vtitle h1 { margin: 0; font: 300 26px/1 var(--font-mono); letter-spacing: -0.02em; color: var(--tx-1); white-space: nowrap; }
+.vtitle h1 sup { font: 400 11px/1 var(--font-mono); color: var(--tx-3); vertical-align: top; margin-left: 5px; letter-spacing: 0; position: relative; top: -1px; }
+@media (max-width: 1359px) {
+  .vtitle { display: none; }
+  .crumb { display: flex; }
+}
+
+/* ==========================================================================
+   Barre d'état (28 px)
+   ========================================================================== */
+.statusbar {
+  grid-column: 1 / -1; grid-row: 3;
+  display: flex; align-items: stretch; height: var(--status-h);
+  background: var(--bg-0); border-top: 1px solid var(--hair);
+  font: 400 11px/1 var(--font-mono); color: var(--tx-2); padding: 0 6px 0 0; user-select: none;
+}
+.sb { display: flex; align-items: center; gap: 8px; padding: 0 14px; white-space: nowrap; }
+.sb + .sb { border-left: 1px solid var(--hair); }
+.sb .k { font: 500 10px/13px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--tx-3); }
+.sb .v { color: var(--tx-1); }
+.sb svg.i { width: 13px; height: 13px; color: var(--tx-3); }
+.sb.engine { padding-left: 16px; }
+/* Point « MOTEUR » : affiché en permanence, donc sans anneau qui pulse (un anneau animé sur
+   tous les écrans coûtait ≈ 8 % d'un cœur au processus GPU sur une vue fixe). Le point garde
+   son halo. L'anneau reste sur les points d'un jeu lancé (Mes jeux, EN JEU, carte du jeu). */
+.statusbar .live-dot::after { display: none; }
+.sb-spacer { flex: 1; border-left: 0 !important; }
+.sb-spacer + .sb { border-left: 1px solid var(--hair); }
+
+/* ==========================================================================
+   Verre dépoli : menus et toasts (avec les dialogues, les seuls backdrop-filter de l'app)
+   ========================================================================== */
+.toasts { position: fixed; right: 18px; bottom: calc(var(--status-h) + 16px); z-index: var(--z-toast); display: flex; flex-direction: column; gap: 8px; }
+.app.no-status .toasts { bottom: 18px; }     /* sans barre d'état : 18 px du bord, comme à droite */
+.toast {
+  position: relative; width: 320px; overflow: hidden; padding: 11px 12px 13px 16px;
+  background: rgba(18,18,18,.82); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  border: 1px solid var(--line-2); border-radius: var(--r-3);
+  box-shadow: 0 16px 40px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.06);
+  animation: toast-in .28s cubic-bezier(.2,.8,.2,1) both;
+}
+.toast::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 2px; background: #fff; box-shadow: var(--glow-sm); }
+.toast.ok::before { background: var(--ok); box-shadow: 0 0 6px rgba(61,220,140,.5); }
+.toast.err::before { background: var(--err); box-shadow: 0 0 6px rgba(255,93,93,.5); }
+.toast .top { display: flex; align-items: center; gap: 8px; }
+.toast .top .t { margin-left: auto; }
+.toast.ok .top .cap:first-child { color: var(--ok); }
+.toast.err .top .cap:first-child { color: var(--err); }
+.toast .x { width: 20px; height: 20px; margin: -3px -2px -3px 4px; border-radius: 3px; display: grid; place-items: center; color: var(--tx-3); }
+.toast .x:hover { background: rgba(255,255,255,.08); color: var(--tx-1); }
+.toast .x:focus-visible { box-shadow: var(--focus-ring); color: var(--tx-1); }
+.toast .x svg.i { width: 13px; height: 13px; }
+.toast .msg { margin-top: 6px; padding-right: 8px; font: 400 13px/1.4 var(--font-sans); color: var(--tx-1); overflow-wrap: anywhere; }
+.toast .msg em { display: block; font-style: normal; font-family: var(--font-mono); font-size: 12px; color: var(--tx-2); }
+.toast .msg em.txt { margin-top: 2px; font: 400 12px/1.4 var(--font-sans); }     /* détail qui est une phrase : Inter, pas mono */
+.toast .act { margin-top: 10px; display: flex; }     /* petit bouton d'action (« Activer les torrents… ») */
+.toast .timer { position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: rgba(255,255,255,.45); transform-origin: left; animation: toast-timer 4.5s linear forwards; }
+.toast.err .timer { animation-duration: 8s; }
+.toast:hover .timer { animation-play-state: paused; }     /* la minuterie s'arrête au survol */
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes toast-timer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+.ctxmenu {
+  position: fixed; z-index: var(--z-menu); width: 264px; padding: 5px;
+  background: rgba(16,16,16,.9); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  border: 1px solid var(--line-2); border-radius: var(--r-3);
+  box-shadow: 0 18px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06);
+  outline: none;
+}
+.ctxmenu[hidden] { display: none; }
+.mi { width: 100%; height: 30px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 3px; font: 400 12px/1 var(--font-mono); color: var(--tx-2); text-align: left; white-space: nowrap; }
+.mi svg.i { width: 14px; height: 14px; color: var(--tx-3); }
+.mi .ml { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.mi kbd { margin-left: auto; font: 500 10px/1 var(--font-mono); letter-spacing: .1em; color: var(--tx-3); text-transform: uppercase; }
+.mi:hover, .mi:focus-visible { background: rgba(255,255,255,.07); color: var(--tx-1); }
+.mi:hover svg.i, .mi:focus-visible svg.i { color: var(--tx-1); }
+.mi.danger svg.i, .mi.danger:hover svg.i, .mi.danger:focus-visible svg.i { color: var(--err); }     /* texte neutre, seule l'icône est rouge */
+.mi.danger:hover, .mi.danger:focus-visible { background: rgba(255,93,93,.10); }
+.mi[disabled] { opacity: .35; pointer-events: none; }
+.msep { height: 1px; margin: 5px 6px; background: var(--hair); }
+
+/* ---------- Glisser-déposer ---------- */
+.drop { position: fixed; inset: 0; z-index: var(--z-drop); background: rgba(0,0,0,.93); display: grid; place-items: center; pointer-events: none; }
+.drop[hidden] { display: none; }
+.drop .zone { position: absolute; inset: 22px; border: 1px dashed rgba(255,255,255,.35); border-radius: var(--r-4); --bk: rgba(255,255,255,.8); --bl: 14px; }
+.drop .box { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.drop .box canvas { width: 200px; height: 200px; margin-bottom: 8px; }
+.drop .box h2 { margin: 0; font: 300 30px/1.1 var(--font-mono); letter-spacing: -0.02em; color: var(--tx-1); }
+
+/* ---------- États vides ---------- */
+.empty { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 24px; overflow: hidden; }
+.empty[hidden] { display: none; }
+.empty::before { content: ''; position: absolute; inset: 0; z-index: 0; background-image: var(--contours); background-size: 760px auto; background-position: center; opacity: .13;
+  -webkit-mask-image: radial-gradient(closest-side, #000, transparent); mask-image: radial-gradient(closest-side, #000, transparent); }
+.empty > * { position: relative; z-index: 1; }
+.empty .dust { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+.empty .mark-anim { width: 132px; height: 132px; margin-bottom: 6px; }
+.empty h2 { margin: 6px 0 0; font: 300 30px/1.1 var(--font-mono); letter-spacing: -0.02em; color: var(--tx-1); }
+.empty p { margin: 2px 0 14px; max-width: 620px; font: 400 13.5px/1.55 var(--font-sans); color: var(--tx-2); }
+.empty .keys { margin-top: 14px; display: flex; align-items: center; gap: 8px; }
+.empty .keys .cap { color: var(--tx-3); }
+.empty .keys .cap.deco { color: var(--tx-4); }
+.empty .row-btns { display: flex; gap: 8px; }
+.noresult { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 40px 20px; font: 400 13px/1.45 var(--font-sans); color: var(--tx-3); text-align: center; }
+.noresult q { color: var(--tx-1); font-family: var(--font-mono); font-size: 12px; quotes: '« ' ' »'; }
+/* Moteur pas encore prêt (avant le premier instantané) : ni liste ni « Aucun torrent » */
+.noresult.waiting { gap: 14px; }
+
+/* ---------- Écran de démarrage (avant le premier instantané du moteur) ---------- */
+.splash { position: fixed; inset: 0; z-index: var(--z-splash); background: #000; display: grid; place-items: center; transition: opacity .2s ease; }
+.splash[hidden] { display: none; }
+.splash.out { opacity: 0; pointer-events: none; }
+.splash .in { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.splash canvas { width: 112px; height: 112px; }
+.splash .wm { font: 500 20px/1 var(--font-mono); letter-spacing: .30em; margin-right: -.30em; color: var(--tx-1); }
+
+/* ---------- Jeu lancé : vert (couleur des états actifs), bien visible ---------- */
+/* étiquette de la bande de titre, visible depuis tous les écrans */
+.tb-live { -webkit-app-region: no-drag; display: inline-flex; align-items: center; gap: 9px; height: 26px; margin-left: auto; padding: 0 12px 0 10px;
+  min-width: 0; max-width: 46%; border: 1px solid var(--ok); border-radius: var(--r-2); background: rgba(61, 220, 140, 0.12); color: var(--ok);
+  font: 500 11px/1 var(--font-mono); letter-spacing: .08em; cursor: pointer; box-shadow: 0 0 18px rgba(61, 220, 140, 0.22); }
+.tb-live:hover { background: rgba(61, 220, 140, 0.2); }
+.tb-live:focus-visible { outline: 2px solid var(--ok); outline-offset: 2px; }
+.tb-live .k { text-transform: uppercase; letter-spacing: .14em; font-weight: 600; flex: none; }
+.tb-live .n { color: var(--tx-1); font-family: var(--font-sans); font-weight: 500; letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tb-live .t { flex: none; font-variant-numeric: tabular-nums; }
+.tb-live .live-dot, .nav .live-dot { background: var(--ok); box-shadow: 0 0 8px rgba(61, 220, 140, 0.7); }
+.tb-live .live-dot::after, .nav .live-dot::after { border-color: rgba(61, 220, 140, 0.6); }
+@media (max-width: 1099px) { .tb-live .n { display: none; } }

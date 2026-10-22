@@ -1,0 +1,338 @@
+/* ==========================================================================
+   CyberDeck — dialogues en verre dépoli (SPEC 5.12) : socle commun (voile,
+   carte, arête de verre, en-tête, champs, erreur, pied), Ajouter un torrent
+   (+ billet « Lecture du lien »), Supprimer, Ajouter / Modifier un jeu,
+   Importer un dossier, Réglages. Composants : AddDialog.tsx (socle DialogFrame
+   exporté), RemoveDialog.tsx, GameDialog.tsx, ImportDialog.tsx, SettingsDialog.tsx.
+   ========================================================================== */
+
+/* ---------- Socle ---------- */
+.overlay { position: fixed; inset: 0; z-index: var(--z-dialog); display: grid; place-items: center; background: rgba(0,0,0,.72); }
+.overlay[hidden] { display: none; }
+.dialog {
+  position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 292px;
+  width: min(820px, calc(100vw - 48px)); max-height: calc(100vh - 48px);
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: blur(22px) saturate(1.05); backdrop-filter: blur(22px) saturate(1.05);
+  border: 1px solid rgba(255,255,255,.14); border-radius: var(--r-5);
+  box-shadow: 0 40px 120px rgba(0,0,0,.8), 0 0 0 1px rgba(0,0,0,.6), 0 0 60px rgba(255,255,255,.04), inset 0 1px 0 rgba(255,255,255,.08);
+  overflow: hidden;
+}
+.dialog:focus { outline: none; }
+.dialog::before { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 5; border-radius: inherit; padding: 1px; background: var(--glass-edge);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+/* Le formulaire défile (sans barre visible au repos) seulement si la fenêtre est trop basse pour lui */
+.dform { padding: 24px 28px 22px; display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  max-height: calc(100vh - 50px); overflow-y: auto; overflow-x: hidden; }
+.dhead-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.dtitle { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+.dtitle h2 { margin: 0; font: 300 26px/1.05 var(--font-mono); letter-spacing: -0.02em; color: var(--tx-1); }
+/* « ÉCHAP ✕ » */
+.xbtn { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 6px 0 10px; border-radius: var(--r-2); color: var(--tx-3); flex: none; }
+.xbtn:hover { background: rgba(255,255,255,.06); color: var(--tx-1); }
+.xbtn:hover .cap, .xbtn:focus-visible .cap { color: var(--tx-1); }
+.xbtn:focus-visible { box-shadow: var(--focus-ring); }
+.xbtn[disabled] { opacity: .34; pointer-events: none; }
+.xbtn svg.i { width: 15px; height: 15px; }
+/* Champs : libellé en légende (+ indication à droite), 8 px au-dessus ; 20 px entre deux champs */
+.field { margin-top: 20px; }
+.field > label, .field > .lab { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.field > .lab > .cap:first-child { min-width: 0; }
+.field > .lab > .cap + .cap { flex: none; }
+.path-row { display: flex; gap: 8px; }
+.path-row .inp { flex: 1; min-width: 0; }
+.path-row .btn { height: 34px; }
+/* chemin en lecture seule : un clic ne le fait pas passer pour un champ à remplir */
+.inp.ro { cursor: default; }
+.inp.ro:focus { border-color: var(--line-3) !important; box-shadow: none; }
+.inp.ro.invalid { border-color: var(--err-line) !important; box-shadow: 0 0 0 3px var(--err-soft); }
+.hint { margin-top: 9px; display: flex; align-items: center; gap: 9px; font: 400 12px/1.4 var(--font-sans); color: var(--tx-2); }
+.hint.mute { color: var(--tx-3); }
+.hint .sdot { color: #fff; box-shadow: var(--glow-sm); }
+/* Erreur : 18 px réservés pour ne rien faire sauter */
+.derr { min-height: 18px; margin-top: 10px; font: 400 12px/1.4 var(--font-sans); color: var(--err); display: flex; align-items: center; gap: 8px; }
+.derr svg.i { width: 14px; height: 14px; }
+/* Pied : touches ou compteur à gauche, Annuler + action principale (34 px) */
+.dfoot { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--hair); }
+/* les touches ne passent jamais sous les boutons : faute de place, elles sont coupées (jamais superposées) */
+.dfoot .keys { margin-right: auto; display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; white-space: nowrap; }
+.dfoot .count { margin-right: auto; color: var(--tx-2); }
+.dfoot .btn { height: 34px; padding: 0 16px; }
+.check + .dfoot { margin-top: 22px; }
+.imp + .dfoot, .scan-busy + .dfoot { margin-top: 16px; }
+/* Focus d'ouverture sur Annuler (Supprimer) : visible tout de suite, même ouvert à la souris */
+.btn.ring { box-shadow: var(--focus-ring); color: var(--tx-1); }
+/* Bouton en cours (Chercher sur Steam) : l'icône qui tourne reste lisible */
+.btn.busy[disabled] { opacity: .6; }
+.dplate { position: relative; border-left: 1px solid var(--hair); background: #040404; overflow: hidden; min-height: 100%; }
+.dplate canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.dialog.single { grid-template-columns: minmax(0, 1fr); width: min(540px, calc(100vw - 48px)); }
+.dialog.wide { grid-template-columns: minmax(0, 1fr); width: min(780px, calc(100vw - 48px)); }
+@media (max-width: 1099px) { .dialog:not(.single):not(.wide) { grid-template-columns: minmax(0, 1fr) 244px; width: min(720px, calc(100vw - 40px)); } }
+/* Dialogue d'ajout réduit à 720 px : il manque 13 px pour les deux paires de touches et les deux
+   boutons. La 2e paire (« ÉCHAP FERMER », déjà rappelée en haut à droite) laisse sa place. */
+@media (max-width: 1099px) { .dialog:not(.single):not(.wide) .dfoot .keys > :nth-child(n+3) { display: none; } }
+
+/* Bandeau d'information dans un dialogue (fin d'installation) */
+.banner { margin-top: 18px; display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: var(--r-3); border: 1px solid var(--line-2); background: rgba(255,255,255,.035); font: 400 13px/1.45 var(--font-sans); color: var(--tx-1); }
+.banner svg.i { color: var(--tx-1); margin-top: 1px; }
+
+/* ---------- Ajouter un torrent ---------- */
+.dseg { margin-top: 22px; }
+/* Lien magnet (3 à 5 lignes de 18 px) : au-delà, défilement sans barre et fondu de 22 px sur le texte
+   seulement — le cadre, le focus et l'état invalide restent entiers (le masque .ta.scroll les effaçait). */
+.ta-wrap { position: relative; }
+.ta-wrap.fade::after { content: ''; position: absolute; left: 1px; right: 1px; bottom: 1px; height: 30px; border-radius: 0 0 3px 3px; pointer-events: none;
+  background: linear-gradient(rgba(5,5,5,0), rgba(5,5,5,.92) 70%, var(--bg-1)); }
+.ta.scrolls { overflow-y: auto; scrollbar-width: none; }
+.ta.scrolls::-webkit-scrollbar { width: 0; height: 0; }
+.seg.big button { height: 30px; padding: 0 14px; font-size: 12px; }
+.seg button[disabled] { opacity: .5; pointer-events: none; }
+/* Zone « Fichier .torrent » (76 px en tirets) */
+.filepick { width: 100%; height: 76px; display: flex; align-items: center; gap: 14px; padding: 0 16px; border: 1px dashed var(--line-3); border-radius: var(--r-2); background: var(--bg-1); text-align: left; color: var(--tx-1); transition: border-color .12s, background-color .12s, box-shadow .12s; }
+.filepick:hover { border-color: rgba(255,255,255,.55); background: rgba(255,255,255,.03); }
+.filepick:focus-visible { box-shadow: var(--focus-ring); }
+.filepick.invalid { border-color: var(--err-line); box-shadow: 0 0 0 3px var(--err-soft); }
+.filepick[disabled] { opacity: .5; pointer-events: none; }
+.filepick svg.i { width: 22px; height: 22px; color: var(--tx-2); }
+.filepick .fp-txt { display: block; min-width: 0; }
+.filepick .fn { display: block; font: 400 13px/1.3 var(--font-mono); color: var(--tx-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filepick .fn.none { color: var(--tx-2); }
+.filepick .fs { display: block; margin-top: 4px; }
+
+/* Billet « Lecture du lien » / « Lecture du fichier » (colonne droite : 292 px, 244 sous 1100 px) */
+.ticket { display: flex; flex-direction: column; height: 100%; }
+.ticket .band { height: 30px; flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 16px; background: rgba(255,255,255,.045); border-bottom: 1px solid var(--hair); }
+.ticket .band .state { display: flex; align-items: center; gap: 6px; color: var(--tx-2); white-space: nowrap; }
+.ticket .band .state.bad { color: var(--err); }
+.ticket .band .state.wait { color: var(--tx-3); }
+.ticket .band svg.i { width: 12px; height: 12px; stroke-width: 2; }
+.ticket .sph { position: relative; flex: none; height: 188px; }
+.ticket .sph canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ticket .sph .frame { position: absolute; inset: 12px 14px 10px; pointer-events: none; --bk: rgba(255,255,255,.3); --bl: 7px; }
+.ticket .perf { position: relative; flex: none; height: 1px; margin: 0 14px; border-top: 1px dashed rgba(255,255,255,.22); }
+.ticket .perf::before, .ticket .perf::after { content: ''; position: absolute; top: -7px; width: 13px; height: 13px; border-radius: 50%; background: #080808; border: 1px solid var(--line); }
+.ticket .perf::before { left: -22px; } .ticket .perf::after { right: -22px; }
+.ticket .info { flex: 1; display: flex; flex-direction: column; padding: 16px 18px; gap: 14px; min-height: 0; }
+/* nom annoncé : 3 lignes au plus (le nom complet est dans la bulle) */
+.ticket .dn { margin-top: 7px; font: 400 13px/1.45 var(--font-mono); color: var(--tx-1); overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+.ticket .dn span { color: var(--tx-3); }
+.ticket .dn.mute { color: var(--tx-3); }
+.ticket .hash { margin-top: 7px; font: 400 11px/1.6 var(--font-mono); color: var(--tx-2); letter-spacing: .04em; }
+.ticket .hash.bad { color: var(--err); }
+.ticket .hash .sub { color: var(--tx-3); letter-spacing: 0; }
+.ticket .path { margin-top: 7px; font: 400 11px/1.55 var(--font-mono); color: var(--tx-2); overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.ticket .note { margin: 0; font: 400 12.5px/1.5 var(--font-sans); color: var(--tx-3); }
+.ticket .note.bad { color: var(--err); }
+.ticket .kv { display: flex; gap: 22px; }
+.ticket .kv > div { display: flex; flex-direction: column; gap: 6px; }
+.ticket .kv .v { font: 400 12px/1 var(--font-mono); color: var(--tx-1); white-space: nowrap; }
+.ticket .kv .v.mute { color: var(--tx-3); }
+.ticket .foot { margin-top: auto; display: flex; align-items: flex-end; justify-content: space-between; }
+.ticket .foot .bc { display: block; width: 96px; height: 18px; opacity: .75; color: #fff; }
+.ticket .foot .cap { display: block; margin-top: 6px; }
+.ticket .star { width: 18px; height: 18px; color: var(--tx-2); flex: none; }
+@media (max-width: 1099px) { .ticket .kv { gap: 16px; } .ticket .info { padding: 16px 16px; } }
+
+/* ---------- Supprimer ---------- */
+.rm-list { margin: 20px 0 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--bg-1); }
+.rm-list li { display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 14px; border-bottom: 1px dashed rgba(255,255,255,.08); }
+.rm-list li:last-child { border-bottom: 0; }
+.rm-list .nm { flex: 1; min-width: 0; font: 450 13px/1.2 var(--font-sans); letter-spacing: -0.003em; color: var(--tx-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rm-list .nm.hash { font: 400 12px/1.2 var(--font-mono); letter-spacing: .02em; color: var(--tx-2); }
+.rm-list .mono { font: 400 11.5px/1 var(--font-mono); color: var(--tx-2); white-space: nowrap; }
+.rm-list .more { color: var(--tx-3); font: 400 12.5px/1 var(--font-sans); }
+/* Encart à cocher : coché = bord blanc ; fichiers à la corbeille = tout l'encart passe au rouge */
+.check { display: flex; align-items: flex-start; gap: 14px; margin-top: 18px; padding: 14px; border-radius: var(--r-3); border: 1px solid var(--line); cursor: pointer; background: rgba(255,255,255,.02); transition: background-color .12s, border-color .12s; }
+.check:hover { border-color: var(--line-2); }
+.check.on { border-color: rgba(255,255,255,.4); background: rgba(255,255,255,.05); }
+.check.on.danger { border-color: var(--err-line); background: var(--err-soft); }
+.check .txt { font: 400 13.5px/1.4 var(--font-sans); color: var(--tx-1); }
+.check .txt small { display: block; margin-top: 4px; font-size: 12px; color: var(--tx-3); }
+.check.on.danger .txt small { color: var(--tx-2); }
+/* la coche (élément de grille, peint après la vraie case) ne doit pas prendre les clics de la case */
+.cbox svg { pointer-events: none; }
+.cbox input { z-index: 1; }
+
+/* ---------- Fiche du jeu (Ajouter / Modifier) ---------- */
+.game-form { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 26px; margin-top: 22px; }
+.game-fields { min-width: 0; }
+.form-ticket { align-self: start; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,.22); background: #0d0d0d; box-shadow: 0 16px 40px rgba(0,0,0,.6); }
+.form-ticket img { display: block; width: 100%; aspect-ratio: 2 / 3; object-fit: cover; }
+.form-ticket .stub { position: relative; height: 30px; display: flex; align-items: center; justify-content: center; padding: 0 10px; border-top: 1px dashed rgba(255,255,255,.28); text-align: center; }
+.form-ticket .stub::before, .form-ticket .stub::after { content: ''; position: absolute; top: -6px; width: 11px; height: 11px; border-radius: 50%; background: #131313; }
+.form-ticket .stub::before { left: -6px; } .form-ticket .stub::after { right: -6px; }
+.form-ticket.empty-cover { aspect-ratio: auto; }
+.form-ticket .ph { aspect-ratio: 2 / 3; display: grid; place-items: center; background-image: var(--contours), linear-gradient(var(--guide) 1px, transparent 1px), linear-gradient(90deg, var(--guide) 1px, transparent 1px); background-size: 420px auto, 16px 16px, 16px 16px; background-color: #0c0c0c; color: var(--tx-3); }
+.form-ticket .ph svg.i { width: 28px; height: 28px; stroke-width: 1.2; color: var(--tx-2); }
+/* icône du .exe (sans jaquette) : cadre noir comme sur les cartes */
+.form-ticket .ph img.ico { width: 34px; height: 34px; aspect-ratio: auto; object-fit: contain; image-rendering: pixelated; border: 1px solid var(--line-2); padding: 4px; background: #000; border-radius: 3px; }
+/* jaquette paysage : image entière centrée sur une matrice de points de la même image */
+.form-ticket .fcov { position: relative; aspect-ratio: 2 / 3; overflow: hidden; background: var(--bg-3); }
+.form-ticket .fcov .pxbg { position: absolute; inset: 0; opacity: .55;
+  -webkit-mask-image: linear-gradient(90deg, #000 0 4px, transparent 4px), linear-gradient(#000 0 4px, transparent 4px); -webkit-mask-size: 5px 5px; -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(90deg, #000 0 4px, transparent 4px), linear-gradient(#000 0 4px, transparent 4px); mask-size: 5px 5px; mask-composite: intersect; }
+.form-ticket .fcov .pxbg canvas { display: block; image-rendering: pixelated; }
+.form-ticket .fcov img.main { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); width: 100%; height: auto; aspect-ratio: auto; box-shadow: 0 10px 30px rgba(0,0,0,.6); }
+.form-ticket.busy > :first-child { opacity: .45; transition: opacity .2s; }
+.game-form .field:first-child { margin-top: 0; }
+
+/* Fiche en lecture seule d'un jeu de plateforme (même dessin que l'onglet Infos : libellé, pointillés, valeur) */
+.psheet { padding: 3px 14px; border: 1px solid var(--line); border-radius: var(--r-2); background: rgba(0,0,0,.25); }
+.psheet .irow { grid-template-columns: 112px minmax(0, 1fr); min-height: 30px; }
+.psheet .irow + .irow { border-top: 1px dashed rgba(255,255,255,.07); }
+.psheet .v .ell.sub { color: var(--tx-2); }
+
+/* Phrase sous le titre d'un dialogue (Plateformes, Retirer un jeu) */
+.dnote { margin: 12px 0 0; max-width: 560px; font: 400 13px/1.5 var(--font-sans); color: var(--tx-2); }
+.dnote b { font-weight: 500; color: var(--tx-1); }
+.rm-list + .dnote { margin-top: 16px; }
+.dnote + .dfoot { margin-top: 22px; }
+
+/* ---------- Plateformes : liste des lanceurs (gauche) et billet du compte Steam (droite) ---------- */
+.plat-sync { margin-top: 18px; display: flex; align-items: center; gap: 14px; }
+.plat-sync .when { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.plat-sync .v { font: 400 12px/1 var(--font-mono); color: var(--tx-1); white-space: nowrap; }
+.plat-sync .scanbar { width: 120px; margin: 5px 0 4px; }
+.plat-sync .count { margin-left: auto; white-space: nowrap; }
+/* Fenêtre Plateformes : en-tête, « Dernière lecture », jeux retirés et pied restent fixes ; seule la liste
+   des lanceurs rétrécit et défile (sans barre visible, fondu de 22 px en bas) quand la fenêtre est basse */
+.dialog[data-dialog='platforms'] .dform { overflow: hidden; }
+.dialog[data-dialog='platforms'] .dform > * { flex: none; }
+.plat-list { margin-top: 12px; border: 1px solid var(--line); border-radius: var(--r-2); background: rgba(0,0,0,.25); }
+.dialog[data-dialog='platforms'] .dform > .plat-list { flex: 0 1 auto; min-height: 66px; display: flex; flex-direction: column; overflow: hidden; }
+.plat-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
+.plat-scroll::-webkit-scrollbar { width: 0; height: 0; }
+.plat-scroll.scrolls:not(.at-end) { -webkit-mask-image: linear-gradient(#000 calc(100% - 22px), transparent); mask-image: linear-gradient(#000 calc(100% - 22px), transparent); }
+/* au moins 18 px avant le pied ; grandit quand le billet de droite est plus haut (le pied reste en bas) */
+.dialog[data-dialog='platforms'] .dform > .plat-fill { flex: 1 0 18px; }
+.plat-fill + .dfoot { margin-top: 0; }
+.plat-row { display: grid; grid-template-columns: 6px minmax(0, 1fr) auto; align-items: center; column-gap: 14px; min-height: 32px; padding: 6px 14px; border-bottom: 1px dashed rgba(255,255,255,.08); }
+.plat-row:last-child { border-bottom: 0; }
+/* état : point vert plein (détectée), anneau gris (pas installée), point rouge (erreur) — toujours avec le libellé à droite */
+.plat-row .mark { width: 6px; height: 6px; border-radius: 50%; border: 1px solid var(--tx-4); }
+.plat-row.detected .mark { background: var(--ok); border-color: var(--ok); box-shadow: 0 0 6px rgba(61,220,140,.45); }
+.plat-row.error .mark { background: var(--err); border-color: var(--err); }
+.plat-row .pmain { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.plat-row .nm { font: 500 13px/1.3 var(--font-sans); color: var(--tx-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plat-row.absent .nm { font-weight: 400; color: var(--tx-3); }
+.plat-row .nm svg.plogo { width: 14px; height: 14px; margin-right: 8px; vertical-align: -2px; color: var(--tx-1); }
+/* lanceurs absents : leurs noms à la suite, sur une ou deux lignes */
+.plat-row .nm.names { white-space: normal; line-height: 1.45; }
+.plat-row .nm.names .pname { white-space: nowrap; }
+.plat-row .sub { font: 400 11px/1.3 var(--font-mono); color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plat-row .perr { font: 400 12px/1.35 var(--font-sans); color: var(--err); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plat-row .st { font: 500 10px/13px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--tx-2); white-space: nowrap; text-align: right; }
+.plat-row .st b { font-weight: 500; color: var(--tx-1); }
+.plat-row.absent .st { color: var(--tx-3); }
+.plat-row.error .st { color: var(--err); }
+.plat-wait { height: 120px; display: flex; align-items: center; justify-content: center; gap: 10px; font: 400 13px/1 var(--font-sans); color: var(--tx-2); }
+.plat-wait svg.i { color: var(--tx-2); }
+.plat-hidden { margin-top: 14px; display: flex; align-items: center; gap: 14px; padding: 9px 10px 9px 14px; border: 1px dashed var(--line-2); border-radius: var(--r-3);
+  font: 400 12.5px/1.4 var(--font-sans); color: var(--tx-2); }
+.plat-hidden b { font-weight: 500; color: var(--tx-1); }
+.plat-hidden .btn { margin-left: auto; }
+/* Billet du compte Steam : bandeau et profil fixes ; seule la partie basse (clé, mode d'emploi) défile si la fenêtre est trop basse */
+.dplate.steam-plate { display: flex; flex-direction: column; min-height: 0; max-height: calc(100vh - 50px); overflow: hidden; }
+.steam-plate .ticket { flex: 1 1 auto; height: auto; min-height: 0; }
+.steam-plate .ticket > * { flex: none; }
+.steam-plate .ticket > .info { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
+.steam-plate .info::-webkit-scrollbar { width: 0; height: 0; }
+.steam-plate .info.scrolls:not(.at-end) { -webkit-mask-image: linear-gradient(#000 calc(100% - 22px), transparent); mask-image: linear-gradient(#000 calc(100% - 22px), transparent); }
+/* pied du billet relié : « LISTE LUE VIA STEAM WEB API · CLÉ CHIFFRÉE SUR CE PC », en bas */
+.steam-plate .pfoot { margin-top: auto; padding-top: 12px; border-top: 1px dashed var(--line); display: flex; flex-direction: column; gap: 4px; }
+.sprof { display: flex; align-items: center; gap: 14px; padding: 18px; }
+.sprof .av { flex: none; width: 48px; height: 48px; border-radius: 6px; border: 1px solid rgba(255,255,255,.22); object-fit: cover; background: #0c0c0c; }
+.sprof .av.none { display: grid; place-items: center; color: var(--tx-3);
+  background-image: linear-gradient(var(--guide) 1px, transparent 1px), linear-gradient(90deg, var(--guide) 1px, transparent 1px); background-size: 8px 8px; }
+.sprof .av.none svg.i { width: 22px; height: 22px; stroke-width: 1.2; }
+.sprof .who { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.sprof .pn { font: 500 14px/1.2 var(--font-sans); color: var(--tx-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sprof .sid { font: 400 11px/1 var(--font-mono); color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.steam-plate .info { gap: 16px; }
+.kfield .lab { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.kfield .lab .cap, .owned .kv .cap { white-space: nowrap; }
+.krow { position: relative; }
+.krow .inp { padding-right: 38px; letter-spacing: .03em; }
+.krow .eye { position: absolute; right: 4px; top: 4px; width: 26px; height: 26px; border-radius: 3px; display: grid; place-items: center; color: var(--tx-3); }
+.krow .eye:hover { background: rgba(255,255,255,.07); color: var(--tx-1); }
+.krow .eye:focus-visible { box-shadow: var(--focus-ring); color: var(--tx-1); }
+.krow .eye[disabled] { opacity: .34; pointer-events: none; }
+.krow .eye svg.i { width: 15px; height: 15px; }
+.kbtns { display: flex; gap: 8px; margin-top: 10px; }
+.kbtns .btn { flex: 1 1 0; justify-content: center; min-width: 0; }
+/* résultat d'un test ou d'un enregistrement : 3 lignes de 18 px réservées (une clé refusée ne fait rien bouger) */
+.kmsg { min-height: 54px; margin-top: 10px; display: flex; align-items: flex-start; gap: 8px; font: 400 12px/18px var(--font-sans); color: var(--tx-2); }
+.kmsg svg.i { width: 14px; height: 14px; margin-top: 2px; }
+.kmsg.ok svg.i { color: var(--ok); }
+.kmsg.bad { color: var(--err); }
+.howto ol { margin: 9px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; font: 400 12px/1.5 var(--font-sans); color: var(--tx-2); }
+.howto ol li::marker { font-family: var(--font-mono); font-size: 11px; color: var(--tx-3); }
+/* guillemets français avec espaces insécables : « localhost » ne se coupe jamais */
+.howto q { font: 400 11.5px/1 var(--font-mono); color: var(--tx-1); quotes: '«\00a0' '\00a0»'; white-space: nowrap; }
+/* lien vers la page des clés : toujours sur une ligne (10 px dans le billet étroit de 244 px) */
+.howto .link { display: inline; text-align: left; font: 400 11.5px/1.35 var(--font-mono); color: var(--tx-1); border-bottom: 1px dotted rgba(255,255,255,.45); white-space: nowrap; }
+.howto .link:hover { border-bottom: 1px solid #fff; }
+.howto .link:focus-visible { box-shadow: var(--focus-ring); border-radius: 2px; }
+.howto .link svg.i { width: 12px; height: 12px; margin-left: 3px; vertical-align: -1px; }
+.howto .fine { margin: 10px 0 0; font: 400 11.5px/1.45 var(--font-sans); color: var(--tx-3); }
+.owned .kv { display: flex; gap: 18px; }
+.owned .kv > div { display: flex; flex-direction: column; gap: 8px; }
+.owned .big { font: 300 26px/1 var(--font-mono); letter-spacing: -0.02em; color: var(--tx-1); }
+.owned .olast { display: block; margin-top: 14px; }
+.owned .orow { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+/* fenêtre étroite (720 px) : le nombre de lanceurs détectés est déjà dans la liste */
+@media (max-width: 1099px) {
+  .plat-sync .count { display: none; }
+  .howto ol { padding-left: 16px; }
+  .howto .link { font-size: 10px; }
+}
+/* fenêtre basse : la phrase d'introduction laisse sa place, les lanceurs absents tiennent sur une ligne */
+@media (max-height: 700px) {
+  .dialog[data-dialog='platforms'] .dnote { display: none; }
+  .plat-row .nm.names { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
+
+/* ---------- Réglages (540 px) : encart « Torrents » (case .cbox), confirmation, dossiers, version ---------- */
+.dialog[data-dialog='settings'] .set-toggle { margin-top: 22px; }
+/* confirmation avant d'arrêter des torrents qui tournent : bandeau neutre (rien n'est perdu), deux petits boutons */
+.set-confirm { margin-top: 12px; }
+.set-confirm > svg.i { flex: none; }
+.set-confirm-body { flex: 1; min-width: 0; }
+.set-confirm .row-btns { margin-top: 12px; justify-content: flex-end; }
+/* les icônes des boutons gardent leur dessin (.banner svg.i ne vise que l'icône du bandeau) */
+.banner.set-confirm .btn svg.i { margin-top: 0; color: var(--tx-2); }
+.banner.set-confirm .btn-danger svg.i { color: var(--err); }
+.dialog[data-dialog='settings'] .dfoot { margin-top: 24px; }
+.dfoot .set-ver { margin-right: auto; white-space: nowrap; }
+.dfoot .set-ver b { font-weight: 500; color: var(--tx-2); }
+
+/* ---------- Importer un dossier de jeux ---------- */
+/* la liste rétrécit dans une fenêtre basse pour que le pied reste visible */
+.imp { margin-top: 16px; max-height: max(140px, min(300px, calc(100vh - 330px))); overflow: auto; border: 1px solid var(--line); border-radius: var(--r-2); background: rgba(0,0,0,.25); }
+.imp-row { display: flex; align-items: center; gap: 14px; min-height: 58px; padding: 9px 14px; border-bottom: 1px dashed rgba(255,255,255,.08); }
+.imp-row:last-child { border-bottom: 0; }
+.imp-row.on { background: rgba(255,255,255,.035); }
+.imp-row .cbox { margin-top: 0; }
+.imp-main { flex: 1; min-width: 0; }
+.imp-name { display: block; width: 100%; max-width: 320px; height: 24px; padding: 0 6px; margin-left: -6px; border: 1px solid transparent; border-radius: 3px; background: transparent; font: 500 13px/22px var(--font-sans); color: var(--tx-1); outline: none; text-overflow: ellipsis; }
+.imp-name:hover { border-color: var(--line-2); }
+.imp-name:focus { border-color: rgba(255,255,255,.6); background: var(--bg-1); }
+.imp-name[disabled] { opacity: .6; }
+.imp-row:not(.on) .imp-name { color: var(--tx-2); }
+.imp-sub { display: flex; align-items: center; gap: 10px; min-width: 0; margin-top: 5px; font: 400 11px/1 var(--font-mono); color: var(--tx-3); }
+/* menu du .exe : petit cadre mono 11 (22 px, bord --line-2, chevron) */
+.imp-sub .sel { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 22px; max-width: 280px; padding: 0 6px 0 8px; border: 1px solid var(--line-2); border-radius: 3px; background: var(--bg-1); color: var(--tx-1); white-space: nowrap; overflow: hidden; flex: none; min-width: 0; }
+.imp-sub .sel:hover { border-color: var(--line-3); }
+.imp-sub .sel:focus-within { border-color: rgba(255,255,255,.6); box-shadow: 0 0 0 3px rgba(255,255,255,.07); }
+.imp-sub .sel span { overflow: hidden; text-overflow: ellipsis; }
+.imp-sub .sel svg.i { width: 12px; height: 12px; color: var(--tx-3); }
+/* <select> natif posé, invisible, sur le cadre : garde le clavier et le menu de Windows */
+.imp-sub .sel select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font: 400 12px var(--font-mono); }
+.imp-sub .sel select option { background: #111; color: var(--tx-1); }
+.imp-sub .btn-sm { height: 22px; }
+.imp-sub .fold { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.scan-busy { margin-top: 16px; height: 120px; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px dashed var(--line-2); border-radius: var(--r-2); font: 400 13px/1 var(--font-sans); color: var(--tx-2); }
+.scan-busy svg.i { color: var(--tx-2); }

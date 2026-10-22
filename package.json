@@ -1,0 +1,40 @@
+{
+  "name": "cyberdeck",
+  "productName": "CyberDeck",
+  "version": "0.5.6",
+  "description": "CyberDeck — bibliothèque de jeux unifiée pour Windows (Steam, Epic, GOG, EA, Ubisoft, Xbox…), avec un client torrent en option",
+  "author": "Cyberkid667",
+  "license": "MIT",
+  "private": true,
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "icon": "node scripts/make-icon.mjs",
+    "dist": "electron-vite build && electron-builder --win"
+  },
+  "dependencies": {
+    "parse-torrent": "^11.0.24",
+    "webtorrent": "^3.0.21"
+  },
+  "devDependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@resvg/resvg-js": "^2.6.2",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^6.0.0",
+    "lucide-react": "^1.61.0",
+    "playwright-core": "^1.64.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "simple-icons": "^16.35.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
+  }
+}

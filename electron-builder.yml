@@ -1,0 +1,32 @@
+# Identifiant neutre de CyberDeck (le même que l'AppUserModelId de main/index.ts).
+# Il diffère de celui d'Essaim / CyberTorrent / CyberLink (fr.essaim.app) : l'installateur
+# ne remplace pas l'ancienne version, à désinstaller à part (ses données sont reprises au
+# premier lancement, voir main/index.ts).
+appId: app.cyberdeck.launcher
+productName: CyberDeck
+copyright: Copyright © 2026 Cyberkid667
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+# Les modules natifs (uTP, WebRTC) sont livrés précompilés en N-API :
+# pas besoin de les recompiler pour Electron.
+npmRebuild: false
+asarUnpack:
+  - '**/*.node'
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: CyberDeck-${version}-Setup.${ext}
+nsis:
+  oneClick: true
+  perMachine: false
+  allowElevation: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: CyberDeck
+  deleteAppDataOnUninstall: false

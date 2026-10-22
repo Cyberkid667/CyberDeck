@@ -1,0 +1,332 @@
+/* ==========================================================================
+   CyberDeck — base : jetons, règles globales, couches d'effets, défilement
+   et primitives partagées (boutons, champs, recherche, bascule, case, étiquettes,
+   touches). Repris de la feuille de référence finale (_src/base.css).
+   Ordre d'import : base, shell, torrents, library, dialogs (main.tsx).
+   Les icônes Lucide reçoivent toutes la classe « i » (LucideProvider dans main.tsx) :
+   leur taille et leur trait viennent UNIQUEMENT de ces feuilles.
+   ========================================================================== */
+
+/* ---------- Jetons ---------- */
+:root {
+  color-scheme: dark;
+  --font-mono: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace;
+  --font-sans: 'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+
+  /* surfaces : noir pur -> gris neutres (aucune teinte) */
+  --bg-0: #000000;   /* bande de titre, barre d'état, fond du démarrage */
+  --bg-1: #050505;   /* fond de l'app, lignes du tableau, champs */
+  --bg-2: #0a0a0a;   /* barre latérale, panneau de détails, cartes, bandeau */
+  --bg-3: #111111;   /* recherche, fond des jaquettes en chargement */
+  --bg-4: #181818;   /* éléments enfoncés */
+  --bg-5: #222222;
+  --row-hover: #0d0d0d;   /* survol d'une ligne */
+  --row-sel: #171717;     /* sélection multiple (+ barre #8d8d8d) */
+  --row-focus: #1d1d1d;   /* ligne dont on voit les détails (+ barre blanche + équerres) */
+
+  /* traits (blanc translucide, toujours 1 px) */
+  --hair: rgba(255, 255, 255, 0.065);
+  --line: rgba(255, 255, 255, 0.10);
+  --line-2: rgba(255, 255, 255, 0.16);
+  --line-3: rgba(255, 255, 255, 0.30);
+  --guide: rgba(255, 255, 255, 0.032);
+  --guide-2: rgba(255, 255, 255, 0.06);
+
+  /* texte — contraste mesuré sur --bg-2 (#0a0a0a) */
+  --tx-1: #f2f2f2;   /* 17,7:1 */
+  --tx-2: #bdbdbd;   /* 10,5:1 */
+  --tx-3: #8d8d8d;   /*  6,0:1 (5,1:1 sur la ligne focus #1d1d1d) — gris le plus sombre permis pour du texte */
+  --tx-4: #5e5e5e;   /*  3,0:1 — décor, « — » vides, désactivé ; jamais une information */
+
+  /* accent : blanc lumineux */
+  --lum: #ffffff;
+  --lum-fill: #f4f4f4;
+  --glow-sm: 0 0 6px rgba(255, 255, 255, 0.55);
+  --halo: 0 0 0 1px #ffffff, 0 8px 26px -8px rgba(255, 255, 255, 0.5), 0 0 22px rgba(255, 255, 255, 0.12);
+  --halo-hover: 0 0 0 1px #ffffff, 0 10px 30px -8px rgba(255, 255, 255, 0.62), 0 0 28px rgba(255, 255, 255, 0.18);
+  --halo-sm: 0 0 0 1px #ffffff, 0 4px 14px -6px rgba(255, 255, 255, 0.55);
+  --focus-ring: 0 0 0 1px rgba(255, 255, 255, 0.9), 0 0 0 4px rgba(255, 255, 255, 0.12);
+
+  /* états uniquement (jamais de décor) */
+  --ok: #3ddc8c;    --ok-soft: rgba(61, 220, 140, 0.14);
+  --err: #ff5d5d;   --err-soft: rgba(255, 93, 93, 0.13);  --err-line: rgba(255, 93, 93, 0.55);
+
+  /* verre */
+  --glass-fill: rgba(19, 19, 19, 0.84);
+  --glass-edge: linear-gradient(158deg, rgba(255,255,255,.36) 0%, rgba(255,255,255,.09) 22%, rgba(255,255,255,.04) 55%, rgba(255,255,255,.10) 100%);
+
+  /* rayons */
+  --r-1: 2px; --r-2: 4px; --r-3: 8px; --r-4: 12px; --r-5: 16px;
+
+  /* gabarit */
+  --strip-h: 44px;
+  --wc-w: 150px;        /* zone des boutons natifs de Windows (titleBarOverlay) */
+  --side-w: 224px;
+  --toolbar-h: 56px;
+  --groups-h: 22px;
+  --thead-h: 32px;
+  --row-h: 44px;
+  --tfoot-h: 26px;
+  --tabs-h: 38px;
+  --details-h: 320px;
+  --status-h: 28px;
+
+  /* tableau des torrents : une seule grille pour groupes, en-tête, lignes, repères */
+  --cols: 44px minmax(220px, 1fr) 84px 232px 100px 96px 104px 88px 80px 64px;
+  --tpad: 12px;
+  --bar-w: 216px;       /* 27 segments de 8 px */
+
+  /* barres segmentées : pas de 8 px CSS, segment + espace choisis pour tomber sur des pixels entiers */
+  --seg: 6px; --gap: 2px;
+
+  /* couches (z-index) */
+  --z-side: 1;          /* barre latérale, au-dessus de son arête */
+  --z-guides: 2;        /* repères verticaux du tableau, arête des détails */
+  --z-sticky: 3;        /* en-tête collant et pied de liste du tableau */
+  --z-splitter: 6;      /* séparateur redimensionnable */
+  --z-dialog: 70;       /* voile + dialogue */
+  --z-toast: 80;        /* toasts, visibles au-dessus d'un dialogue */
+  --z-menu: 90;         /* menu contextuel */
+  --z-drop: 95;         /* glisser-déposer */
+  --z-splash: 150;      /* écran de démarrage */
+  --z-grain: 200;       /* grain de film, au-dessus de tout */
+}
+@media (resolution: 1.25dppx) { :root { --seg: 6.4px; --gap: 1.6px; } }      /* 8 + 2 pixels physiques */
+@media (resolution: 1.5dppx)  { :root { --seg: 6px;   --gap: 2px; } }        /* 9 + 3 */
+@media (resolution: 1.75dppx) { :root { --seg: 6.2857px; --gap: 1.7143px; } } /* 11 + 3 */
+
+/* Fenêtre moyenne (< 1360 px) : colonnes compactes, pastilles en icône, pas de grand titre ni de rangée des groupes */
+@media (max-width: 1359px) {
+  :root {
+    --side-w: 208px;
+    --cols: 28px minmax(150px, 1fr) 70px 196px 84px 78px 92px 74px 66px 44px;
+    --tpad: 8px;
+    --bar-w: 176px;     /* 22 segments de 8 px */
+    --details-h: 300px;
+  }
+}
+/* Petite fenêtre (< 1100 px) : la barre latérale devient un rail de 60 px ; barre de 20 segments */
+@media (max-width: 1099px) {
+  :root {
+    --side-w: 60px;
+    --cols: 28px minmax(140px, 1fr) 70px 180px 84px 78px 92px 74px 66px 44px;
+    --bar-w: 160px;
+  }
+}
+/* Fenêtre basse (< 760 px) */
+@media (max-height: 759px) { :root { --toolbar-h: 52px; --details-h: 232px; } }
+/* Rangée des groupes masquée sous 1360 px de large ou 760 px de haut (les repères restent) */
+@media (max-width: 1359px), (max-height: 759px) { :root { --groups-h: 0px; } }
+
+/* ---------- Base ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body, #root { height: 100%; margin: 0; }
+html { background: var(--bg-0); }
+body {
+  background: var(--bg-1);
+  color: var(--tx-1);
+  font: 400 13.5px/1.45 var(--font-sans);
+  font-feature-settings: 'tnum' 1;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  min-width: 960px;
+  min-height: 600px;
+  user-select: none;            /* une app, pas une page : Maj+clic ne sélectionne pas de texte */
+}
+input, textarea, [contenteditable='true'] { user-select: text; }
+body.resizing, body.resizing * { cursor: row-resize !important; }
+a { color: inherit; text-decoration: none; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+button:focus { outline: none; }
+input, textarea, select { font: inherit; color: inherit; }
+svg.i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+svg.i.fill { fill: currentColor; stroke: none; }
+.mono { font-family: var(--font-mono); }
+/* Légende en petites capitales : 10 px minimum, interligne 13 px (les accents de É ne sont jamais coupés) */
+.cap { font: 500 10px/13px var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--tx-3); }
+.cap.deco, .deco { color: var(--tx-4); }       /* « · », « — », index : décor seulement */
+.nil { color: var(--tx-4); }
+.tot { color: var(--tx-3); }
+.port { color: var(--tx-3); }
+.ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+kbd.k { font: 500 10px/1 var(--font-mono); letter-spacing: 0.1em; color: var(--tx-2); border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 3px; padding: 3px 5px 2px; text-transform: uppercase; }
+:focus-visible { outline: none; }
+
+/* Défilement : fines barres sombres partout */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border: 3px solid transparent; background-clip: padding-box; border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 255, 255, 0.24); }
+::-webkit-scrollbar-thumb:active { background-color: rgba(255, 255, 255, 0.34); }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* ---------- Couches d'effets (statiques, peintes une fois) ---------- */
+/* Grain de film : une tuile de bruit fixe, au-dessus de tout, sans animation ni mélange */
+.grain {
+  position: fixed; inset: 0; z-index: var(--z-grain); pointer-events: none; opacity: 0.05;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1.4 -0.2'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+/* Grille fine (zones vides et plaques seulement ; les lignes du tableau sont opaques) */
+.gridded {
+  background-image: linear-gradient(var(--guide) 1px, transparent 1px), linear-gradient(90deg, var(--guide) 1px, transparent 1px);
+  background-size: 24px 24px; background-position: -1px -1px;
+}
+/* Équerres de coin : 8 dégradés sur un seul élément (--bk couleur, --bl longueur) */
+.brackets {
+  --bk: rgba(255, 255, 255, 0.55); --bl: 9px;
+  background:
+    linear-gradient(var(--bk), var(--bk)) top left / var(--bl) 1px no-repeat,
+    linear-gradient(var(--bk), var(--bk)) top left / 1px var(--bl) no-repeat,
+    linear-gradient(var(--bk), var(--bk)) top right / var(--bl) 1px no-repeat,
+    linear-gradient(var(--bk), var(--bk)) top right / 1px var(--bl) no-repeat,
+    linear-gradient(var(--bk), var(--bk)) bottom left / var(--bl) 1px no-repeat,
+    linear-gradient(var(--bk), var(--bk)) bottom left / 1px var(--bl) no-repeat,
+    linear-gradient(var(--bk), var(--bk)) bottom right / var(--bl) 1px no-repeat,
+    linear-gradient(var(--bk), var(--bk)) bottom right / 1px var(--bl) no-repeat;
+}
+/* Petite croix de 9 px */
+.plus { position: absolute; width: 9px; height: 9px; pointer-events: none;
+  background: linear-gradient(var(--line-3), var(--line-3)) center / 9px 1px no-repeat, linear-gradient(var(--line-3), var(--line-3)) center / 1px 9px no-repeat; }
+/* Arête de verre statique, sans backdrop-filter : liseré 1 px en dégradé */
+.glass-edge { position: relative; }
+.glass-edge::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2; border-radius: inherit; padding: 1px;
+  background: var(--glass-edge);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+}
+
+/* Point vivant (moteur actif, jeu lancé) : anneau animé en transform + opacity seulement */
+.live-dot { position: relative; width: 6px; height: 6px; border-radius: 50%; background: #fff; box-shadow: var(--glow-sm); flex: none; }
+.live-dot::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 1px solid rgba(255,255,255,.6); animation: ping 2.4s ease-out infinite; }
+.live-dot.off { background: var(--tx-4); box-shadow: none; }
+.live-dot.off::after { display: none; }
+/* Point d'état de 5 px (couleur = currentColor) */
+.sdot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex: none; }
+@keyframes ping { 0% { transform: scale(0.4); opacity: 0.9; } 80%, 100% { transform: scale(1.6); opacity: 0; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes scan { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+.spin { animation: spin 0.9s linear infinite; }
+/* Barre de balayage 160 × 2 px (chargement des détails, démarrage du moteur) : même reflet que « Recherche des infos » */
+.scanbar { display: block; width: 160px; height: 2px; position: relative; overflow: hidden; background: rgba(255,255,255,.08); }
+.scanbar i { position: absolute; top: 0; bottom: 0; width: 30%; background: linear-gradient(90deg, transparent, #fff, transparent); animation: scan 1.8s cubic-bezier(.5,0,.5,1) infinite; }
+
+/* ==========================================================================
+   Boutons
+   ========================================================================== */
+.btn {
+  height: 32px; display: inline-flex; align-items: center; gap: 8px; flex: none;
+  padding: 0 12px; border-radius: var(--r-2); border: 1px solid transparent;
+  font: 400 12px/1 var(--font-mono); letter-spacing: 0.01em; color: var(--tx-2); white-space: nowrap;
+  transition: background-color .12s, color .12s, box-shadow .12s, border-color .12s;
+}
+.btn svg.i { width: 15px; height: 15px; color: var(--tx-3); transition: color .12s; }
+.btn:hover { background: rgba(255,255,255,.055); color: var(--tx-1); }
+.btn:hover svg.i { color: var(--tx-1); }
+.btn:active { background: rgba(255,255,255,.09); }
+.btn:focus-visible { box-shadow: var(--focus-ring); color: var(--tx-1); }
+.btn[disabled] { opacity: 0.34; pointer-events: none; }
+/* Principal : blanc plein + halo (anneau blanc 1 px, halo bas, halo diffus) */
+.btn-primary { background: var(--lum-fill); color: #000; font-weight: 500; box-shadow: var(--halo); }
+.btn-primary svg.i { color: #000; stroke-width: 2; }
+.btn-primary svg.i.fill { stroke: none; }
+.btn-primary:hover { background: #fff; color: #000; box-shadow: var(--halo-hover); }
+.btn-primary:hover svg.i { color: #000; }
+.btn-primary:active { background: #e6e6e6; box-shadow: var(--halo-sm); }
+.btn-primary:focus-visible { color: #000; box-shadow: var(--halo), 0 0 0 4px rgba(255,255,255,.22); }
+.btn-primary[disabled] { opacity: 0.4; box-shadow: none; }
+/* Contour */
+.btn-line { border-color: var(--line-2); color: var(--tx-1); }
+.btn-line svg.i { color: var(--tx-2); }
+.btn-line:hover { border-color: var(--line-3); }
+/* Petit */
+.btn-sm { height: 26px; padding: 0 9px; font-size: 11px; gap: 6px; }
+.btn-sm svg.i { width: 13px; height: 13px; }
+.btn .ico-err { color: var(--err) !important; }
+/* Suppression : contour neutre, icône rouge ; armée (fichiers à la corbeille) : rouge plein */
+.btn-danger { border-color: var(--line-2); color: var(--tx-1); }
+.btn-danger svg.i { color: var(--err); }
+.btn-danger:hover { border-color: var(--err-line); background: rgba(255,93,93,.08); }
+.btn-danger:hover svg.i { color: var(--err); }
+.btn-danger.armed { background: var(--err); border-color: var(--err); color: #000; font-weight: 500; box-shadow: 0 0 22px rgba(255,93,93,.25); }
+.btn-danger.armed svg.i { color: #000; }
+.btn-danger.armed:hover { background: #ff7373; }
+.tsep { width: 1px; height: 22px; background: var(--line); margin: 0 10px; flex: none; }
+.spacer { flex: 1 1 0; min-width: 8px; }
+.row-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- Recherche ---------- */
+.search {
+  flex: 0 1 264px; min-width: 200px; height: 32px;
+  display: flex; align-items: center; gap: 9px; padding: 0 6px 0 11px;
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: var(--r-2); color: var(--tx-3);
+  transition: border-color .12s, box-shadow .12s;
+}
+.search:hover { border-color: var(--line-2); }
+.search:focus-within { border-color: rgba(255,255,255,.5); box-shadow: 0 0 0 3px rgba(255,255,255,.06); }
+.search svg.i { width: 15px; height: 15px; }
+.search input { all: unset; flex: 1; min-width: 0; font: 400 12px/1 var(--font-mono); color: var(--tx-1); user-select: text; }
+.search input::placeholder { color: var(--tx-3); }
+.search .clear { width: 22px; height: 22px; border-radius: 3px; display: grid; place-items: center; color: var(--tx-3); flex: none; }
+.search .clear:hover { background: rgba(255,255,255,.07); color: var(--tx-1); }
+.search .clear:focus-visible { box-shadow: var(--focus-ring); color: var(--tx-1); }
+.search .clear svg.i { width: 13px; height: 13px; }
+
+/* ---------- Bascule segmentée : choix actif = blanc plein, texte noir, enfoncé (se voit sans lire) ---------- */
+.seg { display: inline-flex; padding: 3px; gap: 3px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--bg-2); flex: none; }
+.seg button { height: 26px; padding: 0 11px; border-radius: 3px; display: inline-flex; align-items: center; gap: 8px; font: 400 11.5px/1 var(--font-mono); color: var(--tx-3); white-space: nowrap; transition: background-color .12s, color .12s; }
+.seg button:hover { color: var(--tx-1); background: rgba(255,255,255,.05); }
+.seg button:focus-visible { box-shadow: var(--focus-ring); }
+.seg button.on { background: var(--lum-fill); color: #000; font-weight: 500; box-shadow: inset 0 1px 2px rgba(0,0,0,.35), 0 0 14px rgba(255,255,255,.14); }
+.seg button svg.i { width: 14px; height: 14px; }
+.seg.dis, .search.dis { opacity: .34; pointer-events: none; }
+/* Bascule compacte (titre de section de la bibliothèque : « Installés | Tous ») : choix de 22 px, mono 10,5 */
+.seg.sm { padding: 2px; gap: 2px; }
+.seg.sm button { height: 22px; padding: 0 9px; font-size: 10.5px; }
+
+/* ---------- Champs ---------- */
+.ta, .inp {
+  width: 100%; background: var(--bg-1); border: 1px solid var(--line-2); border-radius: var(--r-2);
+  color: var(--tx-1); font: 400 12px/18px var(--font-mono); outline: none; resize: none;
+  transition: border-color .12s, box-shadow .12s;
+}
+.ta:hover, .inp:hover { border-color: var(--line-3); }
+/* Lien magnet : hauteur = n lignes de 18 px + 2 × 10 px de marge ; grandit de 3 à 5 lignes, puis défile avec un fondu */
+.ta { display: block; padding: 10px 12px; height: calc(var(--lines, 3) * 18px + 22px); word-break: break-all; overflow: hidden; }
+.ta.scroll { overflow-y: auto; -webkit-mask-image: linear-gradient(#000 calc(100% - 28px), transparent calc(100% - 6px)); mask-image: linear-gradient(#000 calc(100% - 28px), transparent calc(100% - 6px)); }
+.ta.scroll::-webkit-scrollbar { width: 0; }
+.ta::placeholder, .inp::placeholder { color: var(--tx-3); }
+.ta:focus, .inp:focus, .ta.focus, .inp.focus { border-color: rgba(255,255,255,.62) !important; box-shadow: 0 0 0 3px rgba(255,255,255,.07), 0 0 22px rgba(255,255,255,.07); }
+.inp { height: 34px; padding: 0 12px; line-height: 32px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inp.sans { font: 450 13px/32px var(--font-sans); }
+.inp.ro { color: var(--tx-2); }
+.inp.invalid, .ta.invalid { border-color: var(--err-line) !important; box-shadow: 0 0 0 3px var(--err-soft); }
+.inp[disabled], .ta[disabled] { opacity: .5; }
+
+/* ---------- Case à cocher : cochée = carré blanc plein + grosse coche noire + effet enfoncé ; décochée = relief sombre ---------- */
+.cbox { flex: none; width: 20px; height: 20px; margin-top: 1px; border-radius: 4px; display: grid; place-items: center; cursor: pointer; position: relative;
+  border: 1px solid var(--line-3); background: linear-gradient(180deg, #1c1c1c, #0e0e0e); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 1px 2px rgba(0,0,0,.6); }
+.cbox:hover { border-color: rgba(255,255,255,.55); }
+.cbox:focus-visible, .cbox:has(input:focus-visible) { box-shadow: var(--focus-ring); }
+.cbox svg { width: 14px; height: 14px; stroke: #000; stroke-width: 3; fill: none; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
+.cbox.on, .check.on .cbox { background: var(--lum-fill); border-color: #fff; box-shadow: inset 0 2px 3px rgba(0,0,0,.35), 0 0 14px rgba(255,255,255,.25); }
+.cbox.on svg, .check.on .cbox svg { opacity: 1; }
+.cbox.dis { opacity: .35; cursor: default; }
+/* vraie case <input type="checkbox"> masquée visuellement dans .cbox */
+.cbox input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: inherit; }
+
+/* ---------- Étiquettes ---------- */
+.tag { flex: none; height: 22px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: 3px; border: 1px solid var(--line-2);
+  font: 500 10px/13px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--tx-2); white-space: nowrap; }
+.tag svg.i { width: 12px; height: 12px; }
+.tag.warn { border: 1px dashed var(--err-line); color: var(--err); }
+
+/* ==========================================================================
+   Mouvement réduit : toutes les animations et transitions s'arrêtent
+   (les canevas dessinent une seule image : voir fx/loop.ts)
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .live-dot::after { display: none; }
+  .scanbar i { left: 35%; }
+}

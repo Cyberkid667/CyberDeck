@@ -1,0 +1,22 @@
+import path from 'node:path'
+import { pathToFileURL } from 'node:url'
+// racine du projet, déduite de l'emplacement de ce script (tests/outils)
+const ROOT = path.resolve(import.meta.dirname, '..', '..')
+const [outDir, userData] = process.argv.slice(2)
+const { _electron } = await import(pathToFileURL(path.join(ROOT, 'node_modules', 'playwright-core', 'index.mjs')).href)
+const app = await _electron.launch({ executablePath: path.join(ROOT, 'node_modules', 'electron', 'dist', 'electron.exe'), args: [path.resolve(outDir, 'main', 'index.js')], env: { ...process.env, CYBERDECK_USER_DATA: path.resolve(userData) , CYBERDECK_TEST_QUIET: '1'} })
+const page = await app.firstWindow()
+page.setDefaultTimeout(15000)
+await page.waitForTimeout(2500)
+await page.locator('[data-testid="nav-library"]').click()
+await page.locator('[data-testid="btn-import-folder"]').click()
+await page.locator('[data-testid="import-row"]').first().waitFor()
+await page.waitForTimeout(1500)
+const rows = await page.locator('[data-testid="import-row"]').evaluateAll((els) => els.map((el) => {
+  const cb = el.querySelector('input[type=checkbox]')
+  return (cb?.checked ? '[x] ' : '[ ] ') + el.innerText.replace(/\s+/g, ' ').slice(0, 140)
+}))
+console.log(rows.filter((r) => r.startsWith('[x]')).join('\n') || 'aucune ligne cochée')
+await page.evaluate(() => window.close()).catch(() => {})
+await app.waitForEvent('close', { timeout: 15000 }).catch(() => {})
+process.exit(0)
