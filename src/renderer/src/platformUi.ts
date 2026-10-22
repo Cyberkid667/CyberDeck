@@ -1,3 +1,4 @@
+import { getLang, locale, t, tn } from '../../shared/i18n'
 import { canInstallGame, gameLastPlayedAt, PLATFORM_INFO, PLATFORM_ORDER } from '../../shared/platforms'
 import type { Game, GamePlatform, LibraryState, PlatformsState } from '../../shared/types'
 
@@ -15,8 +16,12 @@ export const FILTER_ORDER: GamePlatform[] = [...PLATFORM_ORDER, 'local']
 
 export const platformName = (p: GamePlatform): string => PLATFORM_INFO[p].name
 
-/** « de Steam », « d’Epic Games », « d’Ubisoft Connect » (élision devant une voyelle). */
-export const ofName = (name: string): string => (/^[aeiouyàâéèêîôû]/i.test(name) ? `d’${name}` : `de ${name}`)
+/**
+ * Français : « de Steam », « d’Epic Games », « d’Ubisoft Connect » (élision devant une voyelle) ;
+ * anglais : « from Steam ».
+ */
+export const ofName = (name: string): string =>
+  getLang() !== 'fr' ? `from ${name}` : /^[aeiouyàâéèêîôû]/i.test(name) ? `d’${name}` : `de ${name}`
 
 /**
  * Jeu sur ce PC, ou en cours d'installation par sa plateforme (Steam le télécharge) :
@@ -68,12 +73,13 @@ export function gameState(g: Game, lib: Pick<LibraryState, 'running' | 'launchin
 export const canPlayState = (s: GameState): boolean => s === 'ready' || s === 'updating'
 
 /** « Jouer via Steam » pour un jeu de plateforme, « Jouer » pour un jeu local. */
-export const playLabel = (g: Game): string => (g.platform === 'local' ? 'Jouer' : `Jouer via ${platformName(g.platform)}`)
+export const playLabel = (g: Game): string =>
+  g.platform === 'local' ? t('library.common.play') : t('library.common.playVia', { platform: platformName(g.platform) })
 
 /** Dossier du jeu à montrer (bandeau, fiche) : dossier d'installation d'abord (l'exe peut être vide). */
 export const gameFolder = (g: Game): string | null => (g.platform === 'local' ? g.exePath || g.installDir : g.installDir || g.exePath || null)
 
-const byName = (a: Game, b: Game): number => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base', numeric: true })
+const byName = (a: Game, b: Game): number => a.name.localeCompare(b.name, locale(), { sensitivity: 'base', numeric: true })
 
 /**
  * Tri « Joués récemment » : d'abord les jeux déjà joués, de la dernière partie (CyberDeck ou
@@ -92,5 +98,5 @@ function byRecent(a: Game, b: Game): number {
 
 export const sortGames = (list: Game[], mode: 'recent' | 'name'): Game[] => list.sort(mode === 'name' ? byName : byRecent)
 
-/** « 1 jeu », « 6 jeux » */
-export const gamesWord = (n: number): string => (n > 1 ? 'jeux' : 'jeu')
+/** « 1 jeu », « 6 jeux » ; « 1 game », « 6 games » */
+export const gamesWord = (n: number): string => tn('library.games.word', n)

@@ -1,14 +1,18 @@
 import type { TorrentStatus, TorrentSummary } from '../../shared/types'
+import { locale, t, tn } from '../../shared/i18n'
 
-// Formats français à décimales FIXES : rien ne saute d'une seconde à l'autre
-// (les chiffres mono ont tous la même largeur). Voir SPEC 8.
-// 756 Mo · 6,20 Go · 18,4 Mo/s · 412 Ko/s · 42,0 % · 0,84 · 3 h 05 · 00:14:36
+// Formats à décimales FIXES : rien ne saute d'une seconde à l'autre
+// (les chiffres mono ont tous la même largeur). Voir SPEC 8. Ils suivent la langue de l'interface :
+// 756 Mo · 6,20 Go · 18,4 Mo/s · 412 Ko/s · 42,0 % · 0,84 · 3 h 05 · 00:14:36 (français)
+// 756 MB · 6.20 GB · 18.4 MB/s · 412 KB/s · 42.0% · 0.84 · 3h 05m · 00:14:36 (anglais)
 
-const UNITS = ['o', 'Ko', 'Mo', 'Go', 'To']
+/** Unités de taille dans la langue en cours : « o|Ko|Mo|Go|To » ou « B|KB|MB|GB|TB ». */
+const units = (): string[] => t('shell.format.units').split('|')
 
 /** Taille : 2 décimales sous 10, 1 sous 100, 0 au-delà (min = max) : « 6,20 Go », « 18,4 Mo », « 756 Mo ». */
 export function formatBytes(bytes: number): string {
-  if (!bytes || bytes < 0) return '0 o'
+  const UNITS = units()
+  if (!bytes || bytes < 0) return `0 ${UNITS[0]}`
   let i = 0
   let v = bytes
   while (v >= 1024 && i < UNITS.length - 1) {
@@ -16,7 +20,7 @@ export function formatBytes(bytes: number): string {
     i++
   }
   const digits = i === 0 ? 0 : v < 10 ? 2 : v < 100 ? 1 : 0
-  return `${v.toLocaleString('fr-FR', { maximumFractionDigits: digits, minimumFractionDigits: digits })} ${UNITS[i]}`
+  return `${v.toLocaleString(locale(), { maximumFractionDigits: digits, minimumFractionDigits: digits })} ${UNITS[i]}`
 }
 
 /** Vitesse : « 18,4 Mo/s » ; « — » à zéro (à afficher en --tx-4 : <span className="nil">). */
@@ -36,55 +40,58 @@ export function shownDownload(t: Pick<TorrentSummary, 'downloadSpeed' | 'progres
   return t.progress >= 1 || t.status === 'seeding' || t.status === 'completed' ? 0 : t.downloadSpeed
 }
 
-/** Temps restant : « 42 s », « 5 min 18 s », « 3 h 05 min », « 2 j 4 h », « > 99 j » ; « — » si inconnu. */
+/**
+ * Temps restant : « 42 s », « 5 min 18 s », « 3 h 05 min », « 2 j 4 h », « > 99 j » ; « — » si inconnu.
+ * Anglais : « 42s », « 5m 18s », « 3h 05m », « 2d 4h », « > 99d ».
+ */
 export function formatEta(seconds: number | null): string {
   if (seconds === null || !isFinite(seconds) || seconds < 0) return '—'
   const total = Math.round(seconds)
-  if (total < 60) return `${Math.max(1, total)} s`
+  if (total < 60) return t('shell.eta.s', { s: Math.max(1, total) })
   const m = Math.floor(total / 60)
-  if (m < 60) return `${m} min ${String(total % 60).padStart(2, '0')} s`
+  if (m < 60) return t('shell.eta.ms', { m, s: String(total % 60).padStart(2, '0') })
   const h = Math.floor(m / 60)
-  if (h < 24) return `${h} h ${String(m % 60).padStart(2, '0')} min`
+  if (h < 24) return t('shell.eta.hm', { h, m: String(m % 60).padStart(2, '0') })
   const d = Math.floor(h / 24)
-  return d > 99 ? '> 99 j' : `${d} j ${h % 24} h`
+  return d > 99 ? t('shell.eta.max') : t('shell.eta.dh', { d, h: h % 24 })
 }
 
 /**
  * Pourcentage : « 0 % » et « 100 % » exacts ; sinon UNE décimale toujours affichée,
- * arrondie vers le bas (on ne voit jamais « 100,0 % » avant la fin réelle).
+ * arrondie vers le bas (on ne voit jamais « 100,0 % » avant la fin réelle). Anglais : « 42.0% ».
  */
 export function formatPercent(p: number): string {
   const v = Math.max(0, Math.min(1, p || 0)) * 100
-  if (v >= 100) return '100 %'
-  if (v <= 0) return '0 %'
+  if (v >= 100) return t('shell.format.percent', { v: 100 })
+  if (v <= 0) return t('shell.format.percent', { v: 0 })
   // + 1e-9 : 0,29 × 100 = 28,999999999999996 doit donner 29,0 ; jamais plus de 99,9 avant la fin
   const d = Math.min(99.9, Math.floor(v * 10 + 1e-9) / 10)
-  return `${d.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`
+  return t('shell.format.percent', { v: d.toLocaleString(locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })
 }
 
 /** Largeur de barre pour --p : « 42.00% » (point décimal, pour le CSS). */
 export const percentVar = (p: number): string => `${(Math.max(0, Math.min(1, p || 0)) * 100).toFixed(2)}%`
 
-/** Ratio : toujours 2 décimales, « 0,84 ». */
+/** Ratio : toujours 2 décimales, « 0,84 » (« 0.84 » en anglais). */
 export function formatRatio(r: number): string {
-  return (r || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return (r || 0).toLocaleString(locale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 /** Date et heure : « 21 oct. 2026, 22:58 » ; « — » si absente. */
 export function formatDate(ts: number | null): string {
   if (!ts) return '—'
-  return new Date(ts).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })
+  return new Date(ts).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' })
 }
 
 /** Jour seul : « 21 oct. 2026 » ; « — » si absent. */
 export function formatDay(ts: number | null): string {
   if (!ts) return '—'
-  return new Date(ts).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
+  return new Date(ts).toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-/** Heure : « 23:21 » (ou « 23:41:52 » avec les secondes). */
+/** Heure : « 23:21 » (ou « 23:41:52 » avec les secondes) ; « 11:21 PM » en anglais. */
 export function formatTime(ts: number, seconds = false): string {
-  return new Date(ts).toLocaleTimeString('fr-FR', seconds ? { hour: '2-digit', minute: '2-digit', second: '2-digit' } : { hour: '2-digit', minute: '2-digit' })
+  return new Date(ts).toLocaleTimeString(locale(), seconds ? { hour: '2-digit', minute: '2-digit', second: '2-digit' } : { hour: '2-digit', minute: '2-digit' })
 }
 
 /** Compteur en texte simple : « 55 (197) », ou « 2 » sans total connu. */
@@ -97,13 +104,13 @@ export function countParts(connected: number, total: number | null): { n: string
   return { n: String(connected), total: total === null ? null : ` (${total})` }
 }
 
-/** Temps de jeu long (bandeau) : « Jamais joué », « Moins d’une minute », « 15 min », « 3 h 05 ». */
+/** Temps de jeu long (bandeau) : « Jamais joué », « Moins d’une minute », « 15 min », « 3 h 05 » (anglais : « 3h 05m »). */
 export function formatPlayTime(seconds: number): string {
-  if (!seconds) return 'Jamais joué'
-  if (seconds < 60) return 'Moins d’une minute'
+  if (!seconds) return t('shell.play.never')
+  if (seconds < 60) return t('shell.play.underMinute')
   const m = Math.round(seconds / 60)
-  if (m < 60) return `${m} min`
-  return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`
+  if (m < 60) return t('shell.play.m', { m })
+  return t('shell.play.hm', { h: Math.floor(m / 60), m: String(m % 60).padStart(2, '0') })
 }
 
 /**
@@ -112,39 +119,43 @@ export function formatPlayTime(seconds: number): string {
  * (texte complet de la bulle).
  */
 export function formatPlayTimeShort(seconds: number, full = false): string {
-  if (!seconds) return 'Jamais joué'
-  if (seconds < 60) return '< 1 min'
+  if (!seconds) return t('shell.play.never')
+  if (seconds < 60) return t('shell.play.underMinuteShort')
   const m = Math.round(seconds / 60)
-  if (m < 60) return `${m} min`
+  if (m < 60) return t('shell.play.m', { m })
   const h = Math.floor(m / 60)
-  return h >= 100 && !full ? `${h} h` : `${h} h ${String(m % 60).padStart(2, '0')}`
+  return h >= 100 && !full ? t('shell.play.h', { h }) : t('shell.play.hm', { h, m: String(m % 60).padStart(2, '0') })
 }
 
 /**
  * Dernière partie (cartes) : « aujourd’hui », « hier », « il y a 3 j », « le 12 oct. » ; '' si jamais.
- * full : « il y a 3 jours » (texte complet de la bulle).
+ * full : « il y a 3 jours » (texte complet de la bulle). Anglais : « today », « yesterday »,
+ * « 3d ago » (« 3 days ago »), « on Oct 12 ».
  */
 export function formatLastPlayed(ts: number | null, now = Date.now(), full = false): string {
   if (!ts) return ''
   const day = (t: number): number => new Date(t).setHours(0, 0, 0, 0)
   const days = Math.round((day(now) - day(ts)) / 86_400_000)
-  if (days <= 0) return 'aujourd’hui'
-  if (days === 1) return 'hier'
-  if (days < 7) return full ? `il y a ${days} jours` : `il y a ${days} j`
-  return `le ${new Date(ts).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`
+  if (days <= 0) return t('shell.when.today')
+  if (days === 1) return t('shell.when.yesterday')
+  if (days < 7) return full ? tn('shell.when.daysAgo', days) : t('shell.when.daysAgoShort', { n: days })
+  return t('shell.when.onDate', { date: new Date(ts).toLocaleDateString(locale(), { day: 'numeric', month: 'short' }) })
 }
 
-/** « aujourd’hui à 23:21 », « hier à 23:21 », « le 12 oct. à 21:10 » (« le 12 oct. 2025 à … » une autre année). */
+/**
+ * « aujourd’hui à 23:21 », « hier à 23:21 », « le 12 oct. à 21:10 » (« le 12 oct. 2025 à … » une autre année).
+ * Anglais : « today at 11:21 PM », « yesterday at 11:21 PM », « on Oct 12 at 9:10 PM ».
+ */
 export function formatWhen(ts: number, now = Date.now()): string {
   const day = (t: number): number => new Date(t).setHours(0, 0, 0, 0)
   const days = Math.round((day(now) - day(ts)) / 86_400_000)
   const at = formatTime(ts)
-  if (days <= 0) return `aujourd’hui à ${at}`
-  if (days === 1) return `hier à ${at}`
+  if (days <= 0) return t('shell.when.todayAt', { time: at })
+  if (days === 1) return t('shell.when.yesterdayAt', { time: at })
   const d = new Date(ts)
   const sameYear = d.getFullYear() === new Date(now).getFullYear()
-  const date = d.toLocaleDateString('fr-FR', sameYear ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' })
-  return `le ${date} à ${at}`
+  const date = d.toLocaleDateString(locale(), sameYear ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' })
+  return t('shell.when.onDateAt', { date, time: at })
 }
 
 /** Chrono de session en trois morceaux sur 2 chiffres : ['00', '14', '36'] (secondes en --tx-3 dans le bandeau). */
@@ -181,16 +192,14 @@ export const baseName = (p: string): string => p.split(/[\\/]/).pop() ?? p
 export const errorText = (err: unknown): string =>
   String((err as Error)?.message ?? err).replace(/^Error invoking remote method '[^']+': (Error: )?/, '')
 
-export const STATUS_LABEL: Record<TorrentStatus, string> = {
-  metadata: 'Recherche des infos',
-  checking: 'Vérification',
-  downloading: 'Téléchargement',
-  stalled: 'En attente de pairs',
-  seeding: 'En partage',
-  paused: 'En pause',
-  completed: 'Terminé',
-  error: 'Erreur'
-}
+const STATUSES: TorrentStatus[] = ['metadata', 'checking', 'downloading', 'stalled', 'seeding', 'paused', 'completed', 'error']
+
+/** Libellé d'un statut dans la langue en cours. */
+export const statusLabel = (status: TorrentStatus): string => t(`shell.status.${status}`)
+
+/** Libellés des statuts ; chaque accès lit la langue en cours (getters). Préférer statusLabel(). */
+export const STATUS_LABEL = {} as Record<TorrentStatus, string>
+for (const s of STATUSES) Object.defineProperty(STATUS_LABEL, s, { get: () => statusLabel(s), enumerable: true })
 
 /**
  * Cause courte d'une erreur, affichée après « ERREUR · » : ENOSPC / espace →
@@ -200,10 +209,10 @@ export const STATUS_LABEL: Record<TorrentStatus, string> = {
 export function errorCause(error: string | null | undefined): string {
   const e = (error ?? '').trim().replace(/^error:\s*/i, '')
   if (!e) return ''
-  if (/ENOSPC|espace|no space left|disk full/i.test(e)) return 'Disque plein'
-  if (/EACCES|EPERM|permission denied|operation not permitted|accès refusé/i.test(e)) return 'Accès refusé'
-  if (/ENOENT|no such file|introuvable/i.test(e)) return 'Fichiers introuvables'
-  if (/ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH|EAI_AGAIN|ENOTFOUND|network|réseau/i.test(e)) return 'Réseau'
+  if (/ENOSPC|espace|no space left|disk full/i.test(e)) return t('shell.cause.diskFull')
+  if (/EACCES|EPERM|permission denied|operation not permitted|accès refusé/i.test(e)) return t('shell.cause.accessDenied')
+  if (/ENOENT|no such file|introuvable/i.test(e)) return t('shell.cause.notFound')
+  if (/ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENETUNREACH|EHOSTUNREACH|EAI_AGAIN|ENOTFOUND|network|réseau/i.test(e)) return t('shell.cause.network')
   return e.length > 24 ? `${e.slice(0, 24).trimEnd()}…` : e
 }
 
@@ -211,9 +220,9 @@ export function errorCause(error: string | null | undefined): string {
 export function statusText(t: Pick<TorrentSummary, 'status' | 'error'>): string {
   if (t.status === 'error') {
     const cause = errorCause(t.error)
-    return cause ? `${STATUS_LABEL.error} · ${cause}` : STATUS_LABEL.error
+    return cause ? `${statusLabel('error')} · ${cause}` : statusLabel('error')
   }
-  return STATUS_LABEL[t.status]
+  return statusLabel(t.status)
 }
 
 /** Lien magnet sans « dn » : le moteur met l'empreinte comme nom jusqu'à l'arrivée des infos. */
@@ -222,12 +231,16 @@ export const isHashName = (t: Pick<TorrentSummary, 'id' | 'name'>): boolean =>
 
 export type Filter = 'all' | 'active' | 'done' | 'seeding'
 
-export const FILTERS: { id: Filter; label: string }[] = [
-  { id: 'all', label: 'Tous' },
-  { id: 'active', label: 'En cours' },
-  { id: 'done', label: 'Terminés' },
-  { id: 'seeding', label: 'En partage' }
-]
+/** Libellé d'un filtre dans la langue en cours. */
+export const filterLabel = (id: Filter): string => t(`shell.filter.${id}`)
+
+/** Filtres de la barre latérale ; label est lu dans la langue en cours à chaque accès. */
+export const FILTERS: { readonly id: Filter; readonly label: string }[] = (['all', 'active', 'done', 'seeding'] as Filter[]).map((id) => ({
+  id,
+  get label(): string {
+    return filterLabel(id)
+  }
+}))
 
 export function matchesFilter(t: TorrentSummary, f: Filter): boolean {
   switch (f) {

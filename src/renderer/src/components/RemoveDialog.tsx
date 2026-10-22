@@ -2,6 +2,7 @@ import { Trash2 } from 'lucide-react'
 import { useRef, useState } from 'react'
 import type { TorrentStatus, TorrentSummary } from '../../../shared/types'
 import { DASH, formatBytes, formatPercent, isHashName, statusText } from '../format'
+import { useT } from '../i18n'
 import { CheckMark, DialogFrame, DialogHead, Keys } from './AddDialog'
 
 // Supprimer (SPEC 5.12, 540 px) : liste des torrents visés (point de couleur de
@@ -31,6 +32,7 @@ const DOT: Record<TorrentStatus, string> = {
 const MAX_ROWS = 5
 
 export function RemoveDialog({ torrents, onCancel, onConfirm }: Props): React.JSX.Element {
+  const { t, tn } = useT()
   const [deleteFiles, setDeleteFiles] = useState(false)
   // anneau de focus sur Annuler dès l'ouverture, même ouvert à la souris : c'est le choix par défaut
   const [ring, setRing] = useState(true)
@@ -43,32 +45,30 @@ export function RemoveDialog({ torrents, onCancel, onConfirm }: Props): React.JS
     <DialogFrame kind="remove" size="single" labelledBy="rm-title" onClose={onCancel} initialFocus={cancelRef}>
       <DialogHead
         id="rm-title"
-        cap="01.2 · Suppression"
-        title={many ? `Supprimer ${n} torrents ?` : 'Supprimer ce torrent ?'}
+        cap={t('shell.remove.cap')}
+        title={many ? t('shell.remove.titleMany', { n }) : t('shell.remove.titleOne')}
         onClose={onCancel}
       />
 
       {n > 0 && (
         <ul className="rm-list">
-          {torrents.slice(0, MAX_ROWS).map((t) => {
-            const hash = isHashName(t)
+          {torrents.slice(0, MAX_ROWS).map((tr) => {
+            const hash = isHashName(tr)
             return (
-              <li key={t.id}>
-                <span className="sdot" style={{ color: DOT[t.status] }} title={statusText(t)} aria-label={statusText(t)} />
-                <span className={`nm ell${hash ? ' hash' : ''}`} title={t.name}>
-                  {hash ? t.id : t.name}
+              <li key={tr.id}>
+                <span className="sdot" style={{ color: DOT[tr.status] }} title={statusText(tr)} aria-label={statusText(tr)} />
+                <span className={`nm ell${hash ? ' hash' : ''}`} title={tr.name}>
+                  {hash ? tr.id : tr.name}
                 </span>
                 <span className="mono">
-                  {t.size > 0 ? formatBytes(t.size) : DASH} · {formatPercent(t.progress)}
+                  {tr.size > 0 ? formatBytes(tr.size) : DASH} · {formatPercent(tr.progress)}
                 </span>
               </li>
             )
           })}
           {rest > 0 && (
             <li>
-              <span className="more">
-                et {rest} autre{rest > 1 ? 's' : ''}…
-              </span>
+              <span className="more">{tn('shell.remove.more', rest)}</span>
             </li>
           )}
         </ul>
@@ -85,17 +85,13 @@ export function RemoveDialog({ torrents, onCancel, onConfirm }: Props): React.JS
           <CheckMark />
         </span>
         <span className="txt">
-          Mettre aussi les fichiers téléchargés à la corbeille
-          <small>
-            {many
-              ? 'Sinon, les fichiers restent dans leur dossier et seuls les torrents quittent la liste.'
-              : 'Sinon, les fichiers restent dans leur dossier et seul le torrent quitte la liste.'}
-          </small>
+          {t('shell.remove.deleteFiles')}
+          <small>{many ? t('shell.remove.keepFilesMany') : t('shell.remove.keepFilesOne')}</small>
         </span>
       </label>
 
       <div className="dfoot">
-        <Keys keys={[['Échap', 'annuler']]} />
+        <Keys keys={[[t('shell.keys.esc'), t('shell.keys.cancel')]]} />
         <button
           ref={cancelRef}
           type="button"
@@ -104,7 +100,7 @@ export function RemoveDialog({ torrents, onCancel, onConfirm }: Props): React.JS
           onBlur={() => setRing(false)}
           onClick={onCancel}
         >
-          Annuler
+          {t('shell.common.cancel')}
         </button>
         <button
           type="button"
@@ -113,7 +109,7 @@ export function RemoveDialog({ torrents, onCancel, onConfirm }: Props): React.JS
           onClick={() => onConfirm(deleteFiles)}
         >
           <Trash2 />
-          {deleteFiles ? 'Supprimer avec les fichiers' : 'Supprimer'}
+          {deleteFiles ? t('shell.remove.submitWithFiles') : t('shell.remove.submit')}
         </button>
       </div>
     </DialogFrame>

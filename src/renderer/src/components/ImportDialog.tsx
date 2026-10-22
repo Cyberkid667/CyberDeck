@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ScanCandidate } from '../../../shared/types'
 import { baseName } from '../format'
 import { useCanvasHold } from '../fx/loop'
+import { useT } from '../i18n'
 import { CheckMark, DialogFrame, DialogHead } from './AddDialog'
 
 // Importer un dossier de jeux (SPEC 5.12, 780 px) : un sous-dossier par jeu.
@@ -26,26 +27,28 @@ const relative = (file: string, root: string): string =>
   file.toLowerCase().startsWith(root.toLowerCase()) ? file.slice(root.length + 1) : file
 
 function Tag({ row }: { row: Row }): React.JSX.Element | null {
-  if (row.alreadyInLibrary) return <span className="tag">Déjà dans la bibliothèque</span>
+  const { t } = useT()
+  if (row.alreadyInLibrary) return <span className="tag">{t('library.import.tagInLibrary')}</span>
   if (row.kind === 'installer')
     return (
       <span className="tag warn">
         <TriangleAlert />
-        Installateur, pas un jeu installé
+        {t('library.import.tagInstaller')}
       </span>
     )
-  if (row.kind === 'tool') return <span className="tag">Outil ou émulateur</span>
+  if (row.kind === 'tool') return <span className="tag">{t('library.import.tagTool')}</span>
   if (row.kind === 'empty' && !row.exePath)
     return (
       <span className="tag warn">
         <TriangleAlert />
-        Aucun programme trouvé
+        {t('library.import.tagNoExe')}
       </span>
     )
   return null
 }
 
 export function ImportDialog({ onClose, onToast }: Props): React.JSX.Element {
+  const { t, tn } = useT()
   // les canevas de la bibliothèque (poussière du bandeau…) restent figés derrière le dialogue
   useCanvasHold()
   const [folder, setFolder] = useState('')
@@ -100,11 +103,11 @@ export function ImportDialog({ onClose, onToast }: Props): React.JSX.Element {
       )
     } catch {
       setBusy(false)
-      onToast('error', 'L’import n’a pas pu se faire. Réessaie.')
+      onToast('error', t('library.import.failed'))
       return
     }
     setBusy(false)
-    onToast('success', `${added} jeu${added > 1 ? 'x' : ''} ajouté${added > 1 ? 's' : ''}. Les jaquettes arrivent une par une.`)
+    onToast('success', tn('library.import.added', added))
     onClose()
   }
 
@@ -112,18 +115,16 @@ export function ImportDialog({ onClose, onToast }: Props): React.JSX.Element {
     <DialogFrame kind="import" size="wide" labelledBy="import-title" busy={busy} onClose={onClose}>
       <DialogHead
         id="import-title"
-        cap={rows ? '02.4 · Import — analyse terminée' : '02.4 · Import — analyse en cours'}
-        title="Importer un dossier de jeux"
+        cap={rows ? t('library.import.capDone') : t('library.import.capBusy')}
+        title={t('library.common.importFolder')}
         onClose={onClose}
         busy={busy}
       />
       <div className="field">
         <div className="lab">
-          <span className="cap">Dossier qui contient tes jeux (un sous-dossier par jeu)</span>
+          <span className="cap">{t('library.import.folderLabel')}</span>
           {rows && (
-            <span className="cap">
-              {rows.length} sous-dossier{rows.length > 1 ? 's' : ''}
-            </span>
+            <span className="cap">{tn('library.import.subfolders', rows.length)}</span>
           )}
         </div>
         <div className="path-row">
@@ -134,11 +135,11 @@ export function ImportDialog({ onClose, onToast }: Props): React.JSX.Element {
             tabIndex={-1}
             value={folder}
             title={folder}
-            aria-label="Dossier qui contient tes jeux"
+            aria-label={t('library.import.folderAria')}
           />
           <button type="button" className="btn btn-line" disabled={busy} data-testid="folder-pick" onClick={chooseFolder}>
             <FolderOpen />
-            Changer…
+            {t('library.import.change')}
           </button>
         </div>
       </div>
@@ -146,12 +147,12 @@ export function ImportDialog({ onClose, onToast }: Props): React.JSX.Element {
       {!rows ? (
         <div className="scan-busy" aria-busy="true">
           <LoaderCircle className="spin" />
-          Analyse du dossier…
+          {t('library.import.scanning')}
         </div>
       ) : rows.length === 0 ? (
-        <div className="scan-busy">Aucun sous-dossier trouvé.</div>
+        <div className="scan-busy">{t('library.import.noSubfolders')}</div>
       ) : (
-        <div className="imp" role="list" aria-label="Sous-dossiers trouvés">
+        <div className="imp" role="list" aria-label={t('library.import.listAria')}>
           {rows.map((row, i) => {
             const can = !!row.exePath
             const on = row.checked && can
@@ -162,7 +163,7 @@ export function ImportDialog({ onClose, onToast }: Props): React.JSX.Element {
                     type="checkbox"
                     checked={on}
                     disabled={!can || busy}
-                    aria-label={`Importer ${row.name || baseName(row.folder)}`}
+                    aria-label={t('library.import.rowAria', { name: row.name || baseName(row.folder) })}
                     onChange={(e) => update(i, { checked: e.target.checked })}
                   />
                   <CheckMark />
@@ -175,7 +176,7 @@ export function ImportDialog({ onClose, onToast }: Props): React.JSX.Element {
                     spellCheck={false}
                     autoComplete="off"
                     disabled={busy}
-                    aria-label="Nom du jeu"
+                    aria-label={t('library.common.gameName')}
                     onChange={(e) => update(i, { name: e.target.value })}
                   />
                   <div className="imp-sub">
@@ -186,7 +187,7 @@ export function ImportDialog({ onClose, onToast }: Props): React.JSX.Element {
                         <select
                           value={row.exePath!}
                           disabled={busy}
-                          aria-label={`Programme qui lance ${row.name || baseName(row.folder)}`}
+                          aria-label={t('library.import.exeAria', { name: row.name || baseName(row.folder) })}
                           onChange={(e) => (e.target.value === OTHER ? void chooseExe(i, row) : update(i, { exePath: e.target.value }))}
                         >
                           {row.exeOptions.map((o) => (
@@ -194,13 +195,13 @@ export function ImportDialog({ onClose, onToast }: Props): React.JSX.Element {
                               {relative(o, row.folder)}
                             </option>
                           ))}
-                          <option value={OTHER}>Autre programme…</option>
+                          <option value={OTHER}>{t('library.import.otherExe')}</option>
                         </select>
                       </span>
                     ) : (
                       <button type="button" className="btn btn-line btn-sm" disabled={busy} onClick={() => chooseExe(i, row)}>
                         <FolderOpen />
-                        Choisir le programme…
+                        {t('library.import.chooseExe')}
                       </button>
                     )}
                     <span className="fold" title={row.folder}>
@@ -217,14 +218,14 @@ export function ImportDialog({ onClose, onToast }: Props): React.JSX.Element {
 
       <div className="dfoot">
         <span className="cap count" aria-live="polite">
-          {rows ? (n ? `${n} jeu${n > 1 ? 'x' : ''} sélectionné${n > 1 ? 's' : ''}` : 'Aucun jeu sélectionné') : ''}
+          {rows ? (n ? tn('library.import.selected', n) : t('library.import.noneSelected')) : ''}
         </span>
         <button type="button" className="btn btn-line" disabled={busy} data-testid="dialog-cancel" onClick={onClose}>
-          Annuler
+          {t('library.common.cancel')}
         </button>
         <button type="button" className="btn btn-primary" disabled={busy || !n} data-testid="dialog-submit" onClick={submit}>
           {busy ? <LoaderCircle className="spin" /> : <FolderInput />}
-          Importer
+          {t('library.import.submit')}
         </button>
       </div>
     </DialogFrame>

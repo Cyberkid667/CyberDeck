@@ -189,6 +189,9 @@
 .dnote { margin: 12px 0 0; max-width: 560px; font: 400 13px/1.5 var(--font-sans); color: var(--tx-2); }
 .dnote b { font-weight: 500; color: var(--tx-1); }
 .rm-list + .dnote { margin-top: 16px; }
+/* désinstallation : programme ou dossier concerné (mono, une ligne) et attente de la recherche */
+.dnote.mono { margin-top: 8px; font: 400 11.5px/1.4 var(--font-mono); color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dnote svg.i { width: 14px; height: 14px; vertical-align: -2px; margin-right: 6px; }
 .dnote + .dfoot { margin-top: 22px; }
 
 /* ---------- Plateformes : liste des lanceurs (gauche) et billet du compte Steam (droite) ---------- */
@@ -297,6 +300,7 @@
 
 /* ---------- Réglages (540 px) : encart « Torrents » (case .cbox), confirmation, dossiers, version ---------- */
 .dialog[data-dialog='settings'] .set-toggle { margin-top: 22px; }
+.dialog[data-dialog='settings'] .set-lang { margin-top: 22px; }
 /* confirmation avant d'arrêter des torrents qui tournent : bandeau neutre (rien n'est perdu), deux petits boutons */
 .set-confirm { margin-top: 12px; }
 .set-confirm > svg.i { flex: none; }

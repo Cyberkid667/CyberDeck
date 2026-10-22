@@ -2,6 +2,7 @@
 // passage PowerShell, en lecture seule. On ne lit que des valeurs nommées : jamais
 // de clé entière (certaines contiennent des jetons ou des certificats).
 import { runPs } from '../powershell'
+import { t } from '../../shared/i18n'
 
 export interface RegRead {
   id: string
@@ -211,7 +212,8 @@ export async function takeSnapshot(reads: RegRead[] = READS, withAppx = true): P
   try {
     const raw = JSON.parse(res.stdout.replace(/^\uFEFF/, '').trim() || 'null')
     if (!raw || typeof raw !== 'object')
-      throw new Error(res.stderr.trim() || (res.code === 3 ? 'PowerShell en mode restreint (stratégie du PC)' : `PowerShell ${res.code}`))
+      // code 3 : mode restreint (le script l'écrit aussi, en français, sur stderr : texte traduit ici)
+      throw new Error(res.code === 3 ? t('main.scan.psRestricted') : res.stderr.trim() || `PowerShell ${res.code}`)
     const keys: Record<string, RegKeyData | null> = {}
     for (const r of reads) {
       const k = raw.keys?.[r.id]
@@ -221,10 +223,10 @@ export async function takeSnapshot(reads: RegRead[] = READS, withAppx = true): P
     // Aucune clé lue et aucun programme installé : lecture ratée sans message (droits, stratégie),
     // pas un PC vide. Sinon tous les jeux seraient marqués désinstallés.
     if (reads.length && !uninstall.length && !Object.values(keys).some(Boolean))
-      throw new Error(res.stderr.trim() || 'registre vide (lecture refusée ?)')
+      throw new Error(res.stderr.trim() || t('main.scan.registryEmpty'))
     return {
       ok: true,
-      error: raw.appxError ? `Applications du Microsoft Store illisibles : ${raw.appxError}` : null,
+      error: raw.appxError ? t('main.scan.storeAppsUnreadable', { error: String(raw.appxError) }) : null,
       keys,
       uninstall,
       appx: raw.appx === null || raw.appx === undefined ? (withAppx ? null : []) : asArray<AppxPackage>(raw.appx),
@@ -232,7 +234,7 @@ export async function takeSnapshot(reads: RegRead[] = READS, withAppx = true): P
       takenAt: Date.now()
     }
   } catch (err: any) {
-    return { ...empty, error: `Lecture du registre impossible : ${err.message || res.stderr || 'erreur inconnue'}` }
+    return { ...empty, error: t('main.scan.registryFailed', { error: err.message || res.stderr || t('main.common.unknownError') }) }
   }
 }
 

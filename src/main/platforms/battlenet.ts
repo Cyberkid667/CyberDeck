@@ -6,6 +6,7 @@ import path from 'node:path'
 import { protocolCommand, protocolRegistered } from './registry'
 import type { PlatformScan, ScanContext } from './types'
 import { pbAll, pbFields, pbMessage, pbNumber, pbString } from './protobuf'
+import { t } from '../../shared/i18n'
 import { cleanDir, cleanTitle, exeFromCommand, exeFromIcon, isDir, isFile, largestExeSync, programData, readJson, roamingAppData } from './util'
 
 const SKIP_UIDS = new Set(['agent', 'battle.net', 'bna'])
@@ -88,7 +89,7 @@ export async function scanBattlenet(ctx: ScanContext): Promise<PlatformScan> {
     installs = readProductDb(productDbFile())
   } catch (err: any) {
     // lecture ratée (fichier en cours d'écriture…) : on ne touche à rien cette fois
-    return { ...scan, ok: false, detected: !!client, error: `product.db illisible : ${err.message}` }
+    return { ...scan, ok: false, detected: !!client, error: t('main.scan.battlenetUnreadable', { error: err.message }) }
   }
   if (!installs) {
     // Pas de product.db : repli sur les clés de désinstallation (programme = DisplayIcon)

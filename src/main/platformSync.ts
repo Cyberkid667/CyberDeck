@@ -5,6 +5,7 @@ import { app, net, safeStorage } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { PLATFORM_INFO, PLATFORM_ORDER } from '../shared/platforms'
+import { t, tn } from '../shared/i18n'
 import type {
   LauncherPlatform,
   PlatformsState,
@@ -147,21 +148,31 @@ function steamState(): SteamAccountState {
   let message: string | null = null
   if (!account) {
     status = 'no-account'
-    message = steamInstalled ? 'Aucun compte Steam trouvé sur ce PC : connecte-toi une fois dans Steam.' : 'Steam n’est pas installé sur ce PC.'
+    message = steamInstalled ? t('main.steam.noAccount') : t('main.steam.notInstalled')
   } else if (!hasKey) {
     status = canStoreKey ? 'no-key' : 'unavailable'
     message = canStoreKey
-      ? 'Ajoute ta clé Web API Steam pour voir aussi les jeux possédés mais pas installés.'
-      : 'Windows ne peut pas chiffrer la clé sur ce PC : elle ne peut pas être enregistrée.'
+      ? t('main.steam.addKey')
+      : t('main.steam.cantEncrypt')
   } else if (!readKey()) {
     status = 'error'
-    message = 'La clé enregistrée ne peut pas être relue sur ce PC : enregistre-la à nouveau.'
+    message = t('main.steam.keyUnreadable')
   } else if (checking) {
     status = 'checking'
-    message = 'Lecture de la liste des jeux possédés…'
+    message = t('main.steam.checking')
   } else {
     status = store.steamStatus ?? 'checking'
-    message = status === 'ok' ? `${counts.owned} jeux possédés, dont ${counts.notInstalled} pas installés sur ce PC.` : store.steamMessage
+    // message enregistré dans la langue de sa lecture : redit dans la langue en cours quand il ne dépend que de l'état
+    message =
+      status === 'ok'
+        ? tn('main.steam.ownedSummary', counts.owned, { notInstalled: counts.notInstalled })
+        : status === 'private'
+          ? t('main.steam.private')
+          : status === 'offline'
+            ? t('main.steam.offline')
+            : status === 'invalid-key'
+              ? t('main.steam.keyRefused')
+              : store.steamMessage
   }
   let avatarUrl: string | null = null
   if (account?.avatarFile) {
@@ -222,7 +233,7 @@ function mergeRequest(a: typeof pending, r: SyncRequest): NonNullable<typeof pen
 
 /** Relit les plateformes (toutes par défaut) et met la bibliothèque à jour. Les demandes qui arrivent pendant un passage sont regroupées. */
 export async function syncPlatforms(req: SyncRequest = { full: true }): Promise<PlatformsState> {
-  // captures de démonstration (tests/outils/demo-profile.mjs) : les lanceurs du PC ne sont pas lus
+  // captures de démonstration (tests/tools/demo-profile.mjs) : les lanceurs du PC ne sont pas lus
   if (process.env.CYBERDECK_TEST_NO_PLATFORMS) return platformsState()
   pending = mergeRequest(pending, req)
   if (!runner)
@@ -424,9 +435,9 @@ function result(ok: boolean, status: SteamAccountStatus, message: string, gameCo
 export async function testSteamKey(key?: string): Promise<SteamKeyResult> {
   await ensureAccount()
   const k = key !== undefined ? normalizeSteamKey(key) : readKey()
-  if (!account) return result(false, 'no-account', steamState().message ?? 'Aucun compte Steam trouvé sur ce PC.')
-  if (!k) return result(false, 'no-key', 'Aucune clé enregistrée.')
-  if (!isSteamKeyFormat(k)) return result(false, 'invalid-key', 'Une clé Steam fait 32 caractères (chiffres et lettres A à F).')
+  if (!account) return result(false, 'no-account', steamState().message ?? t('main.steam.noAccountShort'))
+  if (!k) return result(false, 'no-key', t('main.steam.noKey'))
+  if (!isSteamKeyFormat(k)) return result(false, 'invalid-key', t('main.steam.keyFormat'))
   const res = await fetchOwnedGames(fetchJson, k, account.steamId)
   return result(res.status === 'ok', res.status, res.message, res.status === 'ok' ? res.games.length : undefined)
 }
@@ -434,9 +445,9 @@ export async function testSteamKey(key?: string): Promise<SteamKeyResult> {
 export async function setSteamKey(key: string): Promise<SteamKeyResult> {
   await ensureAccount()
   const k = normalizeSteamKey(key)
-  if (!safeStorage.isEncryptionAvailable()) return result(false, 'unavailable', 'Windows ne peut pas chiffrer la clé sur ce PC : elle n’est pas enregistrée.')
-  if (!account) return result(false, 'no-account', steamState().message ?? 'Aucun compte Steam trouvé sur ce PC.')
-  if (!isSteamKeyFormat(k)) return result(false, 'invalid-key', 'Une clé Steam fait 32 caractères (chiffres et lettres A à F).')
+  if (!safeStorage.isEncryptionAvailable()) return result(false, 'unavailable', t('main.steam.cantEncryptNotSaved'))
+  if (!account) return result(false, 'no-account', steamState().message ?? t('main.steam.noAccountShort'))
+  if (!isSteamKeyFormat(k)) return result(false, 'invalid-key', t('main.steam.keyFormat'))
   checking = true
   broadcast()
   const res = await fetchOwnedGames(fetchJson, k, account.steamId)

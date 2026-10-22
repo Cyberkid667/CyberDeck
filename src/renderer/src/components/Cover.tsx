@@ -2,6 +2,7 @@ import { Gamepad2 } from 'lucide-react'
 import { useState } from 'react'
 import type { Game } from '../../../shared/types'
 import { LANDSCAPE_MATRIX_FILTER } from '../fx/pixelMatrix'
+import { useT } from '../i18n'
 import { PixelMatrix } from './PixelMatrix'
 
 // Jaquette d'un jeu, toujours au format 2:3 (SPEC 5.10) :
@@ -41,6 +42,7 @@ interface Props {
 }
 
 export function Cover({ game, className = '', compact = false, children }: Props): React.JSX.Element {
+  const { t } = useT()
   const src = coverSrc(game)
   // une jaquette qui ne se charge pas (fichier supprimé…) laisse place à la plaque gravée
   const [failed, setFailed] = useState<string | null>(null)
@@ -68,7 +70,7 @@ export function Cover({ game, className = '', compact = false, children }: Props
         <span className="plus" />
         {!compact && (
           <div className="ph-text">
-            <div className="cap">Sans jaquette</div>
+            <div className="cap">{t('library.cover.noCover')}</div>
             <div className="pht">{game.name}</div>
           </div>
         )}

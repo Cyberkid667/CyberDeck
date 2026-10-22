@@ -37,7 +37,7 @@ const DEMO = [
 ]
 
 const games = DEMO.map(([name, platform, platformId, steamAppId, hours, days]) => {
-  const dir = `D:\\Jeux\\${name.replace(/[':]/g, '')}`
+  const dir = `D:\\Games\\${name.replace(/[':]/g, '')}`
   return {
     id: randomUUID(), name, exePath: '', args: null, installDir: dir, torrentId: null,
     coverVersion: 0, coverShape: null, iconVersion: 0, steamAppId, coverHint: null, coverTriedAt: null,
@@ -48,7 +48,7 @@ const games = DEMO.map(([name, platform, platformId, steamAppId, hours, days]) =
   }
 })
 fs.writeFileSync(path.join(userData, 'library.json'), JSON.stringify({ version: 2, games, hidden: [] }))
-fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ defaultSavePath: 'D:\\Jeux', port: 28340, torrentsEnabled: false, gamesFolder: null }))
+fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ defaultSavePath: 'D:\\Games', port: 28340, torrentsEnabled: false, gamesFolder: null }))
 
 const { _electron } = await import(pathToFileURL(path.join(ROOT, 'node_modules', 'playwright-core', 'index.mjs')).href)
 const app = await _electron.launch({

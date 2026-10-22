@@ -10,6 +10,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { cleanGameName } from '../shared/gameName'
 import { PLATFORM_INFO } from '../shared/platforms'
+import { locale, t as tr } from '../shared/i18n'
 import type {
   ActionResult,
   Game,
@@ -20,9 +21,11 @@ import type {
   Notice,
   PlatformSkip,
   ScanCandidate,
-  TorrentSummary
+  TorrentSummary,
+  UninstallPlan
 } from '../shared/types'
 import type { DetectedGame, PlatformScan } from './platforms'
+import { takeSnapshot, type UninstallEntry as RegUninstallEntry } from './platforms/registry'
 import { steamLocalCover } from './platforms/steam'
 import { cleanPsError, PS_RESTRICTED, PS_RESTRICTED_CHECK, runPs, startPs } from './powershell'
 
@@ -529,7 +532,7 @@ export async function installFromTorrent(t: TorrentSummary): Promise<void> {
   const fail = (error: string): void =>
     deps.installDone({ torrentId: t.id, ok: false, error, guess: { name: fallbackName, exePath: null, installDir: null } })
   if (!t.installer || installing.has(t.id)) return
-  if (!fs.existsSync(t.installer)) return fail(`L’installateur est introuvable : ${t.installer}`)
+  if (!fs.existsSync(t.installer)) return fail(tr('main.install.installerMissing', { path: t.installer }))
 
   installing.add(t.id)
   deps.broadcast(libraryState())
@@ -541,17 +544,17 @@ export async function installFromTorrent(t: TorrentSummary): Promise<void> {
     const res = await runPs(INSTALL_SCRIPT, { ESSAIM_TARGET: t.installer, ESSAIM_CWD: path.dirname(t.installer) })
     const exitCode = Number((res.stdout.match(/exit:(-?\d+)/) || [])[1] ?? 0)
     deps.log(`Installateur terminé (powershell ${res.code}, installateur ${exitCode})${res.stderr ? ` : ${res.stderr}` : ''}`)
-    if (res.code === 4) return fail('Installation annulée : l’autorisation administrateur a été refusée.')
+    if (res.code === 4) return fail(tr('main.install.adminDenied'))
     if (res.code === PS_RESTRICTED) {
       shell.showItemInFolder(t.installer)
-      return fail('PowerShell est restreint sur ce PC (stratégie de sécurité de Windows) : lance l’installateur toi-même depuis le dossier ouvert, puis ajoute le jeu à la bibliothèque.')
+      return fail(tr('main.install.psRestricted'))
     }
-    if (res.code !== 0) return fail(`L’installateur n’a pas pu démarrer : ${res.stderr.trim() || 'erreur inconnue'}`)
+    if (res.code !== 0) return fail(tr('main.install.cantStart', { error: res.stderr.trim() || tr('main.common.unknownError') }))
     // Codes d'annulation des installateurs Inno Setup, les plus courants.
-    if (exitCode === 2 || exitCode === 5) return fail('Installation annulée.')
+    if (exitCode === 2 || exitCode === 5) return fail(tr('main.install.cancelled'))
     deps.installDone({ torrentId: t.id, ok: true, guess: await guessInstalled(before, startedAt, fallbackName) })
   } catch (err: any) {
-    fail(`Installation impossible : ${err.message}`)
+    fail(tr('main.install.failed', { error: err.message }))
   } finally {
     if (wasSharing) deps.resumeTorrent(t.id)
     installing.delete(t.id)
@@ -1014,7 +1017,7 @@ export async function scanGamesFolder(dir: string): Promise<ScanCandidate[]> {
       alreadyInLibrary
     })
   }
-  return result.sort((a, b) => a.name.localeCompare(b.name, 'fr'))
+  return result.sort((a, b) => a.name.localeCompare(b.name, locale()))
 }
 
 export function defaultGamesFolder(): string {
@@ -1034,8 +1037,8 @@ export function defaultGamesFolder(): string {
 // ---------- Ajouter, modifier, retirer ----------
 
 function checkExe(exePath: string): void {
-  if (!/\.exe$/i.test(exePath)) throw new Error('Choisis un programme .exe.')
-  if (!fs.existsSync(exePath)) throw new Error(`Programme introuvable : ${exePath}`)
+  if (!/\.exe$/i.test(exePath)) throw new Error(tr('main.game.chooseExe'))
+  if (!fs.existsSync(exePath)) throw new Error(tr('main.game.exeNotFound', { path: exePath }))
 }
 
 export function addGame(input: GameInput): Game {
@@ -1230,7 +1233,11 @@ function onWatcherLine(id: string, watcher: ChildProcess, line: string): void {
     if (game)
       deps.notice({
         level: 'info',
-        message: `${game.name} n’a pas encore démarré après ${durationText(waited)} (mise à jour ou connexion dans le lanceur ?). CyberDeck le surveille encore ${durationText(Math.max(0, MAX_WAIT_SECONDS - waited))} : son temps de jeu sera compté s’il démarre.`
+        message: tr('main.play.notStartedYet', {
+          name: game.name,
+          waited: durationText(waited),
+          left: durationText(Math.max(0, MAX_WAIT_SECONDS - waited))
+        })
       })
     changed()
   }
@@ -1258,18 +1265,18 @@ function followWatcher(id: string, watcher: ChildProcess, direct: DirectLaunch):
   })
   watcher.stderr?.setEncoding('utf8')
   watcher.stderr?.on('data', (d: string) => (stderr += d))
-  watcher.on('error', (err) => finishSession(id, watcher, `PowerShell ne démarre pas (${err.message}).`))
+  watcher.on('error', (err) => finishSession(id, watcher, tr('main.play.psStartFailed', { message: err.message })))
   watcher.on('close', (code) => {
-    if (code === 4) finishSession(id, watcher, 'l’autorisation administrateur a été refusée.')
+    if (code === 4) finishSession(id, watcher, tr('main.play.adminDenied'))
     else if (code === PS_RESTRICTED) launchRestricted(id, watcher, direct)
-    else if (code === 3) finishSession(id, watcher, cleanPsError(stderr) || 'erreur inconnue')
+    else if (code === 3) finishSession(id, watcher, cleanPsError(stderr) || tr('main.common.unknownError'))
     else if (code === 5) finishSession(id, watcher, null, true)
     // fin normale, script arrêté par CyberDeck, ou arrêté après avoir lancé le jeu
     else if (code === 0 || code === null || launched) finishSession(id, watcher, null)
     // PowerShell arrêté avant d'avoir lancé quoi que ce soit (antivirus, stratégie du PC…)
     else {
       const why = cleanPsError(stderr)
-      finishSession(id, watcher, `PowerShell s’est arrêté avant le lancement (code ${code})${why ? ` : ${why}` : '.'}`)
+      finishSession(id, watcher, why ? tr('main.play.psStoppedWhy', { code: String(code), why }) : tr('main.play.psStopped', { code: String(code) }))
     }
   })
 }
@@ -1320,7 +1327,7 @@ async function launchUntracked(id: string, direct: DirectLaunch, resumeTorrentId
   const error = await launchDirect(direct)
   if (resumeTorrentId) deps.resumeTorrent(resumeTorrentId)
   const g = findGame(id)
-  if (error) deps.notice({ level: 'error', message: `Impossible de lancer le jeu : ${error}` })
+  if (error) deps.notice({ level: 'error', message: tr('main.play.failed', { error }) })
   else {
     if (g) g.lastPlayedAt = Date.now()
     deps.log(`Lancement direct de ${g?.name ?? id} : ${direct.target}`)
@@ -1328,7 +1335,7 @@ async function launchUntracked(id: string, direct: DirectLaunch, resumeTorrentId
       psRestrictedTold = true
       deps.notice({
         level: 'info',
-        message: 'PowerShell est restreint sur ce PC (stratégie de sécurité de Windows) : les jeux sont lancés directement, mais CyberDeck ne peut pas compter leur temps de jeu.'
+        message: tr('main.play.psRestricted')
       })
     }
   }
@@ -1346,14 +1353,14 @@ export async function playGame(id: string): Promise<void> {
       current.watcher.kill()
     } else {
       const waiting = current.startedAt === null
-      return deps.notice({ level: 'info', message: waiting ? `${g.name} est en train de démarrer.` : `${g.name} est déjà lancé.` })
+      return deps.notice({ level: 'info', message: waiting ? tr('main.play.starting', { name: g.name }) : tr('main.play.alreadyRunning', { name: g.name }) })
     }
   }
   if (g.platform !== 'local') return playPlatformGame(g)
   if (!fs.existsSync(g.exePath)) {
     return deps.notice({
       level: 'error',
-      message: `Programme introuvable : ${g.exePath}. Clique sur Modifier pour choisir le bon .exe.`
+      message: tr('main.play.exeMissing', { path: g.exePath })
     })
   }
   // Jeu lancé directement depuis le dossier d'un torrent (sans installation).
@@ -1375,7 +1382,7 @@ export async function playGame(id: string): Promise<void> {
     })
   } catch (err: any) {
     if (resumeTorrentId) deps.resumeTorrent(resumeTorrentId)
-    return deps.notice({ level: 'error', message: `Impossible de lancer le jeu : PowerShell ne démarre pas (${err.message}).` })
+    return deps.notice({ level: 'error', message: tr('main.play.failed', { error: tr('main.play.psStartFailed', { message: err.message }) }) })
   }
   followWatcher(id, watcher, direct)
   running.set(id, { startedAt, launchedAt: startedAt, watcher, resumeTorrentId, expired: false, lastAliveAt: null })
@@ -1398,19 +1405,22 @@ const durationText = (s: number): string => (s >= 120 ? `${Math.round(s / 60)} m
 function playPlatformGame(g: Game): void {
   const platformName = PLATFORM_INFO[g.platform].name
   if (!g.installed)
-    return deps.notice({ level: 'error', message: `${g.name} n’est pas installé.${g.platform === 'steam' ? ' Clique sur Installer.' : ''}` })
+    return deps.notice({
+      level: 'error',
+      message: tr(g.platform === 'steam' ? 'main.play.notInstalledSteam' : 'main.play.notInstalled', { name: g.name })
+    })
   const launch = g.launch
   if (!launch || !launch.target)
-    return deps.notice({ level: 'error', message: `Le lanceur ${platformName} est introuvable : installe-le ou relance la détection des plateformes.` })
+    return deps.notice({ level: 'error', message: tr('main.play.launcherMissing', { platform: platformName }) })
   if (launch.kind === 'uri') {
     const scheme = launch.target.slice(0, launch.target.indexOf(':')).toLowerCase()
     if (!scheme || !deps.protocolAvailable(scheme))
-      return deps.notice({ level: 'error', message: `${platformName} n’est pas installé sur ce PC (adresse ${scheme}: inconnue de Windows).` })
+      return deps.notice({ level: 'error', message: tr('main.play.protocolMissing', { platform: platformName, scheme }) })
   } else if (!fs.existsSync(launch.target)) {
-    return deps.notice({ level: 'error', message: `Programme introuvable : ${launch.target}. Relance la détection des plateformes.` })
+    return deps.notice({ level: 'error', message: tr('main.play.targetMissing', { path: launch.target }) })
   }
   const dirs = (g.watch?.dirs.length ? g.watch.dirs : g.installDir ? [g.installDir] : []).filter((d) => !!d && !tooBroad(d))
-  if (!dirs.length) return deps.notice({ level: 'error', message: `Dossier de ${g.name} inconnu : relance la détection des plateformes.` })
+  if (!dirs.length) return deps.notice({ level: 'error', message: tr('main.play.folderUnknown', { name: g.name }) })
   const cwd = [launch.cwd, g.installDir, os.homedir()].find((d) => !!d && fs.existsSync(d)) ?? os.homedir()
   const id = g.id
   const direct: DirectLaunch = { kind: launch.kind === 'uri' ? 'uri' : 'exe', target: launch.target, args: launch.kind === 'exe' ? (launch.args ?? '') : '', cwd }
@@ -1433,7 +1443,7 @@ function playPlatformGame(g: Game): void {
       ESSAIM_STEAM_KEY: process.env.CYBERDECK_TEST_STEAM_KEY ?? ''
     })
   } catch (err: any) {
-    return deps.notice({ level: 'error', message: `Impossible de lancer le jeu : PowerShell ne démarre pas (${err.message}).` })
+    return deps.notice({ level: 'error', message: tr('main.play.failed', { error: tr('main.play.psStartFailed', { message: err.message }) }) })
   }
   followWatcher(id, watcher, direct)
   running.set(id, { startedAt: null, launchedAt, watcher, resumeTorrentId: null, expired: false, lastAliveAt: null })
@@ -1455,7 +1465,7 @@ function finishSession(id: string, watcher: ChildProcess, error: string | null, 
   if (session.resumeTorrentId) deps.resumeTorrent(session.resumeTorrentId)
   const g = findGame(id)
   if (g && !error) g.playTimeSeconds += sessionSeconds(session)
-  if (error) deps.notice({ level: 'error', message: `Impossible de lancer le jeu : ${error}` })
+  if (error) deps.notice({ level: 'error', message: tr('main.play.failed', { error }) })
   else if (notStarted && g) {
     // déjà dit à la fin du délai (« expired ») : seulement le journal cette fois
     // sinon (Steam préparait encore le lancement à la fin du délai) : dit maintenant
@@ -1463,7 +1473,7 @@ function finishSession(id: string, watcher: ChildProcess, error: string | null, 
     else
       deps.notice({
         level: 'info',
-        message: `${g.name} n’a pas démarré en ${durationText(MAX_WAIT_SECONDS)} (mise à jour ou connexion dans le lanceur ?) : le temps de jeu n’est pas compté cette fois.`
+        message: tr('main.play.notStarted', { name: g.name, duration: durationText(MAX_WAIT_SECONDS) })
       })
   }
   changed()
@@ -1484,17 +1494,188 @@ export function stopAllSessions(): void {
 
 export async function installPlatformGame(id: string): Promise<ActionResult> {
   const g = findGame(id)
-  if (!g) return { ok: false, error: 'Jeu introuvable.' }
-  if (g.installed) return { ok: false, error: `${g.name} est déjà installé.` }
+  if (!g) return { ok: false, error: tr('main.common.gameNotFound') }
+  if (g.installed) return { ok: false, error: tr('main.install.alreadyInstalled', { name: g.name }) }
   if (g.platform !== 'steam' || !g.platformId || !/^\d+$/.test(g.platformId))
-    return { ok: false, error: 'L’installation depuis CyberDeck n’existe que pour les jeux Steam.' }
-  if (!deps.protocolAvailable('steam')) return { ok: false, error: 'Steam n’est pas installé sur ce PC.' }
+    return { ok: false, error: tr('main.install.steamOnly') }
+  if (!deps.protocolAvailable('steam')) return { ok: false, error: tr('main.steam.notInstalled') }
   try {
     await shell.openExternal(`steam://install/${g.platformId}`)
     deps.log(`Installation demandée à Steam : ${g.name} (${g.platformId})`)
     return { ok: true }
   } catch (err: any) {
-    return { ok: false, error: `Steam ne répond pas : ${err.message}` }
+    return { ok: false, error: tr('main.install.steamNoReply', { message: err.message }) }
+  }
+}
+
+// ---------- Désinstaller ----------
+
+/** Plateformes qui ne se laissent pas désinstaller depuis une autre app : on les ouvre.
+ *  Fonction : le nom affiché suit la langue en cours. */
+const openToUninstall = (): Partial<Record<Game['platform'], { name: string; uri: string; scheme: string | null }>> => ({
+  epic: { name: 'Epic Games', uri: 'com.epicgames.launcher://store', scheme: 'com.epicgames.launcher' },
+  itch: { name: 'itch', uri: 'itch://library', scheme: 'itch' },
+  amazon: { name: 'Amazon Games', uri: 'amazon-games://', scheme: 'amazon-games' },
+  // jeux du Microsoft Store / Game Pass : « Applications installées » de Windows
+  xbox: { name: tr('main.uninstall.windowsApps'), uri: 'ms-settings:appsfeatures', scheme: null }
+})
+
+/** « "C:\…\unins000.exe" /SILENT » ou « MsiExec.exe /X{…} » → programme et arguments. */
+function splitCommand(cmd: string): { exe: string; args: string } | null {
+  const c = cmd.trim()
+  if (c.startsWith('"')) {
+    const end = c.indexOf('"', 1)
+    return end > 1 ? { exe: c.slice(1, end), args: c.slice(end + 1).trim() } : null
+  }
+  const m = /^(.+?\.exe)(?:\s+(.*))?$/i.exec(c)
+  return m ? { exe: m[1], args: (m[2] ?? '').trim() } : null
+}
+
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * Désinstalleur déclaré dans Windows pour ce jeu : d'abord la clé propre à sa plateforme
+ * (GOG « <id>_is1 », Ubisoft « Uplay Install <id> », Riot, Battle.net --uid, Rockstar
+ * -uninstall), sinon une clé dont le dossier (ou le désinstalleur) est celui du jeu.
+ */
+function matchUninstall(g: Game, entries: RegUninstallEntry[]): RegUninstallEntry | null {
+  const id = (g.platformId ?? '').toLowerCase()
+  const withCmd = entries.filter((e) => e.uninstall.trim())
+  const byPlatform = (e: RegUninstallEntry): boolean => {
+    if (!id) return false
+    const key = e.key.toLowerCase()
+    const cmd = e.uninstall.toLowerCase()
+    switch (g.platform) {
+      case 'gog':
+        return key === `${id}_is1`
+      case 'ubisoft':
+        return key === `uplay install ${id}`
+      case 'riot':
+        return key === `riot game ${id}`
+      case 'battlenet':
+        return new RegExp(`--uid=${escapeRe(id)}(?=[\\s"]|$)`).test(cmd)
+      case 'rockstar':
+        return new RegExp(`-uninstall=${escapeRe(id)}(?=[\\s"]|$)`).test(cmd)
+      default:
+        return false
+    }
+  }
+  const dir = g.installDir
+  const inDir = (e: RegUninstallEntry): boolean => {
+    if (!dir || tooBroad(dir)) return false
+    const loc = e.location.trim().replace(/^"|"$/g, '')
+    if (loc && sameDir(loc, dir)) return true
+    const exe = splitCommand(e.uninstall)?.exe
+    return !!exe && inside(exe, dir)
+  }
+  return withCmd.find(byPlatform) ?? withCmd.find(inDir) ?? null
+}
+
+/** Désinstalleur posé à la racine du dossier du jeu (unins000.exe d'Inno Setup, uninstall.exe…). */
+function uninstallerInFolder(dir: string | null): string | null {
+  if (!dir || tooBroad(dir)) return null
+  try {
+    const f = fs.readdirSync(dir).find((n) => /^(unins\d{3}|uninstall|uninst|uninstaller)\.exe$/i.test(n))
+    return f ? path.join(dir, f) : null
+  } catch {
+    return null
+  }
+}
+
+type UninstallCommand = { exe: string; args: string }
+
+/** Ce que fera « Désinstaller » pour ce jeu (aucune action ici). */
+async function planUninstall(g: Game): Promise<UninstallPlan & { command?: UninstallCommand }> {
+  const none = (error: string): UninstallPlan => ({ kind: 'none', launcher: null, target: null, error })
+  if (!g.installed) return none(tr('main.uninstall.notInstalled', { name: g.name }))
+  if (g.platform === 'steam') {
+    if (!g.platformId || !/^\d+$/.test(g.platformId)) return none(tr('main.uninstall.noSteamId'))
+    if (!deps.protocolAvailable('steam')) return none(tr('main.steam.notInstalled'))
+    return { kind: 'launcher', launcher: 'Steam', target: null, error: null }
+  }
+  const reg = await takeSnapshot([], false)
+  const entry = reg.ok ? matchUninstall(g, reg.uninstall) : null
+  const cmd = entry ? splitCommand(entry.uninstall) : null
+  if (cmd) return { kind: 'uninstaller', launcher: g.platform === 'local' ? null : PLATFORM_INFO[g.platform].name, target: cmd.exe, error: null, command: cmd }
+  const open = openToUninstall()[g.platform]
+  if (open && (!open.scheme || deps.protocolAvailable(open.scheme))) return { kind: 'open-launcher', launcher: open.name, target: null, error: null }
+  const own = uninstallerInFolder(g.installDir)
+  if (own) return { kind: 'uninstaller', launcher: null, target: own, error: null, command: { exe: own, args: '' } }
+  const dir = g.installDir && fs.existsSync(g.installDir) && !tooBroad(g.installDir) ? g.installDir : null
+  if (dir) return { kind: 'folder', launcher: null, target: dir, error: null }
+  return none(tr('main.uninstall.nothingFound'))
+}
+
+export async function uninstallPlan(id: string): Promise<UninstallPlan> {
+  const g = findGame(id)
+  if (!g) return { kind: 'none', launcher: null, target: null, error: tr('main.common.gameNotFound') }
+  const plan = await planUninstall(g)
+  return { kind: plan.kind, launcher: plan.launcher, target: plan.target, error: plan.error }
+}
+
+/**
+ * Le désinstalleur d'un jeu local est lancé : quand son programme et son dossier ont disparu
+ * (vérifié toutes les 5 s pendant 15 min), le jeu est retiré de la bibliothèque. Les jeux de
+ * plateforme passent « Non installé » à la lecture suivante de leur plateforme.
+ */
+function followLocalUninstall(id: string): void {
+  const startedAt = Date.now()
+  const timer = setInterval(() => {
+    const g = findGame(id)
+    if (!g || Date.now() - startedAt > 15 * 60_000) return clearInterval(timer)
+    const gone = (!g.exePath || !fs.existsSync(g.exePath)) && (!g.installDir || !fs.existsSync(g.installDir))
+    if (!gone) return
+    clearInterval(timer)
+    removeGame(id)
+    deps.log(`Désinstallé : ${g.name}`)
+    deps.notice({ level: 'success', message: tr('main.uninstall.done', { name: g.name }) })
+  }, 5000)
+}
+
+export async function uninstallGame(id: string, removeFromList: boolean): Promise<ActionResult> {
+  const g = findGame(id)
+  if (!g) return { ok: false, error: tr('main.common.gameNotFound') }
+  if (running.has(id)) return { ok: false, error: tr('main.uninstall.running', { name: g.name }) }
+  const plan = await planUninstall(g)
+  try {
+    switch (plan.kind) {
+      case 'launcher':
+        await shell.openExternal(`steam://uninstall/${g.platformId}`)
+        deps.log(`Désinstallation demandée à Steam : ${g.name} (${g.platformId})`)
+        return { ok: true }
+      case 'open-launcher': {
+        const open = openToUninstall()[g.platform]!
+        await shell.openExternal(open.uri)
+        deps.log(`Désinstallation de ${g.name} : ${open.name} ouvert`)
+        return { ok: true }
+      }
+      case 'folder': {
+        const error = await shell.openPath(plan.target!)
+        if (error) return { ok: false, error: tr('main.uninstall.folderMissing', { error }) }
+        if (removeFromList) removeGame(id)
+        deps.log(`Désinstallation de ${g.name} : dossier ouvert (${plan.target})${removeFromList ? ', retiré de la bibliothèque' : ''}`)
+        return { ok: true }
+      }
+      case 'uninstaller': {
+        const { exe, args } = plan.command!
+        const cwd = path.isAbsolute(exe) && fs.existsSync(path.dirname(exe)) ? path.dirname(exe) : os.homedir()
+        const res = await runPs(LAUNCH, { ESSAIM_TARGET: exe, ESSAIM_CWD: cwd, ESSAIM_ARGS: args }, 30_000)
+        if (res.code === 4) return { ok: false, error: tr('main.uninstall.adminDenied') }
+        if (res.code === PS_RESTRICTED) {
+          const error = await launchDirect({ kind: 'exe', target: exe, args, cwd })
+          if (error) return { ok: false, error: tr('main.uninstall.cantStart', { error }) }
+        } else if (!/launched/.test(res.stdout)) {
+          return { ok: false, error: tr('main.uninstall.cantStart', { error: cleanPsError(res.stderr) || `code ${res.code}` }) }
+        }
+        deps.log(`Désinstalleur lancé pour ${g.name} : ${exe}${args ? ' ' + args : ''}`)
+        if (g.platform === 'local') followLocalUninstall(id)
+        return { ok: true }
+      }
+      default:
+        return { ok: false, error: plan.error ?? tr('main.uninstall.failed') }
+    }
+  } catch (err: any) {
+    return { ok: false, error: err.message }
   }
 }
 

@@ -4,6 +4,7 @@
 import path from 'node:path'
 import type { PlatformScan, ScanContext } from './types'
 import { withSqliteCopy, tableColumns } from './sqlite'
+import { t } from '../../shared/i18n'
 import { cleanDir, cleanTitle, isDir, isFile, largestExeSync, localAppData, normDir, readJson } from './util'
 
 export function amazonClient(ctx: ScanContext): string | null {
@@ -31,15 +32,15 @@ export async function scanAmazon(ctx: ScanContext): Promise<PlatformScan> {
   try {
     rows = withSqliteCopy(db, ctx.tempDir, (query) => {
       const cols = tableColumns(query, 'DbSet')
-      if (!cols.has('Id') || !cols.has('InstallDirectory')) throw new Error('schéma de la base inconnu')
+      if (!cols.has('Id') || !cols.has('InstallDirectory')) throw new Error(t('main.scan.unknownSchema'))
       const title = cols.has('ProductTitle') ? 'ProductTitle' : 'NULL'
       const installed = cols.has('Installed') ? 'Installed' : '1'
       return query(`SELECT Id AS id, InstallDirectory AS dir, ${title} AS title, ${installed} AS installed FROM DbSet`)
     })
   } catch (err: any) {
-    return { ...scan, ok: false, error: `Base Amazon Games illisible : ${err.message}` }
+    return { ...scan, ok: false, error: t('main.scan.amazonUnreadable', { error: err.message }) }
   }
-  if (rows === null) return { ...scan, ok: false, error: 'SQLite indisponible : jeux Amazon non lus' }
+  if (rows === null) return { ...scan, ok: false, error: t('main.scan.amazonNoSqlite') }
 
   const seen = new Set<string>()
   for (const r of rows) {

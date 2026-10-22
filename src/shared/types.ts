@@ -1,4 +1,5 @@
 // Types partagés entre le moteur, le processus principal et l'interface.
+import type { Lang } from './i18n'
 
 export type TorrentStatus =
   | 'metadata' // lien magnet : on récupère les infos du torrent
@@ -135,10 +136,12 @@ export interface Settings {
   gamesFolder: string | null
   /** vérifier au démarrage (puis toutes les 12 h) si une nouvelle version est publiée sur GitHub */
   checkUpdates: boolean
+  /** langue de l'interface (anglais par défaut) */
+  language: Lang
 }
 
 /** Réglages modifiables depuis la fenêtre « Réglages » (le reste est géré par l'app). */
-export type SettingsPatch = Partial<Pick<Settings, 'torrentsEnabled' | 'defaultSavePath' | 'gamesFolder' | 'checkUpdates'>>
+export type SettingsPatch = Partial<Pick<Settings, 'torrentsEnabled' | 'defaultSavePath' | 'gamesFolder' | 'checkUpdates' | 'language'>>
 
 /** Dernière vérification des mises à jour (Release la plus récente du dépôt GitHub). */
 export interface UpdateState {
@@ -356,6 +359,23 @@ export interface ActionResult {
   error?: string
 }
 
+/**
+ * Comment CyberDeck désinstallerait un jeu (montré dans la fenêtre de confirmation) :
+ * 'launcher' : la plateforme ouvre sa propre fenêtre de désinstallation (Steam) ;
+ * 'uninstaller' : programme de désinstallation déclaré par le jeu dans Windows ;
+ * 'open-launcher' : la plateforme ne se laisse pas piloter, CyberDeck l'ouvre et dit quoi cliquer ;
+ * 'folder' : aucun désinstalleur, CyberDeck ouvre le dossier (jamais de suppression automatique) ;
+ * 'none' : impossible (raison dans error).
+ */
+export interface UninstallPlan {
+  kind: 'launcher' | 'uninstaller' | 'open-launcher' | 'folder' | 'none'
+  /** nom du lanceur (« Steam », « Epic Games ») ou de la fenêtre Windows à ouvrir */
+  launcher: string | null
+  /** programme de désinstallation ('uninstaller') ou dossier du jeu ('folder') */
+  target: string | null
+  error: string | null
+}
+
 export interface GameInput {
   name: string
   exePath: string
@@ -475,4 +495,10 @@ export interface EssaimApi {
   checkUpdate(): Promise<UpdateState>
   /** ouvre la page de téléchargement dans le navigateur */
   openUpdate(): void
+
+  // ---- Désinstallation ----
+  /** comment le jeu serait désinstallé (lit le registre de Windows) */
+  uninstallPlan(id: string): Promise<UninstallPlan>
+  /** lance la désinstallation décrite par uninstallPlan ; removeFromList : 'folder' seulement */
+  uninstallGame(id: string, removeFromList: boolean): Promise<ActionResult>
 }

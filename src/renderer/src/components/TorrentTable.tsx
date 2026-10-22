@@ -12,6 +12,7 @@ import {
   shownDownload,
   type Filter
 } from '../format'
+import { useT } from '../i18n'
 import { StatusProgress } from './ProgressBar'
 
 // Tableau des torrents (SPEC 5.4) : une seule grille (--cols) partagée par la rangée
@@ -37,32 +38,20 @@ export interface Sort {
   dir: 1 | -1
 }
 
-const COLUMNS: { key: SortKey; label: string; r?: boolean; title?: string }[] = [
-  { key: 'addedAt', label: '#', r: true, title: 'Ordre d’ajout' },
-  { key: 'name', label: 'Nom' },
-  { key: 'size', label: 'Taille', r: true },
-  { key: 'progress', label: 'Progression et statut' },
-  { key: 'downloadSpeed', label: 'Réception', r: true },
-  { key: 'uploadSpeed', label: 'Émission', r: true },
-  { key: 'eta', label: 'Restant', r: true },
-  { key: 'seeds', label: 'Sources', r: true },
-  { key: 'peers', label: 'Pairs', r: true },
-  { key: 'ratio', label: 'Ratio', r: true }
+// Libellés : « shell.table.col.<clé> » (en-tête) et « shell.table.sort.<clé> » (pied de liste :
+// « TRI : RÉCEPTION ↓ ») ; title : clé de la bulle (sinon « Trier par … »).
+const COLUMNS: { key: SortKey; r?: boolean; title?: string }[] = [
+  { key: 'addedAt', r: true, title: 'shell.table.addedOrder' },
+  { key: 'name' },
+  { key: 'size', r: true },
+  { key: 'progress' },
+  { key: 'downloadSpeed', r: true },
+  { key: 'uploadSpeed', r: true },
+  { key: 'eta', r: true },
+  { key: 'seeds', r: true },
+  { key: 'peers', r: true },
+  { key: 'ratio', r: true }
 ]
-
-/** Nom du tri dans le pied de liste : « TRI : RÉCEPTION ↓ ». */
-const SORT_LABEL: Record<SortKey, string> = {
-  addedAt: '#',
-  name: 'Nom',
-  size: 'Taille',
-  progress: 'Progression',
-  downloadSpeed: 'Réception',
-  uploadSpeed: 'Émission',
-  eta: 'Restant',
-  seeds: 'Sources',
-  peers: 'Pairs',
-  ratio: 'Ratio'
-}
 
 export function sortValue(t: TorrentSummary, key: SortKey): number | string {
   if (key === 'name') return t.name.toLocaleLowerCase('fr')
@@ -120,6 +109,7 @@ function actionSig(node: ReactNode): string {
 }
 
 export function TorrentTable(p: Props): React.JSX.Element {
+  const { t, tn, locale } = useT()
   const handlers = useRef<RowHandlers>(p)
   useLayoutEffect(() => {
     handlers.current = p
@@ -137,7 +127,7 @@ export function TorrentTable(p: Props): React.JSX.Element {
     // seulement quand la ligne elle-même a le focus (Entrée sur une pastille reste un clic sur la pastille)
     const row = e.target as HTMLElement
     if (!row.classList.contains('tr') || !count || e.altKey || e.metaKey) return
-    const ids = p.torrents.map((t) => t.id)
+    const ids = p.torrents.map((x) => x.id)
     const at = ids.indexOf(row.dataset.id ?? '')
     let next = -1
     if (e.key === 'ArrowDown') next = Math.min(ids.length - 1, at + 1)
@@ -162,21 +152,26 @@ export function TorrentTable(p: Props): React.JSX.Element {
         <div className="tcap">
           <div className="tgroups" aria-hidden="true">
             <div style={{ gridColumn: 'span 3' }}>
-              <b>A</b>Torrent
+              <b>A</b>
+              {t('shell.table.group.torrent')}
             </div>
             <div style={{ gridColumn: 'span 1' }}>
-              <b>B</b>État
+              <b>B</b>
+              {t('shell.table.group.state')}
             </div>
             <div style={{ gridColumn: 'span 3' }}>
-              <b>C</b>Débit
+              <b>C</b>
+              {t('shell.table.group.rate')}
             </div>
             <div style={{ gridColumn: 'span 3' }}>
-              <b>D</b>Essaim
+              <b>D</b>
+              {t('shell.table.group.swarm')}
             </div>
           </div>
           <div className="thead" role="row">
             {COLUMNS.map((c) => {
               const on = p.sort.key === c.key
+              const label = t(`shell.table.col.${c.key}`)
               return (
                 <button
                   key={c.key}
@@ -184,10 +179,10 @@ export function TorrentTable(p: Props): React.JSX.Element {
                   role="columnheader"
                   aria-sort={on ? (p.sort.dir === 1 ? 'ascending' : 'descending') : 'none'}
                   className={`th${c.r ? ' r' : ''}${on ? ' sorted' : ''}`}
-                  title={c.title ?? `Trier par ${c.label.toLocaleLowerCase('fr')}`}
+                  title={c.title ? t(c.title) : t('shell.table.sortBy', { col: label.toLocaleLowerCase(locale) })}
                   onClick={() => p.onSort(c.key)}
                 >
-                  {c.label}
+                  {label}
                   {on && (p.sort.dir === 1 ? <ArrowUp className="arr" /> : <ArrowDown className="arr" />)}
                 </button>
               )
@@ -197,15 +192,15 @@ export function TorrentTable(p: Props): React.JSX.Element {
 
         {count > 0 ? (
           <div className="rows" role="rowgroup" ref={rowsRef} onKeyDown={onRowsKey}>
-            {p.torrents.map((t) => {
-              const action = p.renderAction(t)
+            {p.torrents.map((tor) => {
+              const action = p.renderAction(tor)
               return (
                 <Row
-                  key={t.id}
-                  t={t}
-                  num={p.numbers.get(t.id) ?? 0}
-                  sel={p.selected.has(t.id)}
-                  focus={p.focusId === t.id}
+                  key={tor.id}
+                  t={tor}
+                  num={p.numbers.get(tor.id) ?? 0}
+                  sel={p.selected.has(tor.id)}
+                  focus={p.focusId === tor.id}
                   action={action}
                   sig={actionSig(action)}
                   handlers={handlers}
@@ -224,14 +219,14 @@ export function TorrentTable(p: Props): React.JSX.Element {
             <div className="tfoot">
               <span className="sl">//</span>
               <b>{formatIndex(count)}</b>
-              {`torrent${count > 1 ? 's' : ''}${filtered ? ` sur ${total}` : ''}`}
+              {`${tn('shell.table.foot.torrents', count)}${filtered ? t('shell.table.foot.of', { total }) : ''}`}
               <span className="dot">·</span>
               <b>{nSel}</b>
-              {`sélectionné${nSel > 1 ? 's' : ''}`}
+              {tn('shell.table.foot.selected', nSel)}
               <span className="dot">·</span>
-              Tri :
+              {t('shell.table.foot.sort')}
               <b>
-                {SORT_LABEL[p.sort.key]} {p.sort.dir === 1 ? '↑' : '↓'}
+                {t(`shell.table.sort.${p.sort.key}`)} {p.sort.dir === 1 ? '↑' : '↓'}
               </b>
             </div>
             <div className="guides" aria-hidden="true">
@@ -274,6 +269,8 @@ function Count({ n, total }: { n: number; total: number | null }): React.JSX.Ele
 
 const Row = memo(
   function Row({ t, num, sel, focus, action, handlers }: RowProps): React.JSX.Element {
+    // redessinée au changement de langue (formats), malgré la comparaison ci-dessous
+    const { t: tr } = useT()
     const hash = isHashName(t)
     const dim = t.status === 'paused' || t.status === 'metadata'
     const cls = `tr${focus ? ' focus' : ''}${sel ? ' sel' : ''}`
@@ -299,7 +296,7 @@ const Row = memo(
         </div>
         <div className="td name" role="gridcell">
           {hash ? (
-            <span className="nm hash" title={`Lien magnet sans nom : ${t.id}`}>
+            <span className="nm hash" title={tr('shell.table.unnamedMagnet', { hash: t.id })}>
               {t.id}
             </span>
           ) : (

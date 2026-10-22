@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { protocolRegistered } from './registry'
 import type { PlatformScan, ScanContext } from './types'
+import { t } from '../../shared/i18n'
 import { cleanTitle, isFile, localAppData, readText, skip, uniqueDirs } from './util'
 
 const SYSTEM_PACKAGE = /^Microsoft\.(GamingApp|GamingServices|Xbox|XboxApp|XboxGamingOverlay|XboxGameOverlay|XboxIdentityProvider|XboxSpeechToTextOverlay|Xbox\.TCUI|XboxGameCallableUI|XboxDevices|Edge\.GameAssist)$/i
@@ -67,7 +68,7 @@ function manifestApps(xml: string): ManifestApp[] {
 export async function scanXbox(ctx: ScanContext): Promise<PlatformScan> {
   const scan: PlatformScan = { platform: 'xbox', ok: true, clientPath: null, detected: false, games: [], excluded: 0, error: null }
   const packages = ctx.reg.appx
-  if (packages === null) return { ...scan, ok: false, error: ctx.reg.error ?? 'Applications du Microsoft Store illisibles' }
+  if (packages === null) return { ...scan, ok: false, error: ctx.reg.error ?? t('main.scan.storeAppsUnreadableShort') }
   const gamingApp = packages.find((p) => /^Microsoft\.GamingApp$/i.test(p.name))
   if (gamingApp) {
     const exe = path.join(gamingApp.location, 'XboxPcApp.exe')

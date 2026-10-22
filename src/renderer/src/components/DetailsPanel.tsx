@@ -11,8 +11,10 @@ import {
   isHashName,
   shownDownload,
   splitAddress,
-  STATUS_LABEL
+  statusLabel
 } from '../format'
+import { locale } from '../../../shared/i18n'
+import { useT } from '../i18n'
 import { PeerGlobe } from './PeerGlobe'
 import { MiniProgress } from './ProgressBar'
 
@@ -23,19 +25,15 @@ import { MiniProgress } from './ProgressBar'
 
 type Tab = 'files' | 'infos' | 'peers' | 'trackers'
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'files', label: 'Fichiers' },
-  { id: 'infos', label: 'Infos' },
-  { id: 'peers', label: 'Pairs' },
-  { id: 'trackers', label: 'Trackers' }
-]
+/** Onglets ; libellé : clé « shell.details.tab.<id> ». */
+const TABS: { id: Tab }[] = [{ id: 'files' }, { id: 'infos' }, { id: 'peers' }, { id: 'trackers' }]
 const TAB_KEY = 'essaim.detailsTab'
 
 /** Onglet ouvert : le dernier choisi (mémorisé), sinon Fichiers comme avant la refonte. */
 function readTab(): Tab {
   try {
     const v = localStorage.getItem(TAB_KEY)
-    if (TABS.some((t) => t.id === v)) return v as Tab
+    if (TABS.some((x) => x.id === v)) return v as Tab
   } catch {
     // simple confort
   }
@@ -70,19 +68,20 @@ interface Props {
 }
 
 export function DetailsPanel({ torrent, details, height, number, onCopy, onOpenFolder }: Props): React.JSX.Element {
+  const { t } = useT()
   const [tab, setTabState] = useState<Tab>(readTab)
   const tabsRef = useRef<HTMLDivElement>(null)
   const d = details && torrent && details.id === torrent.id ? details : null
   const peers = useMemo(() => (d ? [...d.peers].sort(byRate) : []), [d])
 
-  const setTab = (t: Tab): void => {
-    setTabState(t)
-    storeTab(t)
+  const setTab = (next: Tab): void => {
+    setTabState(next)
+    storeTab(next)
   }
 
   // Flèches gauche / droite, Début / Fin : onglet voisin (motif « tablist »).
   function onTabsKey(e: React.KeyboardEvent<HTMLDivElement>): void {
-    const i = TABS.findIndex((t) => t.id === tab)
+    const i = TABS.findIndex((x) => x.id === tab)
     let next = -1
     if (e.key === 'ArrowRight') next = (i + 1) % TABS.length
     else if (e.key === 'ArrowLeft') next = (i + TABS.length - 1) % TABS.length
@@ -103,23 +102,23 @@ export function DetailsPanel({ torrent, details, height, number, onCopy, onOpenF
   const name = torrent ? (isHashName(torrent) ? torrent.id : torrent.name) : ''
 
   return (
-    <section className="details" style={{ height }} data-testid="details-panel" aria-label="Détails du torrent">
-      <div className="tabs" role="tablist" aria-label="Détails du torrent" ref={tabsRef} onKeyDown={onTabsKey}>
-        {TABS.map((t) => (
+    <section className="details" style={{ height }} data-testid="details-panel" aria-label={t('shell.details.label')}>
+      <div className="tabs" role="tablist" aria-label={t('shell.details.label')} ref={tabsRef} onKeyDown={onTabsKey}>
+        {TABS.map((x) => (
           <button
-            key={t.id}
-            id={`dtab-${t.id}`}
+            key={x.id}
+            id={`dtab-${x.id}`}
             type="button"
             role="tab"
-            aria-selected={tab === t.id}
-            aria-controls={tab === t.id ? `dpane-${t.id}` : undefined}
-            tabIndex={tab === t.id ? 0 : -1}
-            className={`tab${tab === t.id ? ' on' : ''}`}
-            data-testid={`details-tab-${t.id}`}
-            onClick={() => setTab(t.id)}
+            aria-selected={tab === x.id}
+            aria-controls={tab === x.id ? `dpane-${x.id}` : undefined}
+            tabIndex={tab === x.id ? 0 : -1}
+            className={`tab${tab === x.id ? ' on' : ''}`}
+            data-testid={`details-tab-${x.id}`}
+            onClick={() => setTab(x.id)}
           >
-            {t.label}
-            {counts[t.id] !== undefined && <span className="n">{counts[t.id]}</span>}
+            {t(`shell.details.tab.${x.id}`)}
+            {counts[x.id] !== undefined && <span className="n">{counts[x.id]}</span>}
           </button>
         ))}
         {torrent && (
@@ -134,10 +133,10 @@ export function DetailsPanel({ torrent, details, height, number, onCopy, onOpenF
 
       <div className="dbody">
         {!torrent ? (
-          <div className="details-empty">Sélectionne un torrent pour voir ses détails.</div>
+          <div className="details-empty">{t('shell.details.empty')}</div>
         ) : !d ? (
           <div className="loading" aria-busy="true">
-            <span className="cap">Chargement…</span>
+            <span className="cap">{t('shell.details.loading')}</span>
             <span className="scanbar">
               <i />
             </span>
@@ -197,7 +196,7 @@ interface Node {
 }
 
 const newNode = (name: string): Node => ({ name, dirs: new Map(), files: [], all: [] })
-const byName = (a: string, b: string): number => a.localeCompare(b, 'fr', { numeric: true, sensitivity: 'base' })
+const byName = (a: string, b: string): number => a.localeCompare(b, locale(), { numeric: true, sensitivity: 'base' })
 
 /**
  * Une ligne par dossier et par fichier : chemins découpés par « / » ou « \ », dossiers
@@ -277,6 +276,7 @@ function useRowWindow(ref: RefObject<HTMLDivElement | null>, count: number): { s
 
 /** done : torrent complet (le moteur peut annoncer 99,9 % pour un fichier dont toutes les pièces sont là). */
 function FilesTree({ id, files, done }: { id: string; files: FileInfo[]; done: boolean }): React.JSX.Element {
+  const { t } = useT()
   const ref = useRef<HTMLDivElement>(null)
   // La structure ne dépend que des chemins (fixes pour un torrent : clé = id + nombre de
   // fichiers) ; tailles et progression sont recalculées à chaque instantané.
@@ -286,15 +286,15 @@ function FilesTree({ id, files, done }: { id: string; files: FileInfo[]; done: b
   const { start, end } = useRowWindow(ref, rows.length)
 
   if (!files.length)
-    return <div className="details-empty">La liste des fichiers arrive dès que les infos du torrent sont reçues.</div>
+    return <div className="details-empty">{t('shell.details.filesEmpty')}</div>
 
   const visible = rows.slice(start, end)
   return (
     <div className="dtable ftree" ref={ref}>
       <div className="dhead">
-        <div>Nom</div>
-        <div className="r">Taille</div>
-        <div>Progression</div>
+        <div>{t('shell.details.col.name')}</div>
+        <div className="r">{t('shell.details.col.size')}</div>
+        <div>{t('shell.details.col.progress')}</div>
       </div>
       {start > 0 && <div style={{ height: start * ROW_H }} aria-hidden="true" />}
       {visible.map((r) => {
@@ -334,68 +334,70 @@ interface InfosProps {
   onOpenFolder: (id: string) => void
 }
 
-function InfosTab({ torrent: t, details: d, onCopy, onOpenFolder }: InfosProps): React.JSX.Element {
-  const status = t.status === 'error' ? `Erreur : ${t.error || 'inconnue'}` : STATUS_LABEL[t.status]
+function InfosTab({ torrent: tor, details: d, onCopy, onOpenFolder }: InfosProps): React.JSX.Element {
+  const { t, locale } = useT()
+  const status =
+    tor.status === 'error' ? t('shell.details.errorStatus', { error: tor.error || t('shell.details.unknownError') }) : statusLabel(tor.status)
   const rows: [string, ReactNode][] = [
     [
-      'Statut',
+      t('shell.details.info.status'),
       <span className="ell" title={status}>
         {status}
       </span>
     ],
     [
-      'Dossier',
+      t('shell.details.info.folder'),
       <>
-        <span className="ell" title={t.savePath}>
-          {t.savePath}
+        <span className="ell" title={tor.savePath}>
+          {tor.savePath}
         </span>
-        <button type="button" className="btn btn-line btn-sm" onClick={() => onOpenFolder(t.id)}>
+        <button type="button" className="btn btn-line btn-sm" onClick={() => onOpenFolder(tor.id)}>
           <FolderOpen />
-          Ouvrir
+          {t('shell.details.open')}
         </button>
       </>
     ],
-    ['Taille totale', t.size > 0 ? formatBytes(t.size) : nil],
+    [t('shell.details.info.size'), tor.size > 0 ? formatBytes(tor.size) : nil],
     // « 2 519 × 4,00 Mo » : espace insécable de pleine chasse (l'espace fine est plus étroite en mono)
-    ['Pièces', d.pieceCount > 0 ? `${d.pieceCount.toLocaleString('fr-FR').replace(/ /g, ' ')} × ${formatBytes(d.pieceLength)}` : nil],
-    ['Reçu', formatBytes(t.downloadedTotal)],
-    ['Envoyé', formatBytes(t.uploadedTotal)],
-    ['Ratio', formatRatio(t.ratio)],
+    [t('shell.details.info.pieces'), d.pieceCount > 0 ? `${d.pieceCount.toLocaleString(locale).replace(/ /g, ' ')} × ${formatBytes(d.pieceLength)}` : nil],
+    [t('shell.details.info.downloaded'), formatBytes(tor.downloadedTotal)],
+    [t('shell.details.info.uploaded'), formatBytes(tor.uploadedTotal)],
+    [t('shell.details.info.ratio'), formatRatio(tor.ratio)],
     [
-      'Vitesses',
+      t('shell.details.info.speeds'),
       <>
-        ↓ {speed(shownDownload(t))}
-        {'   '}↑ {speed(t.uploadSpeed)}
+        ↓ {speed(shownDownload(tor))}
+        {'   '}↑ {speed(tor.uploadSpeed)}
       </>
     ],
-    ['Ajouté le', formatDate(t.addedAt)],
-    ['Terminé le', t.completedAt ? formatDate(t.completedAt) : nil],
+    [t('shell.details.info.added'), formatDate(tor.addedAt)],
+    [t('shell.details.info.completed'), tor.completedAt ? formatDate(tor.completedAt) : nil],
     [
-      'Hash',
+      t('shell.details.info.hash'),
       <>
-        <span className="ell sub" title={t.id}>
-          {t.id}
+        <span className="ell sub" title={tor.id}>
+          {tor.id}
         </span>
-        <button type="button" className="btn btn-line btn-sm" onClick={() => onCopy(t.id, 'Hash copié')}>
+        <button type="button" className="btn btn-line btn-sm" onClick={() => onCopy(tor.id, t('shell.details.hashCopied'))}>
           <Copy />
-          Copier
+          {t('shell.details.copy')}
         </button>
       </>
     ],
     [
-      'Lien magnet',
+      t('shell.add.tab.magnet'),
       <>
         <span className="ell sub" title={d.magnetURI}>
           {d.magnetURI}
         </span>
-        <button type="button" className="btn btn-line btn-sm" onClick={() => onCopy(d.magnetURI, 'Lien magnet copié')}>
+        <button type="button" className="btn btn-line btn-sm" onClick={() => onCopy(d.magnetURI, t('shell.details.magnetCopied'))}>
           <Copy />
-          Copier
+          {t('shell.details.copy')}
         </button>
       </>
     ],
     [
-      'Créé par',
+      t('shell.details.info.createdBy'),
       d.createdBy ? (
         <span className="ell" title={d.createdBy}>
           {d.createdBy}
@@ -404,9 +406,9 @@ function InfosTab({ torrent: t, details: d, onCopy, onOpenFolder }: InfosProps):
         nil
       )
     ],
-    ['Créé le', d.createdAt ? formatDate(d.createdAt) : nil],
+    [t('shell.details.info.createdAt'), d.createdAt ? formatDate(d.createdAt) : nil],
     [
-      'Commentaire',
+      t('shell.details.info.comment'),
       d.comment ? (
         <span className="ell" title={d.comment}>
           {d.comment}
@@ -436,23 +438,20 @@ function InfosTab({ torrent: t, details: d, onCopy, onOpenFolder }: InfosProps):
 const connection = (c: string): string => c.replace(/^(uTP|TCP) /, '$1 · ')
 
 function PeersTable({ peers, paused }: { peers: PeerInfo[]; paused: boolean }): React.JSX.Element {
+  const { t } = useT()
   if (!peers.length)
-    return (
-      <div className="details-empty">
-        {paused ? 'Aucun pair connecté pour l’instant. Le torrent est en pause.' : 'Aucun pair connecté pour l’instant.'}
-      </div>
-    )
+    return <div className="details-empty">{paused ? t('shell.details.peersEmptyPaused') : t('shell.details.peersEmpty')}</div>
   const seen = new Map<string, number>()
   return (
     <div className="dtable peers">
       <div className="dhead">
         <div />
-        <div>Adresse</div>
-        <div>Client</div>
-        <div className="c-conn">Connexion</div>
-        <div>Progression</div>
-        <div className="r">Réception</div>
-        <div className="r">Émission</div>
+        <div>{t('shell.details.col.address')}</div>
+        <div>{t('shell.details.col.client')}</div>
+        <div className="c-conn">{t('shell.details.col.connection')}</div>
+        <div>{t('shell.details.col.progress')}</div>
+        <div className="r">{t('shell.details.col.download')}</div>
+        <div className="r">{t('shell.details.col.upload')}</div>
       </div>
       {peers.map((p, i) => {
         const n = seen.get(p.address) ?? 0
@@ -485,30 +484,31 @@ function PeersTable({ peers, paused }: { peers: PeerInfo[]; paused: boolean }): 
 
 // ---------- Onglet Trackers ----------
 
-const trackerClass = (status: string): string => (status === 'OK' ? 'ok' : status.startsWith('Erreur') ? 'bad' : 'wait')
+const trackerClass = (status: string): string => (status === 'OK' ? 'ok' : /^(Erreur|Error)\b/i.test(status) ? 'bad' : 'wait')
 
 function TrackersTable({ trackers }: { trackers: TrackerInfo[] }): React.JSX.Element {
-  if (!trackers.length) return <div className="details-empty">Aucun tracker : ce torrent trouve ses pairs par le DHT.</div>
+  const { t } = useT()
+  if (!trackers.length) return <div className="details-empty">{t('shell.details.trackersEmpty')}</div>
   return (
     <div className="dtable trk">
       <div className="dhead">
-        <div>Adresse</div>
-        <div>État</div>
-        <div className="r">Sources</div>
-        <div className="r">Pairs</div>
-        <div>Dernière réponse</div>
+        <div>{t('shell.details.col.address')}</div>
+        <div>{t('shell.details.col.state')}</div>
+        <div className="r">{t('shell.details.col.seeds')}</div>
+        <div className="r">{t('shell.details.col.peers')}</div>
+        <div>{t('shell.details.col.lastReply')}</div>
       </div>
-      {trackers.map((t) => (
-        <div className="drow" key={t.url}>
-          <div className="hi" title={t.url}>
-            {t.url}
+      {trackers.map((tr) => (
+        <div className="drow" key={tr.url}>
+          <div className="hi" title={tr.url}>
+            {tr.url}
           </div>
-          <div className={trackerClass(t.status)} title={t.status}>
-            {t.status || 'En contact…'}
+          <div className={trackerClass(tr.status)} title={tr.status}>
+            {tr.status || t('shell.details.contacting')}
           </div>
-          <div className="r">{t.seeds ?? nil}</div>
-          <div className="r">{t.peers ?? nil}</div>
-          <div>{t.lastUpdate ? formatTime(t.lastUpdate, true) : nil}</div>
+          <div className="r">{tr.seeds ?? nil}</div>
+          <div className="r">{tr.peers ?? nil}</div>
+          <div>{tr.lastUpdate ? formatTime(tr.lastUpdate, true) : nil}</div>
         </div>
       ))}
     </div>

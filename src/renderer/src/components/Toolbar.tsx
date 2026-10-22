@@ -1,11 +1,12 @@
 import { FolderOpen, Pause, Play, Plus, Search, Trash2, X } from 'lucide-react'
 import { useRef } from 'react'
+import { useT } from '../i18n'
 
 // Barre d'outils de la vue Torrents : titre de vue (≥ 1360 px), Ajouter (principal),
 // séparateur, Reprendre, Pause, Supprimer, Ouvrir le dossier (libellés toujours
 // visibles), recherche. ViewTitle et SearchBox servent aussi à la bibliothèque.
 
-/** Titre de vue : légende « 01 · TORRENTS » + titre mono 300 26 px + compteur en exposant (masqué sous 1360 px). */
+/** Titre de vue : légende « TORRENTS » + titre mono 300 26 px + compteur en exposant (masqué sous 1360 px). */
 export function ViewTitle({ cap, title, count }: { cap: string; title: string; count: number }): React.JSX.Element {
   return (
     <div className="vtitle">
@@ -30,6 +31,7 @@ interface SearchProps {
 
 /** Recherche : loupe, champ mono, bouton ✕ dès qu'il y a du texte ; Échap vide le champ. */
 export function SearchBox({ value, onChange, placeholder, testId, disabled }: SearchProps): React.JSX.Element {
+  const { t } = useT()
   const input = useRef<HTMLInputElement>(null)
   return (
     <label className={`search${disabled ? ' dis' : ''}`}>
@@ -56,8 +58,8 @@ export function SearchBox({ value, onChange, placeholder, testId, disabled }: Se
         <button
           type="button"
           className="clear"
-          aria-label="Effacer la recherche"
-          title="Effacer la recherche (Échap)"
+          aria-label={t('shell.search.clear')}
+          title={t('shell.search.clearTitle')}
           onClick={() => {
             onChange('')
             input.current?.focus()
@@ -90,20 +92,21 @@ interface Props {
 }
 
 export function Toolbar(p: Props): React.JSX.Element {
+  const { t } = useT()
   const off = !!p.empty
   return (
-    <div className="toolbar" role="toolbar" aria-label="Actions sur les torrents">
-      <ViewTitle cap="01 · Torrents" title={p.title} count={p.count} />
+    <div className="toolbar" role="toolbar" aria-label={t('shell.toolbar.label')}>
+      <ViewTitle cap="Torrents" title={p.title} count={p.count} />
       <button
         type="button"
         className="btn btn-primary"
         data-testid="btn-add-torrent"
-        title="Ajouter un torrent (Ctrl+N)"
-        aria-label="Ajouter un torrent (Ctrl+N)"
+        title={t('shell.toolbar.addTitle')}
+        aria-label={t('shell.toolbar.addTitle')}
         onClick={p.onAdd}
       >
         <Plus />
-        Ajouter
+        {t('shell.toolbar.add')}
       </button>
       <div className="tsep" />
       <button
@@ -111,51 +114,51 @@ export function Toolbar(p: Props): React.JSX.Element {
         className="btn"
         data-testid="btn-resume"
         disabled={off || !p.canResume}
-        title="Reprendre"
-        aria-label="Reprendre"
+        title={t('shell.toolbar.resume')}
+        aria-label={t('shell.toolbar.resume')}
         onClick={p.onResume}
       >
         <Play />
-        <span className="lbl">Reprendre</span>
+        <span className="lbl">{t('shell.toolbar.resume')}</span>
       </button>
       <button
         type="button"
         className="btn"
         data-testid="btn-pause"
         disabled={off || !p.canPause}
-        title="Mettre en pause"
-        aria-label="Pause"
+        title={t('shell.toolbar.pauseTitle')}
+        aria-label={t('shell.toolbar.pause')}
         onClick={p.onPause}
       >
         <Pause />
-        <span className="lbl">Pause</span>
+        <span className="lbl">{t('shell.toolbar.pause')}</span>
       </button>
       <button
         type="button"
         className="btn"
         data-testid="btn-remove"
         disabled={off || !p.hasSelection}
-        title="Supprimer (Suppr)"
-        aria-label="Supprimer (Suppr)"
+        title={t('shell.toolbar.removeTitle')}
+        aria-label={t('shell.toolbar.removeTitle')}
         onClick={p.onRemove}
       >
         <Trash2 />
-        <span className="lbl">Supprimer</span>
+        <span className="lbl">{t('shell.toolbar.remove')}</span>
       </button>
       <button
         type="button"
         className="btn"
         data-testid="btn-open-folder"
         disabled={off || !p.hasSelection}
-        title="Ouvrir le dossier (double-clic sur une ligne)"
-        aria-label="Ouvrir le dossier (double-clic sur une ligne)"
+        title={t('shell.toolbar.openFolderTitle')}
+        aria-label={t('shell.toolbar.openFolderTitle')}
         onClick={p.onOpenFolder}
       >
         <FolderOpen />
-        <span className="lbl">Ouvrir le dossier</span>
+        <span className="lbl">{t('shell.toolbar.openFolder')}</span>
       </button>
       <div className="spacer" />
-      <SearchBox value={p.search} onChange={p.onSearch} placeholder="Rechercher un torrent" testId="torrent-search" />
+      <SearchBox value={p.search} onChange={p.onSearch} placeholder={t('shell.toolbar.search')} testId="torrent-search" />
     </div>
   )
 }

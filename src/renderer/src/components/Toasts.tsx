@@ -2,6 +2,7 @@ import { X } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import type { Notice } from '../../../shared/types'
 import { formatTime } from '../format'
+import { useT } from '../i18n'
 
 // Toasts en verre sombre, pile en bas à droite (4 au plus) : barre de 2 px à
 // gauche (blanche = info, verte = succès, rouge = erreur), ligne du haut
@@ -39,10 +40,10 @@ export interface ToastOptions {
 
 export const toastDuration = (level: Notice['level'], action = false): number => (level === 'error' || action ? 8000 : 4500)
 
-const CATEGORY: Record<Notice['level'], string> = { info: 'Info', success: 'Succès', error: 'Erreur' }
 const CLASS: Record<Notice['level'], string> = { info: '', success: ' ok', error: ' err' }
 
 function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number) => void }): React.JSX.Element {
+  const { t } = useT()
   const duration = toastDuration(toast.level, !!toast.action)
   const remaining = useRef(duration)
   const startedAt = useRef(0)
@@ -77,9 +78,9 @@ function ToastCard({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number)
       onMouseLeave={run}
     >
       <div className="top">
-        <span className="cap">{toast.title ?? CATEGORY[toast.level]}</span>
+        <span className="cap">{toast.title ?? t(`shell.toast.${toast.level}`)}</span>
         <span className="cap t">{formatTime(at.current, true)}</span>
-        <button type="button" className="x" aria-label="Fermer" title="Fermer" onClick={() => onDismiss(toast.id)}>
+        <button type="button" className="x" aria-label={t('shell.common.close')} title={t('shell.common.close')} onClick={() => onDismiss(toast.id)}>
           <X />
         </button>
       </div>

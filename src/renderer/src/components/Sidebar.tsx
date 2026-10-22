@@ -1,7 +1,8 @@
 import { ArrowDown, ArrowDownUp, ArrowUp, Blocks, Check, Gamepad2, LoaderCircle, Settings, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import type { GamePlatform } from '../../../shared/types'
-import { FILTERS, type Filter } from '../format'
+import { filterLabel, type Filter } from '../format'
+import { useT } from '../i18n'
 import { gamesWord, platformName, type LibraryFilter } from '../platformUi'
 import { useScrollFade } from '../useScrollFade'
 import { PlatformLogo } from './PlatformLogo'
@@ -9,7 +10,7 @@ import { Scope } from './Scope'
 
 // Barre latérale en faux verre : une seule section « BIBLIOTHÈQUE » avec deux
 // rubriques sur le même modèle, compteurs, point vivant quand un jeu tourne,
-// oscilloscope « 03 · TRAFIC · 60 S » et pied. Sous « Mes jeux », un filtre par
+// oscilloscope « TRAFIC · 60 S ». Sous « Mes jeux », un filtre par
 // plateforme qui a des jeux (logo de la plateforme, nom, nombre de jeux) ;
 // sous « Torrents », En cours / Terminés / En partage quand ils contiennent quelque
 // chose (ou que le filtre est choisi). La rubrique Torrents n'existe que si les torrents
@@ -25,7 +26,6 @@ const TORRENT_SUBS: { id: Exclude<Filter, 'all'>; icon: LucideIcon }[] = [
   { id: 'done', icon: Check },
   { id: 'seeding', icon: ArrowUp }
 ]
-const filterLabel = (id: Filter): string => FILTERS.find((f) => f.id === id)?.label ?? id
 
 export type View = 'torrents' | 'library'
 
@@ -66,8 +66,6 @@ interface Props {
   /** client torrent activé (Réglages) : sinon ni rubrique Torrents ni oscilloscope */
   torrentsEnabled: boolean
   traffic: Traffic
-  /** version courte affichée dans le pied (« 0.3 ») */
-  version: string
 }
 
 export function Sidebar({
@@ -84,13 +82,13 @@ export function Sidebar({
   onSettings,
   syncing,
   torrentsEnabled,
-  traffic,
-  version
+  traffic
 }: Props): React.JSX.Element {
+  const { t } = useT()
   const navRef = useRef<HTMLDivElement>(null)
-  const torrentNav = torrentsEnabled ? TORRENT_SUBS.filter((t) => counts[t.id] > 0 || (view === 'torrents' && filter === t.id)) : []
+  const torrentNav = torrentsEnabled ? TORRENT_SUBS.filter((s) => counts[s.id] > 0 || (view === 'torrents' && filter === s.id)) : []
   const treeSize = libNav.length + torrentNav.length
-  useScrollFade(navRef, [...libNav.map((n) => n.id), ...torrentNav.map((t) => t.id)].join(','))
+  useScrollFade(navRef, [...libNav.map((n) => n.id), ...torrentNav.map((s) => s.id)].join(','))
 
   // le filtre actif reste visible quand la liste défile
   useEffect(() => {
@@ -99,29 +97,29 @@ export function Sidebar({
 
   return (
     <nav
-      className={`sidebar${view === 'library' ? ' lib-view' : ''}${treeSize ? ' has-tree' : ''}${treeSize > 5 ? ' many-tree' : ''}`}
-      aria-label="Navigation"
+      className={`sidebar${view === 'library' ? ' lib-view' : ''}`}
+      aria-label={t('shell.sidebar.navigation')}
     >
       <div className="side-nav" ref={navRef}>
         <div className="side-sec">
-          <span className="cap">Bibliothèque</span>
+          <span className="cap">{t('shell.sidebar.library')}</span>
           <span className="rule" />
         </div>
         <button
           type="button"
           className={`nav${view === 'library' && libFilter === 'all' ? ' on' : ''}`}
-          title={playing ? 'Mes jeux — un jeu est lancé' : 'Mes jeux'}
+          title={playing ? t('shell.sidebar.myGamesPlaying') : t('shell.sidebar.myGames')}
           aria-current={view === 'library' && libFilter === 'all' ? 'page' : undefined}
           data-testid="nav-library"
           onClick={() => onLibrary('all')}
         >
           <Gamepad2 />
-          <span className="label">Mes jeux</span>
-          {playing && <span className="live-dot" title="Un jeu est lancé" />}
+          <span className="label">{t('shell.sidebar.myGames')}</span>
+          {playing && <span className="live-dot" title={t('shell.sidebar.gameRunning')} />}
           <span className="count">{gameCount}</span>
         </button>
         {libNav.length > 0 && (
-          <div className="side-tree" role="group" aria-label="Filtrer par plateforme">
+          <div className="side-tree" role="group" aria-label={t('shell.sidebar.filterPlatform')}>
             {libNav.map((item) => {
               const on = view === 'library' && libFilter === item.id
               const name = platformName(item.id)
@@ -159,24 +157,24 @@ export function Sidebar({
           </button>
         )}
         {torrentNav.length > 0 && (
-          <div className="side-tree" role="group" aria-label="Filtrer les torrents">
-            {torrentNav.map((t) => {
-              const on = view === 'torrents' && filter === t.id
-              const label = filterLabel(t.id)
+          <div className="side-tree" role="group" aria-label={t('shell.sidebar.filterTorrents')}>
+            {torrentNav.map((s) => {
+              const on = view === 'torrents' && filter === s.id
+              const label = filterLabel(s.id)
               return (
                 <button
-                  key={t.id}
+                  key={s.id}
                   type="button"
                   className={`nav sub${on ? ' on' : ''}`}
-                  title={`${label} · ${counts[t.id]}`}
-                  aria-label={`${label}, ${counts[t.id]}`}
+                  title={`${label} · ${counts[s.id]}`}
+                  aria-label={`${label}, ${counts[s.id]}`}
                   aria-current={on ? 'page' : undefined}
-                  data-testid={`nav-filter-${t.id}`}
-                  onClick={() => onFilter(t.id)}
+                  data-testid={`nav-filter-${s.id}`}
+                  onClick={() => onFilter(s.id)}
                 >
-                  <t.icon className="plogo" aria-hidden="true" />
+                  <s.icon className="plogo" aria-hidden="true" />
                   <span className="label">{label}</span>
-                  <span className="count">{counts[t.id]}</span>
+                  <span className="count">{counts[s.id]}</span>
                 </button>
               )
             })}
@@ -187,32 +185,28 @@ export function Sidebar({
       <button
         type="button"
         className="nav plat-nav"
-        title={syncing ? 'Plateformes : lecture en cours…' : 'Plateformes : lanceurs détectés et compte Steam'}
-        aria-label="Plateformes"
+        title={syncing ? t('shell.sidebar.platformsSyncing') : t('shell.sidebar.platformsTitle')}
+        aria-label={t('shell.sidebar.platforms')}
         data-testid="nav-platforms"
         onClick={onPlatforms}
       >
         {syncing ? <LoaderCircle className="spin" /> : <Blocks />}
-        <span className="label">Plateformes</span>
+        <span className="label">{t('shell.sidebar.platforms')}</span>
       </button>
       <button
         type="button"
         className="nav plat-nav set-nav"
-        title="Réglages : torrents, dossiers par défaut, version"
-        aria-label="Réglages"
+        title={t('shell.sidebar.settingsTitle')}
+        aria-label={t('shell.sidebar.settings')}
         data-testid="nav-settings"
         onClick={onSettings}
       >
         <Settings />
-        <span className="label">Réglages</span>
+        <span className="label">{t('shell.sidebar.settings')}</span>
       </button>
       <div className="side-fill" />
       {/* vue Torrents seulement (masqué par le CSS dans la bibliothèque, l'historique des 60 s est gardé) */}
       {torrentsEnabled && <Scope down={traffic.down} up={traffic.up} stamp={traffic.stamp} />}
-      <div className="side-foot">
-        <span className="cap">CyberDeck {version}</span>
-        <span className="cap">Sans publicité</span>
-      </div>
     </nav>
   )
 }

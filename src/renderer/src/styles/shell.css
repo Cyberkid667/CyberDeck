@@ -31,7 +31,6 @@
 /* Logo 20 px : le centre de la sphère (y = 9 sur 20) tombe sur le milieu des capitales du mot-symbole */
 .logo-mark { width: 20px; height: 20px; flex: none; color: #f4f5f7; margin-top: 2px; }
 .wordmark { font: 500 12px/1 var(--font-mono); letter-spacing: 0.26em; margin-right: -0.26em; color: var(--tx-1); white-space: nowrap; }
-.ver { font: 400 10px/1 var(--font-mono); letter-spacing: 0.08em; color: var(--tx-3); padding-left: 12px; border-left: 1px solid var(--line); }
 .crumb { display: none; align-items: center; gap: 8px; margin-left: 14px; padding-left: 14px; border-left: 1px solid var(--line); white-space: nowrap; }
 .crumb .cap b { color: var(--tx-1); font-weight: 500; }
 /* Bouton qui replie la barre latérale (comme dans Claude) : tout à gauche de la bande, hors zone de glisser */
@@ -47,6 +46,13 @@
 .tb-update:hover { background: rgba(255,255,255,.1); border-color: #fff; }
 .tb-update:focus-visible { box-shadow: var(--focus-ring); }
 .tb-update svg.i { width: 13px; height: 13px; }
+/* Poignée du bord droit de la barre latérale (glisser pour la largeur) : ligne blanche au survol */
+.side-resize { grid-row: 2; grid-column: 1; justify-self: end; position: relative; z-index: 5; width: 8px; margin-right: -4px; cursor: col-resize; }
+.side-resize::after { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: transparent; transition: background-color .12s; }
+.side-resize:hover::after, body.resizing-side .side-resize::after { background: rgba(255,255,255,.35); }
+body.resizing-side, body.resizing-side * { cursor: col-resize !important; user-select: none; }
+/* glissée tout à gauche : la barre pâlit, la relâcher la ferme */
+body.side-closing .sidebar { opacity: .35; transition: opacity .12s; }
 /* Barre latérale repliée : la bibliothèque prend toute la largeur, le fil d'Ariane de la bande dit où l'on est */
 .app.side-closed { --side-w: 0px; }
 .app.side-closed .sidebar { display: none; }
@@ -54,7 +60,7 @@
 
 /* ---------- Barre latérale : faux verre (aucun backdrop-filter) ---------- */
 .sidebar {
-  grid-row: 2; position: relative; z-index: var(--z-side);
+  grid-row: 2; grid-column: 1; position: relative; z-index: var(--z-side);
   display: flex; flex-direction: column; min-height: 0;
   padding: 18px 10px 14px;
   background:
@@ -68,7 +74,6 @@
   background: linear-gradient(180deg, rgba(255,255,255,.30), rgba(255,255,255,.07) 30%, rgba(255,255,255,.05) 70%, rgba(255,255,255,.10));
 }
 .side-sec { display: flex; align-items: center; gap: 8px; padding: 0 10px; margin: 2px 0 8px; }
-.side-sec .idx { color: var(--tx-4); }
 .side-sec .rule { flex: 1; height: 1px; background: var(--hair); }
 .nav {
   position: relative; display: flex; align-items: center; gap: 11px;
@@ -78,7 +83,8 @@
   transition: background-color .12s, color .12s;
 }
 .nav svg.i { color: var(--tx-3); transition: color .12s; }
-.nav .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* line-height plus haut que la police : overflow hidden rognait les jambages (g de « Réglages », j, p) */
+.nav .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; }
 .nav .count { margin-left: auto; font: 400 11px/1 var(--font-mono); color: var(--tx-3); }
 .nav:hover { background: rgba(255,255,255,.045); color: var(--tx-1); }
 .nav:hover svg.i { color: var(--tx-1); }
@@ -121,8 +127,6 @@
 .scope-frame canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .scope-frame .scale { position: absolute; left: 6px; top: 5px; font: 500 10px/1 var(--font-mono); letter-spacing: .06em; color: var(--tx-3); }
 .scope .axis { display: flex; justify-content: space-between; margin-top: 6px; }
-.side-foot { flex: none; margin-top: 14px; padding: 12px 10px 0; border-top: 1px dashed var(--line); display: flex; flex-direction: column; gap: 4px; }
-.side-foot .cap:first-child { color: var(--tx-2); }
 
 /* Rail (< 1100 px) */
 @media (max-width: 1099px) {
@@ -135,7 +139,7 @@
   .nav.on::before { left: -7px; }
   .nav .live-dot { position: absolute; top: 6px; right: 8px; margin: 0; width: 5px; height: 5px; }
   .nav .live-dot + .count { margin: 0; }
-  .scope, .side-foot { display: none; }
+  .scope { display: none; }
   .side-nav { align-self: stretch; align-items: center; margin: -4px -7px 0; padding: 4px 7px; }
   /* plateformes : logo seul, nom et nombre dans la bulle */
   .side-tree { align-items: center; margin: 0 0 2px; }
@@ -145,15 +149,6 @@
   .nav.sub.on::before { left: -7px; top: 8px; bottom: 8px; }
   .plat-nav { margin-top: 4px; }
   .plat-nav.set-nav { margin-top: 0; }
-}
-/* Fenêtre basse avec des filtres de plateforme : le pied (décor) laisse sa place, pour que tous
-   les filtres restent visibles sans défiler (l'oscilloscope, lui, n'est jamais dans la bibliothèque). */
-@media (max-height: 799px) {
-  .sidebar.has-tree .side-foot { display: none; }
-}
-/* Plus de 5 filtres de plateforme sous 820 px de haut : même chose plutôt que de faire défiler la navigation */
-@media (max-height: 879px) {
-  .sidebar.many-tree .side-foot { display: none; }
 }
 
 /* ---------- Zone principale ---------- */

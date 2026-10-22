@@ -5,6 +5,7 @@
 import path from 'node:path'
 import type { PlatformScan, ScanContext } from './types'
 import { withSqliteCopy, tableColumns } from './sqlite'
+import { t } from '../../shared/i18n'
 import { cleanDir, cleanTitle, isDir, isFile, largestExeSync, localAppData, normDir, roamingAppData, skip } from './util'
 
 export function itchClient(ctx: ScanContext): string | null {
@@ -51,7 +52,7 @@ export async function scanItch(ctx: ScanContext): Promise<PlatformScan> {
     rows = withSqliteCopy(db, ctx.tempDir, (query) => {
       const caves = tableColumns(query, 'caves')
       const games = tableColumns(query, 'games')
-      if (!caves.has('game_id') || !games.has('id')) throw new Error('schéma de la base inconnu')
+      if (!caves.has('game_id') || !games.has('id')) throw new Error(t('main.scan.unknownSchema'))
       const col = (set: Set<string>, table: string, name: string): string => (set.has(name) ? `${table}.${name}` : 'NULL')
       const locations = tableColumns(query, 'install_locations')
       const join = locations.has('id') && caves.has('install_location_id') ? 'LEFT JOIN install_locations l ON l.id = c.install_location_id' : ''
@@ -64,9 +65,9 @@ export async function scanItch(ctx: ScanContext): Promise<PlatformScan> {
       )
     })
   } catch (err: any) {
-    return { ...scan, ok: false, error: `Base itch.io illisible : ${err.message}` }
+    return { ...scan, ok: false, error: t('main.scan.itchUnreadable', { error: err.message }) }
   }
-  if (rows === null) return { ...scan, ok: false, error: 'SQLite indisponible : jeux itch.io non lus' }
+  if (rows === null) return { ...scan, ok: false, error: t('main.scan.itchNoSqlite') }
 
   const seen = new Set<string>()
   for (const r of rows) {

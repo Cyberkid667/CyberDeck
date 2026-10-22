@@ -15,6 +15,7 @@ import type { AddRequest, AddResult, EssaimApi, TorrentFileInfo } from '../../..
 import { baseName, dirName, errorText, formatBytes } from '../format'
 import { barcodeCSS } from '../fx/barcode'
 import { createGlobe } from '../fx/globe'
+import { t, useT } from '../i18n'
 
 // ==========================================================================
 // Socle commun des dialogues (SPEC 5.12), utilisé aussi par RemoveDialog,
@@ -26,7 +27,7 @@ import { createGlobe } from '../fx/globe'
 // et le collage ne remontent pas jusqu'aux raccourcis de la fenêtre (Ctrl+N, Suppr…).
 // ==========================================================================
 
-export type DialogKind = 'add-torrent' | 'remove' | 'game' | 'import' | 'platforms' | 'remove-game' | 'settings'
+export type DialogKind = 'add-torrent' | 'remove' | 'game' | 'import' | 'platforms' | 'remove-game' | 'uninstall' | 'settings'
 
 /** Dialogues ouverts, du plus ancien au plus récent : seul le dernier écoute le clavier de la fenêtre. */
 const OPEN: HTMLElement[] = []
@@ -188,14 +189,15 @@ export function DialogHead({
   onClose: () => void
   busy?: boolean
 }): React.JSX.Element {
+  const { t } = useT()
   return (
     <div className="dhead-row">
       <div className="dtitle">
         <span className="cap">{cap}</span>
         <h2 id={id}>{title}</h2>
       </div>
-      <button type="button" className="xbtn" aria-label="Fermer" title="Fermer (Échap)" disabled={busy} onClick={onClose}>
-        <span className="cap">Échap</span>
+      <button type="button" className="xbtn" aria-label={t('shell.common.close')} title={t('shell.dialog.closeTitle')} disabled={busy} onClick={onClose}>
+        <span className="cap">{t('shell.keys.esc')}</span>
         <X />
       </button>
     </div>
@@ -293,16 +295,14 @@ export interface MagnetReading {
   ok: boolean
   /** l'empreinte est lisible (le lien peut quand même être invalide ailleurs) */
   hashOk: boolean
-  /** « Incomplet » ou « Invalide » (bandeau du billet) */
+  /** « Incomplet » ou « Invalide » (bandeau du billet), dans la langue en cours */
   verdict: string | null
-  /** phrase d'erreur sous le formulaire */
+  /** phrase d'erreur sous le formulaire, dans la langue en cours */
   problem: string | null
   /** l'empreinte contient des caractères qui n'ont rien à y faire */
   odd: boolean
 }
 
-/** espace insécable (typographie française : avant « : », à l'intérieur des guillemets) */
-const NB = ' '
 const HEX = /^[0-9a-f]*$/i
 const B32 = /^[a-z2-7]*$/i
 
@@ -335,15 +335,17 @@ export function readMagnet(raw: string): MagnetReading {
   if (!text) return r
   // Mêmes règles que le moteur (parse-torrent → magnet-uri) : préfixe exact, clés exactes, un seul « = »
   // par paramètre (sinon il est ignoré), « xt » lu tel quel, « dn » et « tr » décodés.
-  if (!text.startsWith('magnet:?')) return { ...r, verdict: 'Invalide', problem: `Ce lien ne commence pas par «${NB}magnet:?${NB}».` }
+  const invalid = t('shell.add.verdict.invalid')
+  const incomplete = t('shell.add.verdict.incomplete')
+  if (!text.startsWith('magnet:?')) return { ...r, verdict: invalid, problem: t('shell.add.problem.prefix') }
   r.magnet = true
   // Deux liens collés bout à bout (ou le même lien collé deux fois) : le moteur ne lirait que
   // le premier, avec un dernier paramètre abîmé (« …:80magnet:?xt=… »). Refusé.
   const finish = (): MagnetReading => {
     if (text.indexOf('magnet:?', 1) !== -1) {
       r.ok = false
-      r.verdict = 'Invalide'
-      r.problem = 'Un seul lien magnet à la fois.'
+      r.verdict = invalid
+      r.problem = t('shell.add.problem.several')
     }
     return r
   }
@@ -371,10 +373,10 @@ export function readMagnet(raw: string): MagnetReading {
     }
   }
   r.trackers = trackers.size
-  const garbledProblem = `Ce lien magnet est invalide${NB}: il contient un «${NB}%${NB}» mal encodé.`
+  const garbledProblem = t('shell.add.problem.garbled')
   if (btih === null) {
-    r.verdict = garbled ? 'Invalide' : 'Incomplet'
-    r.problem = garbled ? garbledProblem : `Ce lien magnet est incomplet${NB}: il manque l’empreinte (xt=urn:btih:…).`
+    r.verdict = garbled ? invalid : incomplete
+    r.problem = garbled ? garbledProblem : t('shell.add.problem.noHash')
     return finish()
   }
   r.hash = btih.toUpperCase()
@@ -392,20 +394,20 @@ export function readMagnet(raw: string): MagnetReading {
   if (r.hashOk) {
     r.ok = !garbled
     if (garbled) {
-      r.verdict = 'Invalide'
+      r.verdict = invalid
       r.problem = garbledProblem
     }
   } else if (len < 40 && HEX.test(btih)) {
-    r.verdict = 'Incomplet'
-    r.problem = `Ce lien magnet est incomplet${NB}: l’empreinte doit faire 40 caractères.`
+    r.verdict = incomplete
+    r.problem = t('shell.add.problem.hashLength', { n: 40 })
   } else if (B32.test(btih) && len < 32) {
     r.expected = 32
-    r.verdict = 'Incomplet'
-    r.problem = `Ce lien magnet est incomplet${NB}: l’empreinte doit faire 32 caractères.`
+    r.verdict = incomplete
+    r.problem = t('shell.add.problem.hashLength', { n: 32 })
   } else {
     r.odd = true
-    r.verdict = 'Invalide'
-    r.problem = `Ce lien magnet est invalide${NB}: l’empreinte contient des caractères inattendus.`
+    r.verdict = invalid
+    r.problem = t('shell.add.problem.oddHash')
   }
   return finish()
 }
@@ -491,8 +493,6 @@ function TicketSphere(): React.JSX.Element {
   )
 }
 
-const plural = (n: number, one: string, many: string): string => `${n} ${n > 1 ? many : one}`
-
 interface TicketProps {
   mode: 'magnet' | 'file'
   reading: MagnetReading
@@ -505,18 +505,19 @@ interface TicketProps {
 
 /** Billet « Lecture du lien » / « Lecture du fichier » (colonne droite, 292 px ; 244 sous 1100 px). */
 function LinkTicket({ mode, reading, filePath, dropped, fileInfo, canInspect }: TicketProps): React.JSX.Element {
+  const { t, tn, locale } = useT()
   const file = mode === 'file'
-  const title = file ? 'Lecture du fichier' : 'Lecture du lien'
+  const title = file ? t('shell.add.ticket.file') : t('shell.add.ticket.link')
 
   let state: ReactNode
   let info: ReactNode
   if (!file) {
     state = !reading.text ? (
-      <span className="cap state wait">En attente</span>
+      <span className="cap state wait">{t('shell.add.state.waiting')}</span>
     ) : reading.ok ? (
       <span className="cap state">
         <Check />
-        Valide
+        {t('shell.add.state.valid')}
       </span>
     ) : (
       <span className="cap state bad">
@@ -528,13 +529,11 @@ function LinkTicket({ mode, reading, filePath, dropped, fileInfo, canInspect }: 
       info = (
         <>
           <p className="note">
-            {reading.text
-              ? `Un lien magnet commence par «${NB}magnet:?${NB}».`
-              : `Colle un lien magnet${NB}: son nom, son empreinte et ses trackers s’affichent ici, sans rien envoyer sur le réseau.`}
+            {reading.text ? t('shell.add.note.prefix') : t('shell.add.note.pasteLink')}
           </p>
           <div className="foot">
             <div>
-              <span className="cap">Analyse locale du lien</span>
+              <span className="cap">{t('shell.add.ticket.localLink')}</span>
             </div>
             <Star />
           </div>
@@ -546,21 +545,21 @@ function LinkTicket({ mode, reading, filePath, dropped, fileInfo, canInspect }: 
       info = (
         <>
           <div>
-            <span className="cap">Nom annoncé</span>
-            {reading.name ? <NameLine name={reading.name} /> : <div className="dn mute">Non annoncé</div>}
+            <span className="cap">{t('shell.add.ticket.name')}</span>
+            {reading.name ? <NameLine name={reading.name} /> : <div className="dn mute">{t('shell.add.ticket.noName')}</div>}
           </div>
           <div>
-            <span className="cap">Empreinte</span>
+            <span className="cap">{t('shell.add.ticket.hash')}</span>
             {reading.hashOk ? (
               <HashBlock hash={reading.hash ?? ''} perLine={perLine} />
             ) : reading.hash === null ? (
-              <HashBlock hash="" perLine={perLine} bad sub="Absente du lien" />
+              <HashBlock hash="" perLine={perLine} bad sub={t('shell.add.ticket.hashMissing')} />
             ) : (
               <HashBlock
                 hash={reading.hash}
                 perLine={perLine}
                 bad
-                sub={reading.odd ? 'Caractères inattendus' : `${plural(count, 'caractère', 'caractères')} sur ${reading.expected}`}
+                sub={reading.odd ? t('shell.add.ticket.oddChars') : tn('shell.add.ticket.hashCount', count, { expected: reading.expected })}
               />
             )}
           </div>
@@ -571,12 +570,12 @@ function LinkTicket({ mode, reading, filePath, dropped, fileInfo, canInspect }: 
             </div>
             <div>
               <span className="cap">DHT</span>
-              <span className="v">Oui</span>
+              <span className="v">{t('shell.add.ticket.yes')}</span>
             </div>
             {reading.ok && (
               <div>
-                <span className="cap">Taille</span>
-                {reading.size ? <span className="v">{formatBytes(reading.size)}</span> : <span className="v mute">À venir</span>}
+                <span className="cap">{t('shell.add.ticket.size')}</span>
+                {reading.size ? <span className="v">{formatBytes(reading.size)}</span> : <span className="v mute">{t('shell.add.ticket.sizeLater')}</span>}
               </div>
             )}
           </div>
@@ -584,7 +583,7 @@ function LinkTicket({ mode, reading, filePath, dropped, fileInfo, canInspect }: 
             <div className="foot">
               <div>
                 <span className="bc" style={{ backgroundImage: barcodeCSS(reading.hash ?? '', 96) }} />
-                <span className="cap">Analyse locale du lien</span>
+                <span className="cap">{t('shell.add.ticket.localLink')}</span>
               </div>
               <Star />
             </div>
@@ -593,53 +592,53 @@ function LinkTicket({ mode, reading, filePath, dropped, fileInfo, canInspect }: 
       )
     }
   } else {
-    const how = dropped ? 'Déposé' : 'Choisi'
+    const how = dropped ? t('shell.add.file.dropped') : t('shell.add.file.chosen')
     state = !filePath ? (
-      <span className="cap state wait">En attente</span>
+      <span className="cap state wait">{t('shell.add.state.waiting')}</span>
     ) : canInspect && fileInfo === undefined ? (
-      <span className="cap state wait">Lecture…</span>
+      <span className="cap state wait">{t('shell.add.state.reading')}</span>
     ) : fileInfo === null ? (
       <span className="cap state bad">
         <X />
-        Illisible
+        {t('shell.add.state.unreadable')}
       </span>
     ) : (
       <span className="cap state">
         <Check />
-        {fileInfo ? 'Valide' : how}
+        {fileInfo ? t('shell.add.state.valid') : how}
       </span>
     )
     if (!filePath) {
-      info = <p className="note">{`Choisis un fichier .torrent ou glisse-le dans la fenêtre${NB}: son nom s’affiche ici.`}</p>
+      info = <p className="note">{t('shell.add.note.pickFile')}</p>
     } else if (fileInfo) {
       info = (
         <>
           <div>
-            <span className="cap">Fichier</span>
+            <span className="cap">{t('shell.add.ticket.file1')}</span>
             <NameLine name={baseName(filePath)} />
           </div>
           <div className="kv">
             <div>
-              <span className="cap">Fichiers</span>
-              <span className="v">{fileInfo.files.toLocaleString('fr-FR')}</span>
+              <span className="cap">{t('shell.add.ticket.files')}</span>
+              <span className="v">{fileInfo.files.toLocaleString(locale)}</span>
             </div>
             <div>
-              <span className="cap">Taille</span>
+              <span className="cap">{t('shell.add.ticket.size')}</span>
               <span className="v">{formatBytes(fileInfo.size)}</span>
             </div>
             <div>
-              <span className="cap">Pièces</span>
-              <span className="v">{fileInfo.pieces.toLocaleString('fr-FR')}</span>
+              <span className="cap">{t('shell.add.ticket.pieces')}</span>
+              <span className="v">{fileInfo.pieces.toLocaleString(locale)}</span>
             </div>
           </div>
           <div>
-            <span className="cap">Empreinte</span>
+            <span className="cap">{t('shell.add.ticket.hash')}</span>
             <HashBlock hash={fileInfo.infoHash.toUpperCase()} perLine={5} />
           </div>
           <div className="foot">
             <div>
               <span className="bc" style={{ backgroundImage: barcodeCSS(fileInfo.infoHash.toLowerCase(), 96) }} />
-              <span className="cap">Lecture locale du fichier</span>
+              <span className="cap">{t('shell.add.ticket.localFile')}</span>
             </div>
           </div>
         </>
@@ -648,26 +647,26 @@ function LinkTicket({ mode, reading, filePath, dropped, fileInfo, canInspect }: 
       info = (
         <>
           <div>
-            <span className="cap">Fichier</span>
+            <span className="cap">{t('shell.add.ticket.file1')}</span>
             <NameLine name={baseName(filePath)} />
           </div>
           <div>
-            <span className="cap">Emplacement</span>
+            <span className="cap">{t('shell.add.ticket.location')}</span>
             <div className="path" title={dirName(filePath)}>
               <Breakable text={dirName(filePath)} />
             </div>
           </div>
           {fileInfo === null ? (
-            <p className="note bad">Ce fichier ne se lit pas comme un .torrent. Choisis-en un autre.</p>
+            <p className="note bad">{t('shell.add.note.badFile')}</p>
           ) : canInspect ? (
-            <p className="note">Lecture du fichier…</p>
+            <p className="note">{t('shell.add.note.readingFile')}</p>
           ) : (
-            <p className="note">Le nom, la taille et l’empreinte du torrent s’affichent dans la liste dès l’ajout.</p>
+            <p className="note">{t('shell.add.note.afterAdd')}</p>
           )}
           <div className="foot">
             <div>
               <span className="bc" style={{ backgroundImage: barcodeCSS(filePath.toLowerCase(), 96) }} />
-              <span className="cap">Fichier local</span>
+              <span className="cap">{t('shell.add.ticket.localFileOnly')}</span>
             </div>
           </div>
         </>
@@ -709,6 +708,7 @@ const MIN_LINES = 3
 const MAX_LINES = 5
 
 export function AddDialog({ preset, defaultSavePath, freeSpace = null, onClose, onAdded }: Props): React.JSX.Element {
+  const { t, lang } = useT()
   const [mode, setMode] = useState<'magnet' | 'file'>(preset.filePath ? 'file' : 'magnet')
   const [magnet, setMagnet] = useState(preset.magnet ?? '')
   const [filePath, setFilePath] = useState(preset.filePath ?? '')
@@ -735,7 +735,9 @@ export function AddDialog({ preset, defaultSavePath, freeSpace = null, onClose, 
     magnetNow.current = magnet
   })
 
-  const reading = useMemo(() => readMagnet(magnet), [magnet])
+  // lang : les phrases du lien suivent la langue de l'interface
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const reading = useMemo(() => readMagnet(magnet), [magnet, lang])
   const canInspect = typeof (window.essaim as InspectApi).inspectTorrentFile === 'function'
 
   // Lien magnet trouvé dans le presse-papiers à l'ouverture (si le champ est encore vide).
@@ -864,7 +866,7 @@ export function AddDialog({ preset, defaultSavePath, freeSpace = null, onClose, 
     let source: AddRequest['source']
     if (mode === 'magnet') {
       const text = magnet.trim()
-      if (!text) return fail('Colle un lien magnet d’abord.', 'source')
+      if (!text) return fail(t('shell.add.error.noLink'), 'source')
       if (!reading.ok) {
         setChecked(true)
         setError(null)
@@ -873,10 +875,10 @@ export function AddDialog({ preset, defaultSavePath, freeSpace = null, onClose, 
       }
       source = { kind: 'magnet', magnet: text }
     } else {
-      if (!filePath) return fail('Choisis un fichier .torrent d’abord.', 'source')
+      if (!filePath) return fail(t('shell.add.error.noFile'), 'source')
       source = { kind: 'file', filePath }
     }
-    if (!savePath.trim()) return fail('Choisis un dossier de destination.', 'folder')
+    if (!savePath.trim()) return fail(t('shell.add.error.noFolder'), 'folder')
     setBusy(true)
     setError(null)
     let res: AddResult
@@ -887,11 +889,11 @@ export function AddDialog({ preset, defaultSavePath, freeSpace = null, onClose, 
     }
     setBusy(false)
     if (res.ok) {
-      onAdded(mode === 'file' ? baseName(filePath) : (reading.name ?? 'lien magnet'))
+      onAdded(mode === 'file' ? baseName(filePath) : (reading.name ?? t('shell.add.magnetLink')))
       onClose()
       return
     }
-    setError({ text: res.error ?? 'Ajout impossible.', field: null })
+    setError({ text: res.error ?? t('shell.add.error.failed'), field: null })
     // les champs étaient désactivés pendant l'envoi : le focus revient sur la source
     requestAnimationFrame(() => (mode === 'magnet' ? magnetRef : submitRef).current?.focus())
   }
@@ -904,7 +906,7 @@ export function AddDialog({ preset, defaultSavePath, freeSpace = null, onClose, 
   const drive = driveOf(savePath)
   const freeLabel =
     freeSpace !== null && freeSpace !== undefined && freeSpace >= 0 && drive && drive === driveOf(defaultSavePath)
-      ? `${formatBytes(freeSpace)} libres sur ${drive}:`
+      ? t('shell.add.free', { size: formatBytes(freeSpace), drive })
       : null
 
   const onSegKey = (e: React.KeyboardEvent): void => {
@@ -929,10 +931,10 @@ export function AddDialog({ preset, defaultSavePath, freeSpace = null, onClose, 
         <LinkTicket mode={mode} reading={reading} filePath={filePath} dropped={dropped} fileInfo={fileInfo} canInspect={canInspect} />
       }
     >
-      <DialogHead id="add-title" cap="01.1 · Nouveau torrent" title="Ajouter un torrent" onClose={onClose} busy={busy} />
+      <DialogHead id="add-title" cap={t('shell.add.cap')} title={t('shell.add.title')} onClose={onClose} busy={busy} />
 
       <div className="dseg">
-        <div className="seg big" role="radiogroup" aria-label="Source du torrent" onKeyDown={onSegKey}>
+        <div className="seg big" role="radiogroup" aria-label={t('shell.add.source')} onKeyDown={onSegKey}>
           <button
             ref={magnetTab}
             type="button"
@@ -945,7 +947,7 @@ export function AddDialog({ preset, defaultSavePath, freeSpace = null, onClose, 
             onClick={() => switchMode('magnet', 'field')}
           >
             <Link2 />
-            Lien magnet
+            {t('shell.add.tab.magnet')}
           </button>
           <button
             ref={fileTab}
@@ -959,7 +961,7 @@ export function AddDialog({ preset, defaultSavePath, freeSpace = null, onClose, 
             onClick={() => switchMode('file', 'field')}
           >
             <FileUp />
-            Fichier .torrent
+            {t('shell.add.tab.file')}
           </button>
         </div>
       </div>
@@ -967,8 +969,8 @@ export function AddDialog({ preset, defaultSavePath, freeSpace = null, onClose, 
       {mode === 'magnet' ? (
         <div className="field">
           <label className="lab" htmlFor="add-magnet">
-            <span className="cap">Lien magnet</span>
-            <span className="cap">Ctrl+V pour coller</span>
+            <span className="cap">{t('shell.add.tab.magnet')}</span>
+            <span className="cap">{t('shell.add.pasteHint')}</span>
           </label>
           {/* au-delà de 5 lignes : défilement sans barre, fondu de 22 px sur le texte (pas sur le cadre) tant qu'il en reste */}
           <div className={`ta-wrap${fit.scroll && !atEnd ? ' fade' : ''}`}>
@@ -1002,22 +1004,22 @@ export function AddDialog({ preset, defaultSavePath, freeSpace = null, onClose, 
           {fromClipboard && !message && (
             <div className="hint">
               <span className="sdot" />
-              Lien trouvé dans le presse-papiers.
+              {t('shell.add.fromClipboard')}
             </div>
           )}
         </div>
       ) : (
         <div className="field">
           <div className="lab">
-            <span className="cap">Fichier .torrent</span>
-            <span className="cap">Ou glisse-le dans la fenêtre</span>
+            <span className="cap">{t('shell.add.tab.file')}</span>
+            <span className="cap">{t('shell.add.dropHint')}</span>
           </div>
           <button
             ref={fileRef}
             type="button"
             className={`filepick${sourceInvalid ? ' invalid' : ''}`}
             disabled={busy}
-            title={filePath || 'Choisir un fichier .torrent'}
+            title={filePath || t('shell.add.pickTitle')}
             data-testid="file-pick"
             onClick={pickFile}
           >
@@ -1027,14 +1029,14 @@ export function AddDialog({ preset, defaultSavePath, freeSpace = null, onClose, 
                 <>
                   <span className="fn">{baseName(filePath)}</span>
                   <span className="cap fs">
-                    {dropped ? 'Déposé' : 'Choisi'}
-                    {fileInfo?.fileSize ? ` · ${formatBytes(fileInfo.fileSize)}` : ''} · cliquer pour changer
+                    {dropped ? t('shell.add.file.dropped') : t('shell.add.file.chosen')}
+                    {fileInfo?.fileSize ? ` · ${formatBytes(fileInfo.fileSize)}` : ''} · {t('shell.add.file.change')}
                   </span>
                 </>
               ) : (
                 <>
-                  <span className="fn none">Choisir un fichier…</span>
-                  <span className="cap fs">Aucun fichier choisi</span>
+                  <span className="fn none">{t('shell.add.file.pick')}</span>
+                  <span className="cap fs">{t('shell.add.file.none')}</span>
                 </>
               )}
             </span>
@@ -1044,9 +1046,9 @@ export function AddDialog({ preset, defaultSavePath, freeSpace = null, onClose, 
 
       <div className="field">
         <div className="lab">
-          <span className="cap">Dossier de destination</span>
+          <span className="cap">{t('shell.add.folder')}</span>
           {freeLabel && (
-            <span className="cap" title="Espace libre dans le dossier de destination">
+            <span className="cap" title={t('shell.statusbar.freeTitle')}>
               {freeLabel}
             </span>
           )}
@@ -1059,11 +1061,11 @@ export function AddDialog({ preset, defaultSavePath, freeSpace = null, onClose, 
             tabIndex={-1}
             value={savePath}
             title={savePath}
-            aria-label="Dossier de destination"
+            aria-label={t('shell.add.folder')}
           />
           <button type="button" className="btn btn-line" disabled={busy} data-testid="folder-pick" onClick={pickFolder}>
             <FolderOpen />
-            Parcourir…
+            {t('shell.common.browse')}
           </button>
         </div>
       </div>
@@ -1073,12 +1075,12 @@ export function AddDialog({ preset, defaultSavePath, freeSpace = null, onClose, 
       <div className="dfoot">
         <Keys
           keys={[
-            ['Entrée', 'ajouter'],
-            ['Échap', 'fermer']
+            [t('shell.keys.enter'), t('shell.keys.add')],
+            [t('shell.keys.esc'), t('shell.keys.close')]
           ]}
         />
         <button type="button" className="btn btn-line" disabled={busy} data-testid="dialog-cancel" onClick={onClose}>
-          Annuler
+          {t('shell.common.cancel')}
         </button>
         <button
           ref={submitRef}
@@ -1089,7 +1091,7 @@ export function AddDialog({ preset, defaultSavePath, freeSpace = null, onClose, 
           onClick={submit}
         >
           {busy ? <LoaderCircle className="spin" /> : <Plus />}
-          Ajouter
+          {t('shell.toolbar.add')}
         </button>
       </div>
     </DialogFrame>

@@ -1,6 +1,7 @@
 // Lancement de scripts PowerShell (Windows PowerShell 5.1, présent sur tous les Windows).
 import { spawn, type ChildProcess } from 'node:child_process'
 import path from 'node:path'
+import { t } from '../shared/i18n'
 
 export const POWERSHELL = path.join(
   process.env.SystemRoot ?? process.env.windir ?? 'C:\\Windows',
@@ -40,14 +41,14 @@ export function runPs(
       child = startPs(script, env)
     } catch (err) {
       // PowerShell absent ou bloqué : même réponse qu'un échec du script, jamais d'exception
-      return resolve({ code: -1, stdout: '', stderr: `PowerShell ne démarre pas : ${(err as Error).message}` })
+      return resolve({ code: -1, stdout: '', stderr: t('main.ps.cantStart', { message: (err as Error).message }) })
     }
     let stdout = ''
     let stderr = ''
     let timer: NodeJS.Timeout | null = null
     if (timeoutMs > 0)
       timer = setTimeout(() => {
-        stderr += `\nDélai dépassé (${Math.round(timeoutMs / 1000)} s)`
+        stderr += `\n${t('main.ps.timeout', { s: Math.round(timeoutMs / 1000) })}`
         child.kill()
       }, timeoutMs)
     child.stdout?.setEncoding('utf8')
@@ -56,7 +57,7 @@ export function runPs(
     child.stderr?.on('data', (d) => (stderr += d))
     child.on('error', (err) => {
       if (timer) clearTimeout(timer)
-      resolve({ code: -1, stdout, stderr: `PowerShell ne démarre pas : ${err.message}` })
+      resolve({ code: -1, stdout, stderr: t('main.ps.cantStart', { message: err.message }) })
     })
     child.on('close', (code) => {
       if (timer) clearTimeout(timer)

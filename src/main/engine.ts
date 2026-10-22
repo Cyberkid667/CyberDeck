@@ -20,6 +20,7 @@ import type {
   TorrentSummary,
   TrackerInfo
 } from '../shared/types'
+import { isLang, setLang, t as tr } from '../shared/i18n'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Torrent = any
@@ -29,6 +30,11 @@ interface ParentPort {
   on(event: 'message', cb: (e: { data: ToEngine }) => void): void
 }
 const parentPort = (process as unknown as { parentPort: ParentPort }).parentPort
+
+// Langue des textes du moteur : « --lang=<en|fr> » au lancement, puis message « set-lang »
+// quand elle change dans Réglages (le moteur est un processus à part).
+const langArg = process.argv.find((a) => a.startsWith('--lang='))?.slice('--lang='.length)
+if (isLang(langArg)) setLang(langArg)
 
 // Ce qu'on garde sur disque pour chaque torrent (state.json).
 interface TorrentRecord {
@@ -184,7 +190,7 @@ function addToClient(rec: TorrentRecord): void {
       rec.completedAt = Date.now()
       // Pas de message pour un torrent déjà complet qu'on vient juste de revérifier.
       if (Date.now() - lt.startedAt > 5000 || rec.downloadedTotal > 0) {
-        notify('success', `Téléchargement terminé : ${rec.name}`)
+        notify('success', tr('main.engine.downloadDone', { name: rec.name }))
       }
     }
     dirty = true
@@ -202,7 +208,7 @@ function addToClient(rec: TorrentRecord): void {
     for (const url of rec.announce) {
       if (msg.includes(url)) {
         const info = lt.trackers.get(url) ?? { url, status: '', seeds: null, peers: null, lastUpdate: null }
-        info.status = `Erreur : ${msg.replace(url, '').trim()}`
+        info.status = tr('main.engine.trackerError', { message: msg.replace(url, '').trim() })
         lt.trackers.set(url, info)
       }
     }
@@ -242,7 +248,7 @@ function removeFromClient(lt: LiveTorrent): Promise<void> {
 
 async function addTorrent(req: AddRequest): Promise<AddResult> {
   const savePath = req.savePath.trim()
-  if (!savePath) return { ok: false, error: 'Choisis un dossier de destination.' }
+  if (!savePath) return { ok: false, error: tr('main.engine.chooseFolder') }
   await fsp.mkdir(savePath, { recursive: true })
 
   let parsed: any
@@ -250,7 +256,7 @@ async function addTorrent(req: AddRequest): Promise<AddResult> {
   try {
     if (req.source.kind === 'magnet') {
       const magnet = req.source.magnet.trim()
-      if (!magnet.startsWith('magnet:?')) return { ok: false, error: 'Ce lien ne commence pas par « magnet:? ».' }
+      if (!magnet.startsWith('magnet:?')) return { ok: false, error: tr('main.engine.notMagnet') }
       parsed = await parseTorrent(magnet)
     } else {
       buffer = await fsp.readFile(req.source.filePath)
@@ -259,13 +265,13 @@ async function addTorrent(req: AddRequest): Promise<AddResult> {
   } catch {
     return {
       ok: false,
-      error: req.source.kind === 'magnet' ? 'Ce lien magnet est invalide.' : 'Ce fichier n’est pas un .torrent valide.'
+      error: req.source.kind === 'magnet' ? tr('main.engine.badMagnet') : tr('main.engine.badTorrentFile')
     }
   }
-  if (!parsed?.infoHash) return { ok: false, error: 'Impossible de lire ce torrent.' }
+  if (!parsed?.infoHash) return { ok: false, error: tr('main.engine.unreadable') }
 
   const id: string = parsed.infoHash
-  if (records.has(id)) return { ok: false, error: `« ${records.get(id)!.name} » est déjà dans la liste.` }
+  if (records.has(id)) return { ok: false, error: tr('main.engine.alreadyListed', { name: records.get(id)!.name }) }
 
   const rec: TorrentRecord = {
     id,
@@ -457,22 +463,27 @@ const CLIENT_CODES: Record<string, string> = {
 function clientName(wire: any): string {
   const v = wire.peerExtendedHandshake?.v
   if (v) return typeof v === 'string' ? v : Buffer.from(v).toString('utf8')
-  if (wire.type === 'webSeed') return 'Source web'
+  if (wire.type === 'webSeed') return tr('main.engine.webSeed')
   const idHex: string | undefined = wire.peerId
-  if (!idHex) return 'Inconnu'
+  if (!idHex) return tr('main.engine.unknownClient')
   const id = Buffer.from(idHex, 'hex').toString('latin1')
   if (id[0] === '-' && id[7] === '-') {
     const code = id.slice(1, 3)
     const ver = id.slice(3, 7).replace(/0+$/, '').split('').join('.')
     return `${CLIENT_CODES[code] ?? code} ${ver}`.trim()
   }
-  return 'Inconnu'
+  return tr('main.engine.unknownClient')
 }
 
-const CONNECTIONS: Record<string, string> = {
-  tcpIncoming: 'TCP entrant', tcpOutgoing: 'TCP sortant', utpIncoming: 'uTP entrant',
-  utpOutgoing: 'uTP sortant', webrtc: 'WebRTC', webSeed: 'Source web'
-}
+const connectionLabel = (type: string): string | undefined =>
+  ({
+    tcpIncoming: tr('main.engine.tcpIncoming'),
+    tcpOutgoing: tr('main.engine.tcpOutgoing'),
+    utpIncoming: tr('main.engine.utpIncoming'),
+    utpOutgoing: tr('main.engine.utpOutgoing'),
+    webrtc: 'WebRTC',
+    webSeed: tr('main.engine.webSeed')
+  })[type]
 
 function popcount(buf: Uint8Array | undefined, max: number): number {
   if (!buf || !max) return 0
@@ -499,7 +510,7 @@ function detailsOf(rec: TorrentRecord): TorrentDetails {
     ? t.wires.map((w: any) => ({
         address: w.remoteAddress ? `${w.remoteAddress}:${w.remotePort}` : '—',
         client: clientName(w),
-        connection: CONNECTIONS[w.type] ?? w.type ?? '—',
+        connection: connectionLabel(w.type) ?? w.type ?? '—',
         progress: w.isSeeder ? 1 : popcount(w.peerPieces?.buffer, pieceCount) / (pieceCount || 1),
         downloadSpeed: Math.round(w.downloadSpeed()),
         uploadSpeed: Math.round(w.uploadSpeed()),
@@ -510,9 +521,9 @@ function detailsOf(rec: TorrentRecord): TorrentDetails {
   const trackers: TrackerInfo[] = urls.map((url) => {
     const info = lt?.trackers.get(url)
     if (info) return info
-    let status = 'En contact…'
-    if (!lt) status = rec.paused ? 'En pause' : 'Arrêté'
-    else if (Date.now() - lt.startedAt > 60_000) status = 'Pas de réponse'
+    let status = tr('main.engine.trackerContacting')
+    if (!lt) status = rec.paused ? tr('main.engine.trackerPaused') : tr('main.engine.trackerStopped')
+    else if (Date.now() - lt.startedAt > 60_000) status = tr('main.engine.trackerNoReply')
     return { url, status, seeds: null, peers: null, lastUpdate: null }
   })
   return {
@@ -583,7 +594,7 @@ async function init(msg: Extract<ToEngine, { type: 'init' }>): Promise<void> {
   client = new WebTorrent({ torrentPort: port })
   client.on('error', (err: Error) => {
     log(`Client : ${err.message}`)
-    notify('error', `Erreur du moteur : ${err.message}`)
+    notify('error', tr('main.engine.clientError', { message: err.message }))
   })
   loadState()
   stateLoaded = true
@@ -617,6 +628,12 @@ async function shutdown(): Promise<void> {
 // Les messages sont traités un par un, dans l'ordre d'arrivée.
 let queue: Promise<void> = Promise.resolve()
 parentPort.on('message', ({ data: msg }) => {
+  // changement de langue (hors ToEngine) : appliqué tout de suite, hors de la file
+  const lang = msg as unknown as { type: string; lang?: unknown }
+  if (lang.type === 'set-lang') {
+    if (isLang(lang.lang)) setLang(lang.lang)
+    return
+  }
   queue = queue.then(async () => {
     try {
       switch (msg.type) {
@@ -649,7 +666,7 @@ parentPort.on('message', ({ data: msg }) => {
       }
     } catch (err: any) {
       log(`Message ${msg.type} : ${err?.stack ?? err}`)
-      notify('error', `Action impossible : ${err?.message ?? err}`)
+      notify('error', tr('main.engine.actionFailed', { message: err?.message ?? err }))
     }
   })
 })

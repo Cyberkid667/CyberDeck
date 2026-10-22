@@ -2,6 +2,7 @@ import { Trash2 } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { PLATFORM_INFO } from '../../../shared/platforms'
 import type { Game } from '../../../shared/types'
+import { useT } from '../i18n'
 import { DialogFrame, DialogHead, Keys } from './AddDialog'
 import { PlatformTag } from './PlatformTag'
 
@@ -16,12 +17,13 @@ interface Props {
 }
 
 export function RemoveGameDialog({ game, onCancel, onConfirm }: Props): React.JSX.Element {
+  const { t } = useT()
   const [ring, setRing] = useState(true)
   const cancelRef = useRef<HTMLButtonElement>(null)
   const name = PLATFORM_INFO[game.platform].name
   return (
     <DialogFrame kind="remove-game" size="single" labelledBy="rmg-title" onClose={onCancel} initialFocus={cancelRef}>
-      <DialogHead id="rmg-title" cap="02.3 · Retrait" title="Retirer ce jeu ?" onClose={onCancel} />
+      <DialogHead id="rmg-title" cap={t('library.remove.cap')} title={t('library.remove.title')} onClose={onCancel} />
       <ul className="rm-list">
         <li>
           <PlatformTag platform={game.platform} />
@@ -31,12 +33,12 @@ export function RemoveGameDialog({ game, onCancel, onConfirm }: Props): React.JS
         </li>
       </ul>
       <p className="dnote">
-        {game.installed ? `Le jeu reste installé dans ${name}. ` : ''}
-        CyberDeck ne l’ajoutera plus tout seul à la bibliothèque. Pour le remettre, ouvre <b>Plateformes</b> puis clique sur{' '}
-        <b>Remettre</b>.
+        {game.installed ? t('library.remove.staysInstalled', { platform: name }) : ''}
+        {t('library.remove.note')} <b>{t('library.common.platforms')}</b> {t('library.remove.noteThen')}{' '}
+        <b>{t('library.platforms.restore')}</b>.
       </p>
       <div className="dfoot">
-        <Keys keys={[['Échap', 'annuler']]} />
+        <Keys keys={[[t('library.common.keyEsc'), t('library.common.actCancel')]]} />
         <button
           ref={cancelRef}
           type="button"
@@ -45,11 +47,11 @@ export function RemoveGameDialog({ game, onCancel, onConfirm }: Props): React.JS
           onBlur={() => setRing(false)}
           onClick={onCancel}
         >
-          Annuler
+          {t('library.common.cancel')}
         </button>
         <button type="button" className="btn btn-danger" data-testid="dialog-submit" onClick={onConfirm}>
           <Trash2 />
-          Retirer
+          {t('library.remove.submit')}
         </button>
       </div>
     </DialogFrame>

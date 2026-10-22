@@ -4,6 +4,7 @@
 // demande. GitHub ne voit que l'adresse IP, comme pour une page web.
 import { net, shell } from 'electron'
 import type { UpdateState } from '../shared/types'
+import { t } from '../shared/i18n'
 
 export const REPO = 'Cyberkid667/CyberDeck'
 const LATEST_API = `https://api.github.com/repos/${REPO}/releases/latest`
@@ -35,16 +36,16 @@ export async function fetchUpdate(current: string): Promise<UpdateState> {
     })
     // aucune Release publiée (404) : rien à proposer
     if (res.status === 404) return { ...base, status: 'current' }
-    if (!res.ok) return { ...base, error: `GitHub a répondu ${res.status}` }
+    if (!res.ok) return { ...base, error: t('main.update.httpStatus', { status: res.status }) }
     const data = (await res.json()) as { tag_name?: unknown; html_url?: unknown }
     const latest = typeof data.tag_name === 'string' ? data.tag_name.replace(/^v/i, '') : null
-    if (!latest || !parseVersion(latest)) return { ...base, error: 'numéro de version illisible' }
+    if (!latest || !parseVersion(latest)) return { ...base, error: t('main.update.badVersion') }
     // seule une page de ce dépôt peut être ouverte
     const url = typeof data.html_url === 'string' && data.html_url.startsWith(`https://github.com/${REPO}/`) ? data.html_url : RELEASES_PAGE
     return { ...base, status: compareVersions(latest, current) > 0 ? 'available' : 'current', latest, url }
   } catch (err) {
     // hors ligne, délai dépassé… : on réessaiera à la prochaine vérification
-    return { ...base, error: (err as Error).name === 'TimeoutError' ? 'délai dépassé' : 'hors ligne ou GitHub injoignable' }
+    return { ...base, error: (err as Error).name === 'TimeoutError' ? t('main.update.timeout') : t('main.update.offline') }
   }
 }
 

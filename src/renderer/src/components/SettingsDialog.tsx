@@ -1,7 +1,9 @@
 import { ArrowDownToLine, FolderOpen, PowerOff, RefreshCw, TriangleAlert } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { version as APP_VERSION } from '../../../../package.json'
+import { LANGS, t } from '../../../shared/i18n'
 import type { Settings, SettingsPatch, TorrentSummary, UpdateState } from '../../../shared/types'
+import { useT } from '../i18n'
 import { errorText, formatBytes, isRunning } from '../format'
 import { CheckMark, DialogFrame, DialogHead } from './AddDialog'
 import type { ToastOptions } from './Toasts'
@@ -30,16 +32,17 @@ interface Props {
   onCheckUpdate: () => Promise<UpdateState>
 }
 
-/** Une ligne sur l'état des mises à jour, sous l'interrupteur. */
+/** Une ligne sur l'état des mises à jour, sous l'interrupteur (dans la langue en cours). */
 function updateLine(u: UpdateState | null): string {
-  if (!u || u.status === 'idle') return 'Pas encore vérifié.'
-  if (u.status === 'checking') return 'Vérification en cours…'
-  if (u.status === 'available') return `Nouvelle version disponible : ${u.latest} (tu as la ${u.current}).`
-  if (u.status === 'current') return 'CyberDeck est à jour.'
-  return `Vérification impossible (${u.error ?? 'erreur inconnue'}).`
+  if (!u || u.status === 'idle') return t('shell.update.idle')
+  if (u.status === 'checking') return t('shell.update.checking')
+  if (u.status === 'available') return t('shell.update.available', { latest: u.latest ?? '', current: u.current })
+  if (u.status === 'current') return t('shell.update.current')
+  return t('shell.update.failed', { error: u.error ?? t('shell.update.unknownError') })
 }
 
 export function SettingsDialog({ settings, torrents, freeSpace, onChange, onClose, onToast, update, onCheckUpdate }: Props): React.JSX.Element {
+  const { t, tn } = useT()
   const [busy, setBusy] = useState(false)
   // confirmation avant d'arrêter des torrents qui tournent
   const [confirmOff, setConfirmOff] = useState(false)
@@ -72,7 +75,7 @@ export function SettingsDialog({ settings, torrents, freeSpace, onChange, onClos
     try {
       await onChange(patch)
     } catch (err) {
-      onToast('error', `Réglage impossible : ${errorText(err)}`, { title: 'Réglages' })
+      onToast('error', t('shell.settings.failed', { error: errorText(err) }), { title: t('shell.sidebar.settings') })
     } finally {
       setBusy(false)
     }
@@ -89,20 +92,44 @@ export function SettingsDialog({ settings, torrents, freeSpace, onChange, onClos
   }
 
   async function pickDownloads(): Promise<void> {
-    const dir = await window.essaim.pickFolder(settings.defaultSavePath, 'Dossier de téléchargement')
+    const dir = await window.essaim.pickFolder(settings.defaultSavePath, t('shell.settings.downloads'))
     if (dir) void apply({ defaultSavePath: dir })
   }
 
   async function pickGames(): Promise<void> {
-    const dir = await window.essaim.pickFolder(gamesFolder ?? '', 'Dossier de tes jeux')
+    const dir = await window.essaim.pickFolder(gamesFolder ?? '', t('shell.settings.games'))
     if (dir) void apply({ gamesFolder: dir })
   }
 
-  const freeLabel = on && freeSpace !== null && freeSpace >= 0 ? `${formatBytes(freeSpace)} libres` : null
+  const freeLabel = on && freeSpace !== null && freeSpace >= 0 ? t('shell.settings.free', { size: formatBytes(freeSpace) }) : null
 
   return (
     <DialogFrame kind="settings" size="single" labelledBy="set-title" onClose={onClose}>
-      <DialogHead id="set-title" cap="04 · Réglages" title="Réglages" onClose={onClose} />
+      <DialogHead id="set-title" cap={t('shell.sidebar.settings')} title={t('shell.sidebar.settings')} onClose={onClose} />
+
+      {/* langue de l'interface : chaque langue écrite dans sa propre langue, appliquée tout de suite */}
+      <div className="field set-lang">
+        <div className="lab">
+          <span className="cap">{t('settings.language')}</span>
+        </div>
+        <div className="seg" role="radiogroup" aria-label={t('settings.language')} data-testid="settings-language">
+          {LANGS.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              role="radio"
+              lang={l.id}
+              aria-checked={settings.language === l.id}
+              className={settings.language === l.id ? 'on' : undefined}
+              disabled={busy}
+              data-testid={`settings-language-${l.id}`}
+              onClick={() => void apply({ language: l.id })}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <label className={`check set-toggle${on ? ' on' : ''}`}>
         <span className="cbox">
@@ -123,23 +150,21 @@ export function SettingsDialog({ settings, torrents, freeSpace, onChange, onClos
           <CheckMark />
         </span>
         <span className="txt">
-          Torrents
-          <small>Client torrent intégré. Désactivé, aucun port n’est ouvert.</small>
+          {t('shell.settings.torrents')}
+          <small>{t('shell.settings.torrentsHint')}</small>
         </span>
       </label>
 
       {confirmOff && (
-        <div className="banner set-confirm" role="group" aria-label="Désactiver les torrents ?" data-testid="settings-torrents-confirm-box">
+        <div className="banner set-confirm" role="group" aria-label={t('shell.settings.confirmLabel')} data-testid="settings-torrents-confirm-box">
           <TriangleAlert />
           <div className="set-confirm-body">
             <span>
-              {active > 1
-                ? `${active} torrents sont en cours. Ils s’arrêtent maintenant et reprendront quand tu réactiveras les torrents.`
-                : '1 torrent est en cours. Il s’arrête maintenant et reprendra quand tu réactiveras les torrents.'}
+              {tn('shell.settings.confirmText', active)}
             </span>
             <div className="row-btns">
               <button ref={keepRef} type="button" className="btn btn-line btn-sm" data-testid="settings-torrents-keep" onClick={() => setConfirmOff(false)}>
-                Annuler
+                {t('shell.common.cancel')}
               </button>
               <button
                 type="button"
@@ -151,7 +176,7 @@ export function SettingsDialog({ settings, torrents, freeSpace, onChange, onClos
                 }}
               >
                 <PowerOff />
-                Désactiver
+                {t('shell.settings.disable')}
               </button>
             </div>
           </div>
@@ -161,9 +186,9 @@ export function SettingsDialog({ settings, torrents, freeSpace, onChange, onClos
       {on && (
         <div className="field">
           <div className="lab">
-            <span className="cap">Dossier de téléchargement</span>
+            <span className="cap">{t('shell.settings.downloads')}</span>
             {freeLabel && (
-              <span className="cap" title="Espace libre dans ce dossier">
+              <span className="cap" title={t('shell.settings.freeTitle')}>
                 {freeLabel}
               </span>
             )}
@@ -176,11 +201,11 @@ export function SettingsDialog({ settings, torrents, freeSpace, onChange, onClos
               tabIndex={-1}
               value={settings.defaultSavePath}
               title={settings.defaultSavePath}
-              aria-label="Dossier de téléchargement"
+              aria-label={t('shell.settings.downloads')}
             />
             <button type="button" className="btn btn-line" disabled={busy} data-testid="settings-downloads-pick" onClick={pickDownloads}>
               <FolderOpen />
-              Parcourir…
+              {t('shell.common.browse')}
             </button>
           </div>
         </div>
@@ -188,8 +213,8 @@ export function SettingsDialog({ settings, torrents, freeSpace, onChange, onClos
 
       <div className="field">
         <div className="lab">
-          <span className="cap">Dossier de tes jeux</span>
-          {!settings.gamesFolder && <span className="cap">Par défaut</span>}
+          <span className="cap">{t('shell.settings.games')}</span>
+          {!settings.gamesFolder && <span className="cap">{t('shell.settings.default')}</span>}
         </div>
         <div className="path-row">
           <input
@@ -199,14 +224,14 @@ export function SettingsDialog({ settings, torrents, freeSpace, onChange, onClos
             tabIndex={-1}
             value={gamesFolder ?? ''}
             title={gamesFolder ?? undefined}
-            aria-label="Dossier de tes jeux"
+            aria-label={t('shell.settings.games')}
           />
           <button type="button" className="btn btn-line" disabled={busy} data-testid="settings-games-pick" onClick={pickGames}>
             <FolderOpen />
-            Parcourir…
+            {t('shell.common.browse')}
           </button>
         </div>
-        <div className="hint mute">Ouvert par « Importer un dossier » dans Mes jeux.</div>
+        <div className="hint mute">{t('shell.settings.gamesHint')}</div>
       </div>
 
       <label className={`check set-toggle${settings.checkUpdates ? ' on' : ''}`}>
@@ -227,8 +252,8 @@ export function SettingsDialog({ settings, torrents, freeSpace, onChange, onClos
           <CheckMark />
         </span>
         <span className="txt">
-          Mises à jour
-          <small>Vérifie sur GitHub, au démarrage, si une nouvelle version est sortie. Rien n’est installé sans toi.</small>
+          {t('shell.settings.updates')}
+          <small>{t('shell.settings.updatesHint')}</small>
         </span>
       </label>
       <div className="set-update" data-testid="settings-update-status">
@@ -237,7 +262,7 @@ export function SettingsDialog({ settings, torrents, freeSpace, onChange, onClos
           {update?.status === 'available' && (
             <button type="button" className="btn btn-line btn-sm" data-testid="settings-update-download" onClick={() => window.essaim.openUpdate()}>
               <ArrowDownToLine />
-              Télécharger
+              {t('shell.update.download')}
             </button>
           )}
           <button
@@ -248,17 +273,17 @@ export function SettingsDialog({ settings, torrents, freeSpace, onChange, onClos
             onClick={() => void onCheckUpdate()}
           >
             <RefreshCw className={update?.status === 'checking' ? 'spin' : undefined} />
-            Vérifier maintenant
+            {t('shell.update.checkNow')}
           </button>
         </div>
       </div>
 
       <div className="dfoot">
         <span className="cap set-ver" data-testid="settings-version">
-          CyberDeck · version <b>{APP_VERSION}</b>
+          CyberDeck · {t('shell.settings.version')} <b>{APP_VERSION}</b>
         </span>
         <button type="button" className="btn btn-line" data-testid="dialog-cancel" onClick={onClose}>
-          Fermer
+          {t('shell.common.close')}
         </button>
       </div>
     </DialogFrame>

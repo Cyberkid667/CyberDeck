@@ -5,6 +5,7 @@ import { PLATFORM_INFO } from '../../../shared/platforms'
 import type { Game } from '../../../shared/types'
 import { baseName, dirName, errorText } from '../format'
 import { LANDSCAPE_MATRIX_FILTER } from '../fx/pixelMatrix'
+import { useT } from '../i18n'
 import { gameFolder } from '../platformUi'
 import { DialogFrame, DialogHead, ErrorLine, Keys } from './AddDialog'
 import { PixelMatrix } from './PixelMatrix'
@@ -19,19 +20,20 @@ import { PixelMatrix } from './PixelMatrix'
 
 /** Fiche en lecture seule d'un jeu de plateforme (même dessin que l'onglet Infos). */
 function PlatformSheet({ game }: { game: Game }): React.JSX.Element {
+  const { t } = useT()
   const name = PLATFORM_INFO[game.platform].name
   const folder = gameFolder(game)
   const launch = game.launch ? [game.launch.target, game.launch.kind === 'exe' ? game.launch.args : null].filter(Boolean).join(' ') : ''
   return (
     <div className="field">
       <div className="lab">
-        <span className="cap">Fiche de la plateforme</span>
-        <span className="cap">Lecture seule</span>
+        <span className="cap">{t('library.game.sheetCap')}</span>
+        <span className="cap">{t('library.game.readOnly')}</span>
       </div>
       <div className="psheet" data-testid="game-platform-sheet">
         <div className="irow">
           <span className="k">
-            <span className="cap">Plateforme</span>
+            <span className="cap">{t('library.game.platform')}</span>
           </span>
           <span className="v">
             <span className="ell">{name}</span>
@@ -39,7 +41,7 @@ function PlatformSheet({ game }: { game: Game }): React.JSX.Element {
         </div>
         <div className="irow">
           <span className="k">
-            <span className="cap">Identifiant</span>
+            <span className="cap">{t('library.game.id')}</span>
           </span>
           <span className="v">
             <span className="ell sub" title={game.platformId ?? ''}>
@@ -49,26 +51,26 @@ function PlatformSheet({ game }: { game: Game }): React.JSX.Element {
         </div>
         <div className="irow">
           <span className="k">
-            <span className="cap">Dossier</span>
+            <span className="cap">{t('library.game.folder')}</span>
           </span>
           <span className="v">
             <span className={`ell${folder && game.installed ? '' : ' sub'}`} title={folder ?? ''}>
-              {game.installed ? (folder ?? '—') : 'Pas installé sur ce PC'}
+              {game.installed ? (folder ?? '—') : t('library.common.notInstalledHere')}
             </span>
           </span>
         </div>
         <div className="irow">
           <span className="k">
-            <span className="cap">Lancement</span>
+            <span className="cap">{t('library.game.launch')}</span>
           </span>
           <span className="v">
             <span className="ell sub" title={launch}>
-              {launch ? `Par ${name} · ${launch}` : `Par ${name}`}
+              {launch ? `${t('library.game.launchBy', { platform: name })} · ${launch}` : t('library.game.launchBy', { platform: name })}
             </span>
           </span>
         </div>
       </div>
-      <div className="hint mute">Ce jeu se lance par {name} : ici, seuls son nom et sa jaquette se modifient.</div>
+      <div className="hint mute">{t('library.game.sheetHint', { platform: name })}</div>
     </div>
   )
 }
@@ -85,13 +87,12 @@ interface Props extends GameDialogState {
   onToast: (level: 'info' | 'success' | 'error', message: string, opts?: { title?: string; detail?: string }) => void
 }
 
-const EXE_MISSING = 'Choisis le programme (.exe) qui lance le jeu.'
-
 /** Nom proposé d'après le dossier du programme (« Mon Jeu [v1.2] (x64) » → « Mon Jeu »). */
 const guessName = (exe: string | null | undefined): string => (exe ? cleanGameName(baseName(dirName(exe))) : '')
 
 /** Billet de la jaquette : image 2:3 (paysage : image entière sur sa matrice de points), sinon plaque gravée. */
 function CoverTicket({ game, searching }: { game?: Game; searching: boolean }): React.JSX.Element {
+  const { t } = useT()
   const src = game?.coverVersion ? `essaim://cover/${game.id}?v=${game.coverVersion}` : null
   const [broken, setBroken] = useState<string | null>(null)
   const shown = src && broken !== src ? src : null
@@ -104,7 +105,7 @@ function CoverTicket({ game, searching }: { game?: Game; searching: boolean }): 
         <Gamepad2 />
       </div>
     )
-    caption = 'Jaquette après l’ajout'
+    caption = t('library.game.coverAfterAdd')
   } else if (shown && game.coverShape === 'landscape') {
     cover = (
       <div className="fcov land">
@@ -112,29 +113,31 @@ function CoverTicket({ game, searching }: { game?: Game; searching: boolean }): 
         <img className="main" src={shown} alt="" decoding="async" onError={() => setBroken(shown)} />
       </div>
     )
-    caption = 'Jaquette paysage'
+    caption = t('library.game.coverLandscape')
   } else if (shown) {
     cover = <img src={shown} alt="" decoding="async" onError={() => setBroken(shown)} />
-    caption = 'Jaquette 2:3'
+    caption = t('library.game.coverPortrait')
   } else {
     cover = (
       <div className="ph">
         {game.iconVersion > 0 ? <img className="ico" src={`essaim://icon/${game.id}?v=${game.iconVersion}`} alt="" /> : <Gamepad2 />}
       </div>
     )
-    caption = 'Sans jaquette'
+    caption = t('library.cover.noCover')
   }
   return (
     <div className={`form-ticket${searching ? ' busy' : ''}`}>
       {cover}
       <div className="stub">
-        <span className="cap">{searching ? 'Recherche…' : caption}</span>
+        <span className="cap">{searching ? t('library.game.searching') : caption}</span>
       </div>
     </div>
   )
 }
 
 export function GameDialog({ mode, game, preset, banner, onClose, onToast }: Props): React.JSX.Element {
+  const { t } = useT()
+  const EXE_MISSING = t('library.game.exeMissing')
   const adding = mode === 'add'
   // jeu de plateforme : nom et jaquette seulement (le programme vient de la plateforme)
   const platformGame = !adding && !!game && game.platform !== 'local'
@@ -201,7 +204,7 @@ export function GameDialog({ mode, game, preset, banner, onClose, onToast }: Pro
       requestAnimationFrame(() => nameRef.current?.focus())
       return
     }
-    onToast('success', adding ? 'Ajouté à la bibliothèque' : 'Jeu modifié', { detail: saved.name })
+    onToast('success', adding ? t('library.game.added') : t('library.game.updated'), { detail: saved.name })
     onClose()
   }
 
@@ -214,8 +217,8 @@ export function GameDialog({ mode, game, preset, banner, onClose, onToast }: Pro
     if (saved)
       onToast(
         ok ? 'success' : 'error',
-        ok ? 'Jaquette trouvée sur Steam' : 'Aucune jaquette trouvée sur Steam pour ce nom. Essaie un autre nom.',
-        { title: 'Jaquette', detail: saved.name }
+        ok ? t('library.game.coverFound') : t('library.game.coverNotFound'),
+        { title: t('library.game.cover'), detail: saved.name }
       )
   }
 
@@ -223,8 +226,8 @@ export function GameDialog({ mode, game, preset, banner, onClose, onToast }: Pro
     const file = await window.essaim.pickImage()
     if (!file || !game) return
     const ok = await window.essaim.setCoverFromFile(game.id, file).catch(() => false)
-    onToast(ok ? 'success' : 'error', ok ? 'Jaquette changée' : 'Cette image ne peut pas être lue.', {
-      title: 'Jaquette',
+    onToast(ok ? 'success' : 'error', ok ? t('library.game.coverChanged') : t('library.game.imageUnreadable'), {
+      title: t('library.game.cover'),
       detail: game.name
     })
   }
@@ -241,8 +244,8 @@ export function GameDialog({ mode, game, preset, banner, onClose, onToast }: Pro
     >
       <DialogHead
         id="game-title"
-        cap={banner ? '02.3 · Installation terminée' : '02.3 · Fiche du jeu'}
-        title={adding ? 'Ajouter à la bibliothèque' : 'Modifier le jeu'}
+        cap={banner ? t('library.game.capInstalled') : t('library.game.capDetails')}
+        title={adding ? t('library.game.titleAdd') : t('library.game.titleEdit')}
         onClose={onClose}
         busy={busy}
       />
@@ -258,7 +261,7 @@ export function GameDialog({ mode, game, preset, banner, onClose, onToast }: Pro
         <div className="game-fields">
           <div className="field">
             <label className="lab" htmlFor="game-name">
-              <span className="cap">Nom du jeu</span>
+              <span className="cap">{t('library.common.gameName')}</span>
             </label>
             <input
               id="game-name"
@@ -266,7 +269,7 @@ export function GameDialog({ mode, game, preset, banner, onClose, onToast }: Pro
               className="inp sans"
               type="text"
               value={name}
-              placeholder={guessName(exePath) || 'Nom affiché dans la bibliothèque'}
+              placeholder={guessName(exePath) || t('library.game.namePlaceholder')}
               spellCheck={false}
               autoComplete="off"
               disabled={busy}
@@ -280,7 +283,7 @@ export function GameDialog({ mode, game, preset, banner, onClose, onToast }: Pro
             <>
               <div className="field">
                 <div className="lab">
-                  <span className="cap">Programme à lancer (.exe)</span>
+                  <span className="cap">{t('library.game.exeLabel')}</span>
                 </div>
                 <div className="path-row">
                   <input
@@ -289,30 +292,30 @@ export function GameDialog({ mode, game, preset, banner, onClose, onToast }: Pro
                     readOnly
                     tabIndex={-1}
                     value={exePath}
-                    placeholder="Aucun programme choisi"
+                    placeholder={t('library.game.exePlaceholder')}
                     title={exePath}
-                    aria-label="Programme à lancer"
+                    aria-label={t('library.game.exeAria')}
                     data-testid="game-exe"
                   />
                   <button type="button" className="btn btn-line" disabled={busy} onClick={pickExe}>
                     <FolderOpen />
-                    Parcourir…
+                    {t('library.game.browse')}
                   </button>
                 </div>
               </div>
               <div className="field">
                 <div className="lab">
                   <label className="cap" htmlFor="game-args">
-                    Options de lancement
+                    {t('library.game.args')}
                   </label>
-                  <span className="cap">Facultatif</span>
+                  <span className="cap">{t('library.game.optional')}</span>
                 </div>
                 <input
                   id="game-args"
                   className="inp"
                   type="text"
                   value={args}
-                  placeholder="En général vide. Pour un émulateur : le fichier du jeu."
+                  placeholder={t('library.game.argsPlaceholder')}
                   spellCheck={false}
                   autoComplete="off"
                   disabled={busy}
@@ -323,11 +326,11 @@ export function GameDialog({ mode, game, preset, banner, onClose, onToast }: Pro
             </>
           )}
           {adding ? (
-            <div className="hint mute">La jaquette sera cherchée sur Steam d’après le nom. Tu pourras la changer avec Modifier.</div>
+            <div className="hint mute">{t('library.game.addHint')}</div>
           ) : (
             <div className="field">
               <div className="lab">
-                <span className="cap">Jaquette</span>
+                <span className="cap">{t('library.game.cover')}</span>
               </div>
               <div className="row-btns">
                 <button
@@ -338,14 +341,14 @@ export function GameDialog({ mode, game, preset, banner, onClose, onToast }: Pro
                   onClick={steamCover}
                 >
                   {coverBusy ? <LoaderCircle className="spin" /> : <Search />}
-                  Chercher sur Steam
+                  {t('library.game.searchSteam')}
                 </button>
                 <button type="button" className="btn btn-line" disabled={busy || !game} onClick={fileCover}>
                   <ImageUp />
-                  Choisir une image…
+                  {t('library.game.chooseImage')}
                 </button>
               </div>
-              <div className="hint mute">La recherche Steam utilise le nom du jeu ci-dessus.</div>
+              <div className="hint mute">{t('library.game.searchHint')}</div>
             </div>
           )}
         </div>
@@ -354,13 +357,13 @@ export function GameDialog({ mode, game, preset, banner, onClose, onToast }: Pro
       <ErrorLine message={error} />
 
       <div className="dfoot">
-        <Keys keys={[['Entrée', adding ? 'ajouter' : 'enregistrer']]} />
+        <Keys keys={[[t('library.common.keyEnter'), adding ? t('library.game.actAdd') : t('library.game.actSave')]]} />
         <button type="button" className="btn btn-line" disabled={busy} data-testid="dialog-cancel" onClick={onClose}>
-          Annuler
+          {t('library.common.cancel')}
         </button>
         <button type="button" className="btn btn-primary" disabled={busy} data-testid="dialog-submit" onClick={submit}>
           {busy ? <LoaderCircle className="spin" /> : adding ? <Plus /> : null}
-          {adding ? 'Ajouter' : 'Enregistrer'}
+          {adding ? t('library.game.add') : t('library.common.save')}
         </button>
       </div>
     </DialogFrame>

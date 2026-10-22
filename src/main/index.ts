@@ -38,6 +38,8 @@ import {
   setCoverFromFile,
   steamOwnedCounts,
   stopAllSessions,
+  uninstallGame,
+  uninstallPlan,
   updateGame
 } from './games'
 import {
@@ -54,6 +56,7 @@ import {
   testSteamKey
 } from './platformSync'
 import { fetchUpdate, openReleasePage } from './updates'
+import { isLang, setLang, t, tn } from '../shared/i18n'
 
 /** Nom public de l'app (fenêtre, journal, Gestionnaire des tâches). */
 const APP_NAME = 'CyberDeck'
@@ -243,7 +246,8 @@ function loadSettings(): Settings {
     port: 20000 + Math.floor(Math.random() * 40000),
     torrentsEnabled: false,
     gamesFolder: null,
-    checkUpdates: true
+    checkUpdates: true,
+    language: 'en'
   }
   let saved: Partial<Settings> | null = null
   let text: string | null = null
@@ -274,6 +278,8 @@ function loadSettings(): Settings {
   if (!Number.isInteger(merged.port) || merged.port < 1024 || merged.port > 65535) merged.port = defaults.port
   // réglage apparu en 0.5.7 : activé pour les profils d'avant
   if (typeof merged.checkUpdates !== 'boolean') merged.checkUpdates = true
+  // réglage apparu en 0.6 : anglais par défaut, même pour les profils d'avant
+  if (!isLang(merged.language)) merged.language = 'en'
   const known = typeof saved?.torrentsEnabled === 'boolean'
   if (!known) {
     // Nouvelle installation : torrents désactivés. Profil d'une version d'avant les torrents
@@ -345,15 +351,16 @@ function sendNotice(notice: Notice): void {
 
 /** Demandes en attente d'un moteur qui s'arrête : elles échouent proprement. */
 function failPending(): void {
-  for (const resolve of pendingAdds.values()) resolve({ ok: false, error: 'Le moteur torrent s’est arrêté.' })
+  for (const resolve of pendingAdds.values()) resolve({ ok: false, error: t('main.engine.stopped') })
   pendingAdds.clear()
   for (const resolve of pendingReleases.values()) resolve(false)
   pendingReleases.clear()
 }
 
 function startEngine(): void {
-  const proc = utilityProcess.fork(path.join(__dirname, 'engine.js'), [], {
-    serviceName: `${APP_NAME} - moteur torrent`,
+  // langue des textes du moteur (processus à part) : voir aussi « set-lang » dans settings:set
+  const proc = utilityProcess.fork(path.join(__dirname, 'engine.js'), [`--lang=${settings.language}`], {
+    serviceName: t('main.engine.serviceName', { app: APP_NAME }),
     stdio: 'pipe'
   })
   engine = proc
@@ -400,13 +407,13 @@ function startEngine(): void {
     log(`Moteur arrêté (code ${code})`)
     if (engineRestarts < 3) {
       engineRestarts++
-      sendNotice({ level: 'error', message: 'Le moteur torrent s’est arrêté, redémarrage…' })
+      sendNotice({ level: 'error', message: t('main.engine.restarting') })
       setTimeout(() => {
         // entre-temps, l'app se ferme ou les torrents ont été désactivés
         if (!quitting && settings.torrentsEnabled && !engine && !engineStopping) startEngine()
       }, 1000)
     } else {
-      sendNotice({ level: 'error', message: `Le moteur torrent ne redémarre pas. Ferme et relance ${APP_NAME}.` })
+      sendNotice({ level: 'error', message: t('main.engine.noRestart', { app: APP_NAME }) })
     }
   })
   toEngine({
@@ -435,7 +442,7 @@ async function trashFiles(files: string[], dirs: string[]): Promise<void> {
       // dossier déjà absent ou pas vide : on le laisse
     }
   }
-  if (failed) sendNotice({ level: 'error', message: `${failed} fichier(s) n’ont pas pu aller à la corbeille.` })
+  if (failed) sendNotice({ level: 'error', message: tn('main.trash.failed', failed) })
 }
 
 /**
@@ -554,6 +561,13 @@ function registerIpc(): void {
       toEngine({ type: 'set-default-path', path: p.defaultSavePath })
     }
     if (p.gamesFolder === null || (typeof p.gamesFolder === 'string' && p.gamesFolder.trim())) settings.gamesFolder = p.gamesFolder
+    if (isLang(p.language) && p.language !== settings.language) {
+      settings.language = p.language
+      setLang(p.language)
+      // le moteur torrent (processus à part) suit la nouvelle langue
+      engine?.postMessage({ type: 'set-lang', lang: p.language })
+      log(`Langue de l’interface : ${p.language}`)
+    }
     if (typeof p.checkUpdates === 'boolean' && p.checkUpdates !== settings.checkUpdates) {
       settings.checkUpdates = p.checkUpdates
       log(`Vérification des mises à jour ${settings.checkUpdates ? 'activée' : 'désactivée'}`)
@@ -574,8 +588,8 @@ function registerIpc(): void {
 
   ipcMain.handle('dialog:torrent-file', async () => {
     const res = await dialog.showOpenDialog(win!, {
-      title: 'Choisir un fichier .torrent',
-      filters: [{ name: 'Fichiers torrent', extensions: ['torrent'] }],
+      title: t('main.dialog.torrentTitle'),
+      filters: [{ name: t('main.dialog.torrentFilter'), extensions: ['torrent'] }],
       properties: ['openFile']
     })
     return res.canceled ? null : res.filePaths[0]
@@ -583,7 +597,7 @@ function registerIpc(): void {
 
   ipcMain.handle('dialog:folder', async (_e, defaultPath: string, title?: unknown) => {
     const res = await dialog.showOpenDialog(win!, {
-      title: typeof title === 'string' && title ? title : 'Dossier de destination',
+      title: typeof title === 'string' && title ? title : t('main.dialog.folderTitle'),
       defaultPath,
       properties: ['openDirectory', 'createDirectory']
     })
@@ -623,7 +637,7 @@ function registerIpc(): void {
     if (!engine)
       return {
         ok: false,
-        error: settings.torrentsEnabled ? 'Le moteur torrent n’est pas prêt.' : 'Les torrents sont désactivés : active-les dans Réglages.'
+        error: settings.torrentsEnabled ? t('main.engine.notReady') : t('main.engine.disabled')
       }
     if (request.savePath && request.savePath !== settings.defaultSavePath) {
       settings.defaultSavePath = request.savePath
@@ -672,7 +686,7 @@ function registerIpc(): void {
   ipcMain.on('library:play', (_e, id: string) =>
     playGame(String(id)).catch((err) => {
       log(`Lancement impossible : ${(err as Error)?.stack ?? err}`)
-      sendNotice({ level: 'error', message: `Impossible de lancer le jeu : ${(err as Error)?.message ?? err}` })
+      sendNotice({ level: 'error', message: t('main.play.failed', { error: (err as Error)?.message ?? String(err) }) })
     })
   )
   ipcMain.on('library:open-folder', (_e, id: string) => openGameFolder(id))
@@ -704,15 +718,18 @@ function registerIpc(): void {
   ipcMain.handle('steam:refresh-owned', () => refreshSteamOwned())
   ipcMain.on('steam:open-key-page', () => void shell.openExternal('https://steamcommunity.com/dev/apikey'))
 
+  ipcMain.handle('library:uninstall-plan', (_e, id: unknown) => uninstallPlan(String(id)))
+  ipcMain.handle('library:uninstall', (_e, id: unknown, removeFromList: unknown) => uninstallGame(String(id), removeFromList === true))
+
   ipcMain.handle('update:get', () => update)
   ipcMain.handle('update:check', () => checkUpdates(true))
   ipcMain.on('update:open', () => openReleasePage(update))
 
   ipcMain.handle('dialog:exe', async (_e, defaultPath?: string) => {
     const res = await dialog.showOpenDialog(win!, {
-      title: 'Choisir le programme du jeu',
+      title: t('main.dialog.exeTitle'),
       defaultPath,
-      filters: [{ name: 'Programmes', extensions: ['exe'] }],
+      filters: [{ name: t('main.dialog.exeFilter'), extensions: ['exe'] }],
       properties: ['openFile']
     })
     return res.canceled ? null : res.filePaths[0]
@@ -720,8 +737,8 @@ function registerIpc(): void {
 
   ipcMain.handle('dialog:image', async () => {
     const res = await dialog.showOpenDialog(win!, {
-      title: 'Choisir une jaquette',
-      filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png'] }],
+      title: t('main.dialog.imageTitle'),
+      filters: [{ name: t('main.dialog.imageFilter'), extensions: ['jpg', 'jpeg', 'png'] }],
       properties: ['openFile']
     })
     return res.canceled ? null : res.filePaths[0]
@@ -753,6 +770,7 @@ app.whenReady().then(() => {
   rotateLog()
   log(`${APP_NAME} ${app.getVersion()} démarre`)
   settings = loadSettings()
+  setLang(settings.language)
   Menu.setApplicationMenu(null)
   initLibrary({
     log,

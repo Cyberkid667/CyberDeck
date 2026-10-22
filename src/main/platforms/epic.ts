@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { protocolCommand, regString, type RegistrySnapshot } from './registry'
 import type { DetectedGame, PlatformScan, ScanContext } from './types'
+import { t } from '../../shared/i18n'
 import { cleanDir, cleanTitle, exeFromCommand, fixSlashes, isDir, isFile, largestExeSync, programData, readJson, readText, skip } from './util'
 
 /** Programmes d'infrastructure jamais pris pour le jeu (noms de repli). */
@@ -109,7 +110,7 @@ export async function scanEpic(ctx: ScanContext): Promise<PlatformScan> {
       entries = fs.readdirSync(dir, { withFileTypes: true })
     } catch (err: any) {
       // dossier refusé (EACCES / EPERM) ou disparu entre-temps : rien n'est retiré ce passage
-      return { ...scan, ok: false, detected: !!scan.clientPath, error: `Manifestes Epic illisibles : ${err.code ?? err.message}` }
+      return { ...scan, ok: false, detected: !!scan.clientPath, error: t('main.scan.epicUnreadable', { error: err.code ?? err.message }) }
     }
     for (const f of entries) {
       // le sous-dossier Pending contient des mises à jour en cours : ignoré

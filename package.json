@@ -1,7 +1,7 @@
 {
   "name": "cyberdeck",
   "productName": "CyberDeck",
-  "version": "0.5.7",
+  "version": "0.6.0",
   "description": "CyberDeck — bibliothèque de jeux unifiée pour Windows (Steam, Epic, GOG, EA, Ubisoft, Xbox…), avec un client torrent en option",
   "author": "Cyberkid667",
   "license": "MIT",

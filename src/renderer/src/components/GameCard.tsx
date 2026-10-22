@@ -1,8 +1,10 @@
 import { Download, Ellipsis, LoaderCircle, Play, RefreshCw } from 'lucide-react'
 import { memo } from 'react'
+import { t } from '../../../shared/i18n'
 import { gameLastPlayedAt, gamePlayTimeSeconds } from '../../../shared/platforms'
 import type { Game } from '../../../shared/types'
 import { formatLastPlayed, formatPlayTimeShort } from '../format'
+import { useT } from '../i18n'
 import { platformName, type GameState } from '../platformUi'
 import { Cover } from './Cover'
 import { PlatformLogo } from './PlatformLogo'
@@ -40,7 +42,7 @@ interface Props {
 export function cardMeta(g: Game, full = false): string {
   const seconds = gamePlayTimeSeconds(g)
   const last = formatLastPlayed(gameLastPlayedAt(g), Date.now(), full)
-  if (!seconds) return last ? `Lancé ${last}` : formatPlayTimeShort(0)
+  if (!seconds) return last ? t('library.common.launched', { when: last }) : formatPlayTimeShort(0)
   const time = formatPlayTimeShort(seconds, full)
   return last ? `${time} · ${last}` : time
 }
@@ -51,41 +53,44 @@ export function cardMeta(g: Game, full = false): string {
  */
 function absentMeta(g: Game, full = false): string {
   const seconds = gamePlayTimeSeconds(g)
-  if (!seconds || (!full && seconds < 60)) return 'Pas installé'
-  if (full) return `Pas installé · ${formatPlayTimeShort(seconds, true)}`
+  const absent = t('library.card.notInstalled')
+  if (!seconds || (!full && seconds < 60)) return absent
+  if (full) return `${absent} · ${formatPlayTimeShort(seconds, true)}`
   const m = Math.round(seconds / 60)
-  return `Pas installé · ${m < 60 ? `${m} min` : `${Math.floor(m / 60)} h`}`
+  return `${absent} · ${m < 60 ? `${m} min` : `${Math.floor(m / 60)} h`}`
 }
 
 const stop = (e: React.SyntheticEvent): void => e.stopPropagation()
 
 /** Puce d'état en haut à gauche de la jaquette (EN JEU, DÉMARRAGE…, TÉLÉCHARGEMENT…, MISE À JOUR). */
 function StateChip({ state }: { state: GameState }): React.JSX.Element | null {
+  const { t } = useT()
   if (state === 'running')
     return (
       <span className="live-chip sm badge" aria-hidden="true">
         <span className="live-dot" />
-        En jeu
+        {t('library.state.running')}
       </span>
     )
   if (state === 'launching' || state === 'downloading')
     return (
       <span className="live-chip sm badge busy" aria-hidden="true">
         <LoaderCircle className="spin" />
-        {state === 'launching' ? 'Démarrage…' : 'Téléchargement…'}
+        {state === 'launching' ? t('library.state.launching') : t('library.state.downloading')}
       </span>
     )
   if (state === 'updating')
     return (
       <span className="live-chip sm badge quiet" aria-hidden="true">
         <RefreshCw />
-        Mise à jour
+        {t('library.state.updating')}
       </span>
     )
   return null
 }
 
 function GameCardBase({ game: g, state, session, menuOpen, onPlay, onInstall, onMenu }: Props): React.JSX.Element {
+  const { t } = useT()
   const menuAt = (el: HTMLElement, fromButton: boolean): void => {
     const r = el.getBoundingClientRect()
     if (fromButton) onMenu(g, r.left, r.bottom + 4)
@@ -93,7 +98,7 @@ function GameCardBase({ game: g, state, session, menuOpen, onPlay, onInstall, on
   }
   const live = state === 'running'
   const absent = state === 'installable' || state === 'absent' || state === 'downloading'
-  const via = g.platform === 'local' ? '' : ` via ${platformName(g.platform)}`
+  const viaName = g.platform === 'local' ? null : platformName(g.platform)
   /** action principale (Entrée, double-clic) */
   const primary = (): void => {
     if (state === 'installable') onInstall(g)
@@ -101,28 +106,31 @@ function GameCardBase({ game: g, state, session, menuOpen, onPlay, onInstall, on
   }
   const label =
     state === 'running'
-      ? `${g.name}, en jeu`
+      ? t('library.card.ariaRunning', { name: g.name })
       : state === 'launching'
-        ? `${g.name}, démarrage${via}`
+        ? viaName
+          ? t('library.card.ariaLaunchingVia', { name: g.name, platform: viaName })
+          : t('library.card.ariaLaunching', { name: g.name })
         : state === 'downloading'
-          ? `${g.name}, téléchargement en cours`
+          ? t('library.card.ariaDownloading', { name: g.name })
           : absent
-            ? `${g.name}, pas installé`
+            ? t('library.card.ariaAbsent', { name: g.name })
             : g.name
+  const playTitle = viaName ? t('library.common.playGameVia', { name: g.name, platform: viaName }) : t('library.common.playGame', { name: g.name })
 
   let overlay: React.ReactNode
   if (state === 'running')
     overlay = (
       <span className="live-chip">
         <span className="live-dot" />
-        En jeu
+        {t('library.state.running')}
       </span>
     )
   else if (state === 'launching' || state === 'downloading')
     overlay = (
       <span className="live-chip busy">
         <LoaderCircle className="spin" />
-        {state === 'launching' ? 'Démarrage…' : 'Téléchargement…'}
+        {state === 'launching' ? t('library.state.launching') : t('library.state.downloading')}
       </span>
     )
   else if (state === 'installable')
@@ -132,8 +140,8 @@ function GameCardBase({ game: g, state, session, menuOpen, onPlay, onInstall, on
         className="playbtn install"
         data-testid="game-install"
         tabIndex={-1}
-        title={`Installer ${g.name} avec Steam`}
-        aria-label={`Installer ${g.name}`}
+        title={t('library.card.installTitle', { name: g.name })}
+        aria-label={t('library.card.installAria', { name: g.name })}
         onClick={(e) => {
           e.stopPropagation()
           onInstall(g)
@@ -141,11 +149,11 @@ function GameCardBase({ game: g, state, session, menuOpen, onPlay, onInstall, on
         onDoubleClick={stop}
       >
         <Download />
-        Installer
+        {t('library.common.install')}
       </button>
     )
   else if (state === 'absent')
-    overlay = <span className="live-chip quiet">Non installé</span>
+    overlay = <span className="live-chip quiet">{t('library.state.notInstalled')}</span>
   else
     overlay = (
       <button
@@ -153,8 +161,8 @@ function GameCardBase({ game: g, state, session, menuOpen, onPlay, onInstall, on
         className="playbtn"
         data-testid="game-play"
         tabIndex={-1}
-        title={`Jouer à ${g.name}${via}`}
-        aria-label={`Jouer à ${g.name}${via}`}
+        title={playTitle}
+        aria-label={playTitle}
         onClick={(e) => {
           e.stopPropagation()
           onPlay(g)
@@ -162,7 +170,7 @@ function GameCardBase({ game: g, state, session, menuOpen, onPlay, onInstall, on
         onDoubleClick={stop}
       >
         <Play />
-        Jouer
+        {t('library.common.play')}
       </button>
     )
 
@@ -197,8 +205,8 @@ function GameCardBase({ game: g, state, session, menuOpen, onPlay, onInstall, on
         <button
           type="button"
           className="more"
-          title="Plus d’actions"
-          aria-label={`Plus d’actions pour ${g.name}`}
+          title={t('library.card.more')}
+          aria-label={t('library.card.moreAria', { name: g.name })}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           onClick={(e) => {
@@ -215,7 +223,7 @@ function GameCardBase({ game: g, state, session, menuOpen, onPlay, onInstall, on
           className="pbig"
           data-testid="platform-badge"
           data-platform={g.platform}
-          title={g.platform === 'local' ? 'Jeu local : lancé directement par CyberDeck' : `Jeu ${platformName(g.platform)}`}
+          title={viaName ? t('library.platform.gameTitle', { platform: viaName }) : t('library.platform.localTitle')}
         >
           <PlatformLogo platform={g.platform} />
         </span>
@@ -225,19 +233,21 @@ function GameCardBase({ game: g, state, session, menuOpen, onPlay, onInstall, on
         {live ? (
           <div className="gmeta live">
             <span className="live-dot" />
-            <span className="t">En jeu · {session}</span>
+            <span className="t">
+              {t('library.state.running')} · {session}
+            </span>
           </div>
         ) : state === 'launching' ? (
           // mêmes mots que la puce ; la plateforme est sur l'étiquette du talon (et dans la bulle)
           <div className="gmeta live">
-            <span className="t" title={`Démarrage${via}…`}>
-              Démarrage…
+            <span className="t" title={viaName ? t('library.card.startingVia', { platform: viaName }) : t('library.state.launching')}>
+              {t('library.state.launching')}
             </span>
           </div>
         ) : state === 'downloading' ? (
           <div className="gmeta">
-            <span className="t" title={g.platform === 'local' ? 'Téléchargement…' : `Téléchargement par ${platformName(g.platform)}…`}>
-              Téléchargement…
+            <span className="t" title={viaName ? t('library.card.downloadingBy', { platform: viaName }) : t('library.state.downloading')}>
+              {t('library.state.downloading')}
             </span>
           </div>
         ) : (

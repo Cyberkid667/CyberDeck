@@ -1,6 +1,7 @@
 // Jeux possédés d'un compte Steam (Web API, clé fournie par l'utilisateur) et
 // type des applications d'après la boutique (sans clé). La clé n'apparaît que
 // dans l'adresse envoyée à api.steampowered.com : jamais dans le journal.
+import { t, tn } from '../../shared/i18n'
 
 export type FetchJson = (url: string, timeoutMs?: number) => Promise<{ status: number; json: unknown }>
 
@@ -24,8 +25,8 @@ export const isSteamKeyFormat = (key: string): boolean => /^[0-9A-F]{32}$/.test(
 
 export async function fetchOwnedGames(fetchJson: FetchJson, key: string, steamId: string): Promise<OwnedGamesResult> {
   const k = normalizeSteamKey(key)
-  if (!isSteamKeyFormat(k)) return { status: 'invalid-key', message: 'Une clé Steam fait 32 caractères (chiffres et lettres A à F).', games: [] }
-  if (!/^\d{17}$/.test(steamId)) return { status: 'error', message: 'Compte Steam introuvable sur ce PC.', games: [] }
+  if (!isSteamKeyFormat(k)) return { status: 'invalid-key', message: t('main.steam.keyFormat'), games: [] }
+  if (!/^\d{17}$/.test(steamId)) return { status: 'error', message: t('main.steam.accountNotFound'), games: [] }
   const url =
     'https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key=' +
     encodeURIComponent(k) +
@@ -34,18 +35,18 @@ export async function fetchOwnedGames(fetchJson: FetchJson, key: string, steamId
   try {
     res = await fetchJson(url, 20_000)
   } catch {
-    return { status: 'offline', message: 'Steam est injoignable : vérifie la connexion Internet.', games: [] }
+    return { status: 'offline', message: t('main.steam.offline'), games: [] }
   }
   if (res.status === 401 || res.status === 403)
-    return { status: 'invalid-key', message: 'Steam refuse cette clé. Vérifie-la sur steamcommunity.com/dev/apikey.', games: [] }
-  if (res.status === 429) return { status: 'error', message: 'Steam limite les demandes : réessaie dans quelques minutes.', games: [] }
-  if (res.status !== 200) return { status: 'error', message: `Steam a répondu ${res.status} : réessaie plus tard.`, games: [] }
+    return { status: 'invalid-key', message: t('main.steam.keyRefused'), games: [] }
+  if (res.status === 429) return { status: 'error', message: t('main.steam.rateLimited'), games: [] }
+  if (res.status !== 200) return { status: 'error', message: t('main.steam.httpStatus', { status: res.status }), games: [] }
   const r = (res.json as { response?: { game_count?: number; games?: unknown[] } } | null)?.response
   if (!r || !Array.isArray(r.games)) {
-    if (r && r.game_count === 0) return { status: 'ok', message: 'Aucun jeu sur ce compte.', games: [] }
+    if (r && r.game_count === 0) return { status: 'ok', message: t('main.steam.noGames'), games: [] }
     return {
       status: 'private',
-      message: 'Le détail des jeux de ce compte est privé : dans Steam, Profil › Modifier › Confidentialité, mets « Détails des jeux » sur Public.',
+      message: t('main.steam.private'),
       games: []
     }
   }
@@ -61,7 +62,7 @@ export async function fetchOwnedGames(fetchJson: FetchJson, key: string, steamId
       iconHash: typeof raw.img_icon_url === 'string' && /^[0-9a-f]{40}$/i.test(raw.img_icon_url) ? raw.img_icon_url : null
     })
   }
-  return { status: 'ok', message: `${games.length} jeux et applications sur ce compte.`, games }
+  return { status: 'ok', message: tn('main.steam.gameCount', games.length), games }
 }
 
 /**

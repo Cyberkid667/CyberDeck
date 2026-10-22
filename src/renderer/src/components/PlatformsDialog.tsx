@@ -1,5 +1,6 @@
 import { ArrowUpRight, Check, CircleAlert, Eye, EyeOff, LoaderCircle, RefreshCw, RotateCcw, Trash2, UserRound, X } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
+import { t, tn } from '../../../shared/i18n'
 import type {
   PlatformSkip,
   PlatformSkipReason,
@@ -10,6 +11,7 @@ import type {
   SteamKeyResult
 } from '../../../shared/types'
 import { errorText, formatWhen } from '../format'
+import { useT } from '../i18n'
 import { gamesWord, platformName } from '../platformUi'
 import { useScrollFade } from '../useScrollFade'
 import { DialogFrame, DialogHead, Keys } from './AddDialog'
@@ -36,31 +38,26 @@ interface Props {
 }
 
 const KEY_FORMAT = /^[0-9a-f]{32}$/i
-const KEY_HINT = 'Une clé Steam fait 32 caractères (chiffres et lettres A à F).'
 const normalizeKey = (k: string): string => k.replace(/\s+/g, '')
 
-/** Bandeau du billet Steam : état du compte en capitales (vert jamais : « ✓ RELIÉ » en --tx-2, comme « ✓ VALIDE »). */
+/**
+ * Bandeau du billet Steam : état du compte en capitales (vert jamais : « ✓ RELIÉ » en --tx-2, comme « ✓ VALIDE »).
+ * text : clé du texte (traduit au rendu).
+ */
 const BAND: Record<SteamAccountStatus, { text: string; tone: 'ok' | 'bad' | 'wait' }> = {
-  'no-account': { text: 'Aucun compte', tone: 'wait' },
-  'no-key': { text: 'Clé manquante', tone: 'wait' },
-  checking: { text: 'Lecture…', tone: 'wait' },
-  ok: { text: 'Relié', tone: 'ok' },
-  'invalid-key': { text: 'Clé refusée', tone: 'bad' },
-  private: { text: 'Profil privé', tone: 'bad' },
-  offline: { text: 'Hors ligne', tone: 'wait' },
-  error: { text: 'Erreur', tone: 'bad' },
-  unavailable: { text: 'Indisponible', tone: 'bad' }
+  'no-account': { text: 'library.steam.band.noAccount', tone: 'wait' },
+  'no-key': { text: 'library.steam.band.noKey', tone: 'wait' },
+  checking: { text: 'library.steam.band.checking', tone: 'wait' },
+  ok: { text: 'library.steam.band.ok', tone: 'ok' },
+  'invalid-key': { text: 'library.steam.band.invalidKey', tone: 'bad' },
+  private: { text: 'library.steam.band.private', tone: 'bad' },
+  offline: { text: 'library.steam.band.offline', tone: 'wait' },
+  error: { text: 'library.steam.band.error', tone: 'bad' },
+  unavailable: { text: 'library.steam.band.unavailable', tone: 'bad' }
 }
 
 type NotGame = Exclude<PlatformSkipReason, 'local' | 'platform'>
 const NOT_GAME: NotGame[] = ['tool', 'app', 'dlc', 'other']
-/** mot de la raison : [singulier, pluriel] */
-const REASON_WORD: Record<NotGame, [string, string]> = {
-  tool: ['outil', 'outils'],
-  app: ['logiciel', 'logiciels'],
-  dlc: ['DLC', 'DLC'],
-  other: ['autre', 'autres']
-}
 const capFirst = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1)
 
 /**
@@ -75,30 +72,39 @@ function skipDetails(p: PlatformStatus): { text: string; title?: string }[] {
     const n = p.excludedCount
     const groups = NOT_GAME.map((r) => [r, sk.filter((s) => s.reason === r)] as const).filter(([, l]) => l.length > 0)
     const listed = groups.reduce((a, [, l]) => a + l.length, 0)
-    const word = (r: NotGame, k: number): string => REASON_WORD[r][k > 1 ? 1 : 0]
+    // mot de la raison (« outil », « outils »…)
+    const word = (r: NotGame, k: number): string => tn(`library.platforms.reason.${r}`, k)
+    const count = tn('library.platforms.excluded', n)
     out.push({
-      text: `${n} écarté${n > 1 ? 's' : ''}${groups.length ? ` : ${groups.map(([r, l]) => word(r, l.length)).join(', ')}` : ''}`,
+      text: groups.length
+        ? t('library.platforms.excludedList', { count, reasons: groups.map(([r, l]) => word(r, l.length)).join(', ') })
+        : count,
       title: groups.length
-        ? groups.map(([r, l]) => `${capFirst(word(r, l.length))} : ${l.map((s) => s.name).join(', ')}`).join('\n') +
-          (n > listed ? `\net ${n - listed} autre${n - listed > 1 ? 's' : ''}` : '')
+        ? groups
+            .map(([r, l]) => t('library.platforms.reasonLine', { reason: capFirst(word(r, l.length)), names: l.map((s) => s.name).join(', ') }))
+            .join('\n') + (n > listed ? `\n${tn('library.platforms.andMore', n - listed)}` : '')
         : undefined
     })
   }
   const local = sk.filter((s) => s.reason === 'local')
   const other = sk.filter((s) => s.reason === 'platform')
-  if (local.length) out.push({ text: `${local.length} déjà dans tes jeux locaux`, title: local.map((s) => s.name).join(', ') })
+  if (local.length) out.push({ text: t('library.platforms.inLocal', { n: local.length }), title: local.map((s) => s.name).join(', ') })
   if (other.length) {
     const plats = [...new Set(other.map((s) => s.other))]
     out.push({
-      text: `${other.length} déjà sur ${plats.length === 1 && plats[0] ? platformName(plats[0]) : 'une autre plateforme'}`,
+      text: t('library.platforms.onPlatform', {
+        n: other.length,
+        platform: plats.length === 1 && plats[0] ? platformName(plats[0]) : t('library.platforms.anotherPlatform')
+      }),
       title: other.map((s) => (s.other ? `${s.name} (${platformName(s.other)})` : s.name)).join(', ')
     })
   }
-  if (!local.length && !other.length && p.duplicateCount) out.push({ text: `${p.duplicateCount} déjà dans la bibliothèque` })
+  if (!local.length && !other.length && p.duplicateCount) out.push({ text: t('library.platforms.inLibrary', { n: p.duplicateCount }) })
   return out
 }
 
 function PlatformRow({ p }: { p: PlatformStatus }): React.JSX.Element {
+  const { t } = useT()
   const details = skipDetails(p)
   return (
     <div
@@ -107,7 +113,7 @@ function PlatformRow({ p }: { p: PlatformStatus }): React.JSX.Element {
       data-testid="platform-row"
       data-platform={p.id}
       data-state={p.state}
-      title={p.clientPath ? `Lanceur : ${p.clientPath}` : undefined}
+      title={p.clientPath ? t('library.platforms.launcherTitle', { path: p.clientPath }) : undefined}
     >
       <span className="mark" aria-hidden="true" />
       <div className="pmain">
@@ -117,7 +123,7 @@ function PlatformRow({ p }: { p: PlatformStatus }): React.JSX.Element {
         </span>
         {p.state === 'error' ? (
           <span className="perr" title={p.error ?? undefined}>
-            {p.error ?? 'Lecture impossible.'}
+            {p.error ?? t('library.platforms.readFailed')}
           </span>
         ) : details.length ? (
           <span className="sub" data-testid="platform-skipped">
@@ -134,15 +140,15 @@ function PlatformRow({ p }: { p: PlatformStatus }): React.JSX.Element {
         {p.state === 'detected' ? (
           p.installedCount ? (
             <>
-              Détectée · <b>{p.installedCount}</b> {gamesWord(p.installedCount)}
+              {t('library.platforms.detected')} · <b>{p.installedCount}</b> {gamesWord(p.installedCount)}
             </>
           ) : (
-            'Détectée · aucun jeu'
+            t('library.platforms.detectedNone')
           )
         ) : p.state === 'error' ? (
-          'Erreur'
+          t('library.platforms.error')
         ) : (
-          'Pas installée'
+          tn('library.platforms.notInstalled', 1)
         )}
       </span>
     </div>
@@ -160,6 +166,8 @@ interface SteamProps {
 
 /** Billet du compte Steam (colonne droite). */
 function SteamPlate({ steam, syncing, inputRef, saveRef, onToast }: SteamProps): React.JSX.Element {
+  const { t, tn } = useT()
+  const KEY_HINT = t('library.steam.keyHint')
   const [key, setKey] = useState('')
   const [reveal, setReveal] = useState(false)
   const [busy, setBusy] = useState<'test' | 'save' | 'clear' | 'refresh' | null>(null)
@@ -187,7 +195,7 @@ function SteamPlate({ steam, syncing, inputRef, saveRef, onToast }: SteamProps):
   const apply = (r: SteamKeyResult, saving: boolean): void => {
     setResult({
       ok: r.ok,
-      message: r.ok && !saving && r.gameCount !== undefined ? `Clé valide : ${r.gameCount} ${gamesWord(r.gameCount)} possédés.` : r.message,
+      message: r.ok && !saving && r.gameCount !== undefined ? tn('library.steam.validKey', r.gameCount) : r.message,
       invalid: r.status === 'invalid-key'
     })
     // clé gardée par le processus principal (bonne, ou hors ligne / profil privé : il réessaiera) : le champ se vide
@@ -195,9 +203,9 @@ function SteamPlate({ steam, syncing, inputRef, saveRef, onToast }: SteamProps):
       setKey('')
       setReveal(false)
       if (r.ok)
-        onToast('success', 'Compte Steam relié', {
+        onToast('success', t('library.steam.linked'), {
           title: 'Steam',
-          detail: r.account.ownedCount !== null ? `${r.account.ownedCount} jeux possédés` : r.message,
+          detail: r.account.ownedCount !== null ? tn('library.steam.owned', r.account.ownedCount) : r.message,
           detailKind: r.account.ownedCount !== null ? 'name' : 'text'
         })
     }
@@ -242,7 +250,7 @@ function SteamPlate({ steam, syncing, inputRef, saveRef, onToast }: SteamProps):
     try {
       await window.essaim.clearSteamApiKey()
       setResult(null)
-      onToast('info', 'Clé Steam retirée.', { title: 'Steam', detail: 'Les jeux possédés pas installés quittent la bibliothèque.', detailKind: 'text' })
+      onToast('info', t('library.steam.keyRemoved'), { title: 'Steam', detail: t('library.steam.keyRemovedDetail'), detailKind: 'text' })
     } catch (err) {
       setResult({ ok: false, message: errorText(err) })
     }
@@ -268,10 +276,10 @@ function SteamPlate({ steam, syncing, inputRef, saveRef, onToast }: SteamProps):
   const noteBad = band.tone === 'bad'
 
   return (
-    <aside className="dplate steam-plate" aria-label="Compte Steam" data-testid="steam-account" data-status={status}>
+    <aside className="dplate steam-plate" aria-label={t('library.steam.account')} data-testid="steam-account" data-status={status}>
       <div className="ticket">
         <div className="band">
-          <span className="cap">Compte Steam</span>
+          <span className="cap">{t('library.steam.account')}</span>
           <span className={`cap state${band.tone === 'bad' ? ' bad' : band.tone === 'wait' ? ' wait' : ''}`}>
             {status === 'checking' || busy === 'save' ? (
               <LoaderCircle className="spin" />
@@ -280,7 +288,7 @@ function SteamPlate({ steam, syncing, inputRef, saveRef, onToast }: SteamProps):
             ) : band.tone === 'bad' ? (
               <X />
             ) : null}
-            {busy === 'save' ? 'Vérification…' : band.text}
+            {busy === 'save' ? t('library.steam.checking') : t(band.text)}
           </span>
         </div>
 
@@ -294,9 +302,9 @@ function SteamPlate({ steam, syncing, inputRef, saveRef, onToast }: SteamProps):
           )}
           <div className="who">
             <span className="pn" title={steam?.personaName ?? undefined}>
-              {detected ? (steam?.personaName ?? 'Compte Steam') : 'Aucun compte trouvé'}
+              {detected ? (steam?.personaName ?? t('library.steam.account')) : t('library.steam.noAccountFound')}
             </span>
-            <span className="sid">{steam?.steamId ? `ID ${steam.steamId}` : 'Profil lu sur ce PC'}</span>
+            <span className="sid">{steam?.steamId ? t('library.steam.steamId', { id: steam.steamId }) : t('library.steam.profileLocal')}</span>
           </div>
         </div>
 
@@ -308,10 +316,10 @@ function SteamPlate({ steam, syncing, inputRef, saveRef, onToast }: SteamProps):
           <div className="kfield">
             <div className="lab">
               <label className="cap" htmlFor="steam-key">
-                Clé Web API
+                {t('library.steam.keyLabel')}
               </label>
-              <span className="cap" title={steam?.hasKey ? 'Gardée chiffrée par Windows sur ce PC' : undefined}>
-                {steam?.hasKey ? 'Enregistrée' : 'Facultative'}
+              <span className="cap" title={steam?.hasKey ? t('library.steam.keyStoredTitle') : undefined}>
+                {steam?.hasKey ? t('library.steam.keySaved') : t('library.steam.keyOptional')}
               </span>
             </div>
             <div className="krow">
@@ -321,7 +329,7 @@ function SteamPlate({ steam, syncing, inputRef, saveRef, onToast }: SteamProps):
                 className={`inp${bad ? ' invalid' : ''}`}
                 type={reveal ? 'text' : 'password'}
                 value={key}
-                placeholder={steam?.hasKey ? 'Coller une autre clé' : '32 caractères'}
+                placeholder={steam?.hasKey ? t('library.steam.pasteOther') : t('library.steam.keyChars')}
                 spellCheck={false}
                 autoComplete="off"
                 disabled={!canType}
@@ -336,8 +344,8 @@ function SteamPlate({ steam, syncing, inputRef, saveRef, onToast }: SteamProps):
                 type="button"
                 className="eye"
                 disabled={!canType || !key}
-                aria-label={reveal ? 'Masquer la clé' : 'Afficher la clé'}
-                title={reveal ? 'Masquer la clé' : 'Afficher la clé'}
+                aria-label={reveal ? t('library.steam.hideKey') : t('library.steam.showKey')}
+                title={reveal ? t('library.steam.hideKey') : t('library.steam.showKey')}
                 onClick={() => setReveal((v) => !v)}
               >
                 {reveal ? <EyeOff /> : <Eye />}
@@ -348,23 +356,23 @@ function SteamPlate({ steam, syncing, inputRef, saveRef, onToast }: SteamProps):
                 type="button"
                 className="btn btn-line"
                 disabled={!detected || !!busy || (!typed && !steam?.hasKey)}
-                title={typed ? 'Vérifier cette clé auprès de Steam, sans l’enregistrer' : 'Vérifier la clé enregistrée'}
+                title={typed ? t('library.steam.testTitleTyped') : t('library.steam.testTitleSaved')}
                 data-testid="steam-key-test"
                 onClick={test}
               >
                 {busy === 'test' ? <LoaderCircle className="spin" /> : null}
-                Tester
+                {t('library.steam.test')}
               </button>
               <button
                 type="button"
                 className="btn btn-primary"
                 disabled={!canType || !typed}
-                title="Vérifier la clé, l’enregistrer chiffrée et lire tes jeux possédés"
+                title={t('library.steam.saveTitle')}
                 data-testid="steam-key-save"
                 onClick={save}
               >
                 {busy === 'save' ? <LoaderCircle className="spin" /> : null}
-                Enregistrer
+                {t('library.common.save')}
               </button>
             </div>
             <div className={`kmsg${result ? (result.ok ? ' ok' : ' bad') : ''}`} role="status" aria-live="polite">
@@ -381,75 +389,76 @@ function SteamPlate({ steam, syncing, inputRef, saveRef, onToast }: SteamProps):
             <div className="owned">
               <div className="kv">
                 <div>
-                  <span className="cap">Jeux possédés</span>
+                  <span className="cap">{t('library.steam.ownedGames')}</span>
                   <span className="big">{steam.ownedCount ?? '—'}</span>
                 </div>
                 <div>
-                  <span className="cap">Pas installés</span>
+                  <span className="cap">{t('library.steam.notInstalled')}</span>
                   <span className="big">{steam.ownedNotInstalledCount ?? '—'}</span>
                 </div>
               </div>
               <span className="cap olast">
                 {status === 'checking' || busy === 'refresh'
-                  ? 'Lecture de la liste…'
+                  ? t('library.steam.readingList')
                   : steam.lastRefreshAt
-                    ? `Lue ${formatWhen(steam.lastRefreshAt)}`
-                    : 'Liste pas encore lue'}
+                    ? t('library.steam.readWhen', { when: formatWhen(steam.lastRefreshAt) })
+                    : t('library.steam.notReadYet')}
               </span>
               <div className="orow">
                 <button
                   type="button"
                   className="btn btn-line btn-sm"
                   disabled={!!busy || syncing || status === 'checking'}
-                  title="Relire maintenant la liste de tes jeux Steam"
+                  title={t('library.steam.refreshTitle')}
                   data-testid="steam-refresh"
                   onClick={refresh}
                 >
                   <RefreshCw className={busy === 'refresh' ? 'spin' : undefined} />
-                  Actualiser
+                  {t('library.steam.refresh')}
                 </button>
                 <button
                   type="button"
                   className={`btn btn-danger btn-sm${armed ? ' armed' : ''}`}
                   disabled={!!busy && busy !== 'clear'}
-                  title="Oublier la clé : les jeux possédés pas installés quittent la bibliothèque"
+                  title={t('library.steam.clearTitle')}
                   data-testid="steam-key-clear"
                   onClick={clear}
                 >
                   <Trash2 />
-                  {armed ? 'Confirmer le retrait' : 'Retirer la clé'}
+                  {armed ? t('library.steam.confirmClear') : t('library.steam.clear')}
                 </button>
               </div>
             </div>
           ) : (
             <div className="howto">
-              <span className="cap">Comment avoir une clé</span>
+              <span className="cap">{t('library.steam.howto')}</span>
               <ol>
                 <li>
-                  Ouvre{' '}
+                  {t('library.steam.howtoOpen')}{' '}
                   <button
                     type="button"
                     className="link"
-                    title="Ouvrir https://steamcommunity.com/dev/apikey dans le navigateur"
+                    title={t('library.steam.howtoOpenTitle')}
                     onClick={() => window.essaim.openSteamApiKeyPage()}
                   >
                     steamcommunity.com/dev/apikey
                     <ArrowUpRight />
                   </button>{' '}
-                  et connecte-toi.
+                  {t('library.steam.howtoSignIn')}
                 </li>
                 <li>
-                  Nom de domaine : écris <q>localhost</q>, accepte les conditions, clique sur Enregistrer.
+                  {t('library.steam.howtoDomain')} <q>localhost</q>
+                  {t('library.steam.howtoDomainAfter')}
                 </li>
-                <li>Copie la clé de 32 caractères et colle-la ici.</li>
+                <li>{t('library.steam.howtoPaste')}</li>
               </ol>
-              <p className="fine">Elle reste chiffrée sur ce PC et sert seulement à lire la liste de tes jeux.</p>
+              <p className="fine">{t('library.steam.howtoFine')}</p>
             </div>
           )}
           {steam?.hasKey && (
             <div className="pfoot">
-              <span className="cap">Liste lue via Steam Web API</span>
-              <span className="cap">Clé chiffrée sur ce PC</span>
+              <span className="cap">{t('library.steam.footList')}</span>
+              <span className="cap">{t('library.steam.footKey')}</span>
             </div>
           )}
         </div>
@@ -459,6 +468,7 @@ function SteamPlate({ steam, syncing, inputRef, saveRef, onToast }: SteamProps):
 }
 
 export function PlatformsDialog({ state, onClose, onResync, onToast }: Props): React.JSX.Element {
+  const { t, tn } = useT()
   const inputRef = useRef<HTMLInputElement>(null)
   // focus d'ouverture près du haut (sinon une fenêtre basse défile et cache le titre)
   const resyncRef = useRef<HTMLButtonElement>(null)
@@ -493,13 +503,13 @@ export function PlatformsDialog({ state, onClose, onResync, onToast }: Props): R
       const n = await window.essaim.restoreHiddenGames()
       onToast(
         n ? 'success' : 'info',
-        n ? `${n} ${gamesWord(n)} remis dans la bibliothèque.` : 'Aucun jeu à remettre.',
+        n ? tn('library.platforms.restored', n) : t('library.platforms.nothingToRestore'),
         n
-          ? { title: 'Plateformes', detail: n > 1 ? 'Ils reviennent avec la lecture des plateformes.' : 'Il revient avec la lecture des plateformes.', detailKind: 'text' }
-          : { title: 'Plateformes' }
+          ? { title: t('library.common.platforms'), detail: tn('library.platforms.restoredDetail', n), detailKind: 'text' }
+          : { title: t('library.common.platforms') }
       )
     } catch (err) {
-      onToast('error', errorText(err), { title: 'Plateformes' })
+      onToast('error', errorText(err), { title: t('library.common.platforms') })
     }
     setRestoring(false)
   }
@@ -515,39 +525,37 @@ export function PlatformsDialog({ state, onClose, onResync, onToast }: Props): R
       initialFocus={focusKey ? inputRef : resyncRef}
       aside={<SteamPlate steam={steam} syncing={syncing} inputRef={inputRef} saveRef={saveRef} onToast={onToast} />}
     >
-      <DialogHead id="plat-title" cap="02.5 · Plateformes" title="Plateformes de jeux" onClose={onClose} />
-      <p className="dnote">Les jeux de tes lanceurs arrivent tout seuls dans la bibliothèque et se lancent par leur plateforme.</p>
+      <DialogHead id="plat-title" cap={t('library.common.platforms')} title={t('library.platforms.title')} onClose={onClose} />
+      <p className="dnote">{t('library.platforms.intro')}</p>
 
       <div className="plat-sync">
         <div className="when">
-          <span className="cap">{syncing ? 'Lecture en cours' : 'Dernière lecture'}</span>
+          <span className="cap">{syncing ? t('library.platforms.syncingCap') : t('library.platforms.lastSync')}</span>
           {syncing ? (
             <span className="scanbar" aria-hidden="true">
               <i />
             </span>
           ) : (
-            <span className="v">{state?.lastSyncAt ? formatWhen(state.lastSyncAt) : 'Pas encore faite'}</span>
+            <span className="v">{state?.lastSyncAt ? formatWhen(state.lastSyncAt) : t('library.platforms.notYet')}</span>
           )}
         </div>
-        <span className="cap count">
-          {detected} sur {platforms.length || 11} détectée{detected > 1 ? 's' : ''}
-        </span>
+        <span className="cap count">{tn('library.platforms.detectedCount', detected, { total: platforms.length || 11 })}</span>
         <button
           ref={resyncRef}
           type="button"
           className="btn btn-line"
           disabled={syncing}
-          title="Relire tous les lanceurs maintenant (jeux installés, désinstallés, déplacés)"
+          title={t('library.platforms.resyncTitle')}
           data-testid="btn-resync"
           onClick={resync}
         >
           <RefreshCw className={syncing ? 'spin' : undefined} />
-          {syncing ? 'Lecture…' : 'Resynchroniser'}
+          {syncing ? t('library.platforms.scanningBtn') : t('library.platforms.resync')}
         </button>
       </div>
 
       <div className="plat-list">
-        <div className="plat-scroll" ref={listRef} role="list" aria-label="Plateformes" aria-busy={syncing || undefined}>
+        <div className="plat-scroll" ref={listRef} role="list" aria-label={t('library.common.platforms')} aria-busy={syncing || undefined}>
           {platforms.length ? (
             <>
               {platforms.filter((p) => p.state !== 'absent').map((p) => (
@@ -569,14 +577,14 @@ export function PlatformsDialog({ state, onClose, onResync, onToast }: Props): R
                       ))}
                     </span>
                   </div>
-                  <span className="st">Pas installée{absent.length > 1 ? 's' : ''}</span>
+                  <span className="st">{tn('library.platforms.notInstalled', absent.length)}</span>
                 </div>
               )}
             </>
           ) : (
             <div className="plat-wait">
               <LoaderCircle className="spin" />
-              Lecture des plateformes…
+              {t('library.platforms.loading')}
             </div>
           )}
         </div>
@@ -585,26 +593,18 @@ export function PlatformsDialog({ state, onClose, onResync, onToast }: Props): R
       {!!state?.hiddenCount && (
         <div className="plat-hidden">
           <span>
-            {state.hiddenCount > 1 ? (
-              <>
-                <b>{state.hiddenCount}</b> jeux retirés à la main ne reviennent plus tout seuls.
-              </>
-            ) : (
-              <>
-                <b>1</b> jeu retiré à la main ne revient plus tout seul.
-              </>
-            )}
+            <b>{state.hiddenCount}</b> {tn('library.platforms.hidden', state.hiddenCount)}
           </span>
           <button
             type="button"
             className="btn btn-line btn-sm"
             disabled={restoring}
-            title="Remettre les jeux retirés dans la bibliothèque"
+            title={t('library.platforms.restoreTitle')}
             data-testid="btn-restore-hidden"
             onClick={restore}
           >
             {restoring ? <LoaderCircle className="spin" /> : <RotateCcw />}
-            Remettre
+            {t('library.platforms.restore')}
           </button>
         </div>
       )}
@@ -612,9 +612,9 @@ export function PlatformsDialog({ state, onClose, onResync, onToast }: Props): R
       {/* espace d'au moins 18 px qui pousse le pied en bas quand le billet de droite est plus haut */}
       <div className="plat-fill" aria-hidden="true" />
       <div className="dfoot">
-        <Keys keys={[['Échap', 'fermer']]} />
+        <Keys keys={[[t('library.common.keyEsc'), t('library.common.actClose')]]} />
         <button type="button" className="btn btn-line" data-testid="dialog-cancel" onClick={onClose}>
-          Fermer
+          {t('library.common.close')}
         </button>
       </div>
     </DialogFrame>

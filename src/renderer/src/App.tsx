@@ -1,6 +1,5 @@
 import { ArrowDownToLine, Copy, FolderOpen, Gamepad2, LoaderCircle, Package, PanelLeftClose, PanelLeftOpen, Pause, Play, Plus, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { version as APP_VERSION } from '../../../package.json'
 import { cleanGameName } from '../../shared/gameName'
 import { PLATFORM_INFO } from '../../shared/platforms'
 import type { Game, GamePlatform, LibraryState, PlatformsState, Settings, SettingsPatch, Snapshot, TorrentSummary, UpdateState } from '../../shared/types'
@@ -20,8 +19,11 @@ import { StatusBar } from './components/StatusBar'
 import { Toasts, type Toast, type ToastOptions } from './components/Toasts'
 import { Toolbar } from './components/Toolbar'
 import { sortValue, TorrentTable, type Sort, type SortKey } from './components/TorrentTable'
-import { errorText, FILTERS, formatClockText, isRunning, matchesFilter, type Filter } from './format'
+import { errorText, filterLabel, FILTERS, formatClockText, isRunning, matchesFilter, type Filter } from './format'
 import { useCanvasHold } from './fx/loop'
+import { LangProvider } from './i18n'
+// App fixe la langue (setLang) avant de se dessiner : t et tn y sont lus directement
+import { locale, setLang, t, tn } from '../../shared/i18n'
 import { prefersReducedMotion } from './fx/motion'
 import {
   canShowOwned,
@@ -36,7 +38,6 @@ import {
 const api = window.essaim
 
 /** Version courte affichée dans la bande de titre et le pied de la barre latérale : « 0.3 ». */
-const VERSION = APP_VERSION.split('.').slice(0, 2).join('.')
 
 const DETAILS_KEY = 'essaim.detailsHeight'
 const DETAILS_MIN = 150
@@ -46,13 +47,8 @@ const SPLASH_MAX_MS = 3000
 /** Bouton du toast « Les torrents sont désactivés. » (sert aussi à retrouver ces toasts). */
 const ENABLE_TORRENTS_ACTION = 'toast-enable-torrents'
 
-const FILTER_LABEL = Object.fromEntries(FILTERS.map((f) => [f.id, f.label])) as Record<Filter, string>
-const FILTER_EMPTY: Record<Filter, string> = {
-  all: 'Aucun torrent pour l’instant.',
-  active: 'Aucun torrent en cours pour l’instant.',
-  done: 'Aucun torrent terminé pour l’instant.',
-  seeding: 'Aucun torrent en partage pour l’instant.'
-}
+/** Liste vide pour ce filtre : « Aucun torrent en cours pour l’instant. » (clé shell.empty.<filtre>). */
+const filterEmpty = (f: Filter): string => t(`shell.empty.${f}`)
 
 /** Vue de la bibliothèque mémorisée (« Installés » ou « Tous ») : simple confort, par défaut « Tous ». */
 const SHOW_KEY = 'essaim.libraryShow'
@@ -89,6 +85,29 @@ function storeSideClosed(closed: boolean): void {
   }
 }
 
+/** Largeur de la barre latérale choisie à la souris (bord droit) : simple confort, mémorisé. */
+const SIDE_W_KEY = 'cyberdeck.sideWidth'
+const SIDE_W_MIN = 180
+const SIDE_W_MAX = 420
+/** relâchée plus à gauche que ça, la barre se ferme complètement (comme le bouton en haut à gauche) */
+const SIDE_CLOSE_AT = 110
+function readSideWidth(): number | null {
+  try {
+    const v = Number(localStorage.getItem(SIDE_W_KEY))
+    return v >= SIDE_W_MIN && v <= SIDE_W_MAX ? v : null
+  } catch {
+    return null
+  }
+}
+function storeSideWidth(w: number | null): void {
+  try {
+    if (w === null) localStorage.removeItem(SIDE_W_KEY)
+    else localStorage.setItem(SIDE_W_KEY, String(Math.round(w)))
+  } catch {
+    // simple confort
+  }
+}
+
 /** Changements apportés par les lectures des plateformes, regroupés en un toast par sorte. */
 interface PlatformChanges {
   /** nouveaux jeux sur ce PC (ou en cours d'installation) */
@@ -104,11 +123,11 @@ interface PlatformChanges {
 }
 const noChanges = (): PlatformChanges => ({ added: [], owned: [], downloading: [], installed: [], uninstalled: [], restored: 0 })
 
-/** « DayZ, Rust, Deadlock et 2 autres » */
+/** « DayZ, Rust, Deadlock et 2 autres » (« DayZ, Rust, Deadlock and 2 more ») */
 function namesOf(games: Game[], max = 3): string {
   const names = games.slice(0, max).map((g) => g.name)
   const rest = games.length - names.length
-  return rest > 0 ? `${names.join(', ')} et ${rest} autre${rest > 1 ? 's' : ''}` : names.join(', ')
+  return rest > 0 ? tn('shell.app.namesMore', rest, { names: names.join(', ') }) : names.join(', ')
 }
 
 /** Plateformes concernées, la plus fournie d'abord : [plateforme, nombre] */
@@ -173,6 +192,9 @@ export function App(): React.JSX.Element {
   const [lastSnapAt, setLastSnapAt] = useState(0)
   const [now, setNow] = useState(Date.now())
   const [settings, setSettings] = useState<Settings | null>(null)
+  // langue de l'interface (anglais tant que les réglages ne sont pas lus) : fixée avant tout texte
+  const lang = settings?.language ?? 'en'
+  setLang(lang)
   // dernière vérification des mises à jour ; le toast n'apparaît qu'une fois par nouvelle version
   const [update, setUpdate] = useState<UpdateState | null>(null)
   const updateToasted = useRef<string | null>(null)
@@ -198,6 +220,51 @@ export function App(): React.JSX.Element {
   const [libFilter, setLibFilter] = useState<LibraryFilter>('all')
   const [libShow, setLibShow] = useState<LibraryShow>(readStoredShow)
   const [sideClosed, setSideClosed] = useState(readSideClosed)
+  // largeur choisie (null = largeur par défaut) ; ignorée sous 1100 px, où la barre devient un rail
+  const [sideWidth, setSideWidth] = useState(readSideWidth)
+  const [wide, setWide] = useState(() => window.matchMedia('(min-width: 1100px)').matches)
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1100px)')
+    const on = (): void => setWide(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+  // glisser le bord droit de la barre latérale ; tout à gauche : la barre se ferme ; double-clic : largeur par défaut
+  const startSideResize = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    const handle = e.currentTarget
+    handle.setPointerCapture(e.pointerId)
+    document.body.classList.add('resizing-side')
+    let last: number | null = null
+    let closing = false
+    const move = (ev: PointerEvent): void => {
+      closing = ev.clientX < SIDE_CLOSE_AT
+      // la barre pâlit : la relâcher ici la ferme
+      document.body.classList.toggle('side-closing', closing)
+      if (closing) return
+      last = Math.min(SIDE_W_MAX, Math.max(SIDE_W_MIN, ev.clientX))
+      setSideWidth(last)
+    }
+    const up = (): void => {
+      handle.removeEventListener('pointermove', move)
+      handle.removeEventListener('pointerup', up)
+      handle.removeEventListener('pointercancel', up)
+      document.body.classList.remove('resizing-side', 'side-closing')
+      if (last !== null) storeSideWidth(last)
+      if (closing) {
+        setSideClosed(true)
+        storeSideClosed(true)
+      }
+    }
+    handle.addEventListener('pointermove', move)
+    handle.addEventListener('pointerup', up)
+    handle.addEventListener('pointercancel', up)
+  }, [])
+  const resetSideWidth = useCallback(() => {
+    setSideWidth(null)
+    storeSideWidth(null)
+  }, [])
   const toggleSide = useCallback(() => {
     setSideClosed((c) => {
       storeSideClosed(!c)
@@ -235,11 +302,11 @@ export function App(): React.JSX.Element {
   /** Torrents désactivés : un toast le dit, avec un bouton qui ouvre Réglages (l'ajout reprend ensuite). */
   const torrentsOffToast = useCallback(
     (preset: AddPreset, detail?: string) => {
-      toast('info', 'Les torrents sont désactivés.', {
-        title: 'Torrents',
+      toast('info', t('shell.app.torrentsOff'), {
+        title: t('shell.settings.torrents'),
         detail,
         action: {
-          label: 'Activer les torrents…',
+          label: t('shell.app.enableTorrents'),
           testId: ENABLE_TORRENTS_ACTION,
           onClick: () => {
             pendingAdd.current = preset
@@ -286,13 +353,11 @@ export function App(): React.JSX.Element {
     const offPlatforms = api.onPlatforms(setPlatforms)
     // Fin d'un installateur : on propose d'ajouter le jeu détecté à la bibliothèque.
     const offInstall = api.onInstallDone((r) => {
-      if (!r.ok) return toast('error', r.error ?? 'Installation impossible.')
+      if (!r.ok) return toast('error', r.error ?? t('shell.app.installFailed'))
       setGameDialog({
         mode: 'add',
         preset: { ...r.guess, torrentId: r.torrentId },
-        banner: r.guess.exePath
-          ? 'Installation terminée. Vérifie le nom et le programme qui lance le jeu, puis clique sur Ajouter.'
-          : 'Installation terminée, mais je n’ai pas trouvé le jeu installé. Choisis son programme (.exe) avec Parcourir.'
+        banner: r.guess.exePath ? t('shell.app.installDone') : t('shell.app.installDoneNoExe')
       })
     })
     api.getUpdate().then(setUpdate)
@@ -315,11 +380,11 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     if (update?.status !== 'available' || !update.latest || updateToasted.current === update.latest) return
     updateToasted.current = update.latest
-    toast('info', `CyberDeck ${update.latest} est disponible.`, {
-      title: 'Mise à jour',
-      detail: `Tu as la version ${update.current}. Télécharge le nouvel installateur et lance-le : ta bibliothèque est gardée.`,
+    toast('info', t('shell.update.toast', { latest: update.latest }), {
+      title: t('shell.update.title'),
+      detail: t('shell.update.toastDetail', { current: update.current }),
       detailKind: 'text',
-      action: { label: 'Télécharger', onClick: () => api.openUpdate(), testId: 'toast-update' }
+      action: { label: t('shell.update.download'), onClick: () => api.openUpdate(), testId: 'toast-update' }
     })
   }, [update, toast])
 
@@ -339,13 +404,13 @@ export function App(): React.JSX.Element {
   const flushChanges = useCallback(() => {
     const ch = changes.current
     changes.current = noChanges()
-    const title = 'Plateformes'
+    const title = t('shell.sidebar.platforms')
     let n = ch.restored
     if (ch.added.length) {
       const groups = byPlatform(ch.added)
       const k = ch.added.length
-      const where = groups.length === 1 ? `sur ${PLATFORM_INFO[groups[0][0]].name}` : 'sur tes plateformes'
-      toast('success', k === 1 ? `Nouveau jeu trouvé ${where}` : `${k} nouveaux jeux trouvés ${where}`, {
+      const where = groups.length === 1 ? t('shell.app.onPlatform', { name: PLATFORM_INFO[groups[0][0]].name }) : t('shell.app.onYourPlatforms')
+      toast('success', tn('shell.app.newGames', k, { where }), {
         title,
         detail: groups.length === 1 ? namesOf(ch.added) : groups.map(([p, c]) => `${PLATFORM_INFO[p].name} ${c}`).join(' · ')
       })
@@ -353,9 +418,9 @@ export function App(): React.JSX.Element {
     }
     if (ch.owned.length) {
       const k = ch.owned.length
-      toast('info', k === 1 ? '1 jeu Steam possédé ajouté' : `${k} jeux Steam possédés ajoutés`, {
+      toast('info', tn('shell.app.ownedAdded', k), {
         title: 'Steam',
-        detail: `Pas installé${k > 1 ? 's' : ''} : visible${k > 1 ? 's' : ''} dans « Tous »`,
+        detail: tn('shell.app.ownedDetail', k),
         detailKind: 'text'
       })
       n++
@@ -363,23 +428,23 @@ export function App(): React.JSX.Element {
     if (ch.downloading.length) {
       const k = ch.downloading.length
       const name = PLATFORM_INFO[ch.downloading[0].platform].name
-      toast('info', k === 1 ? `${name} télécharge le jeu` : `${name} télécharge ${k} jeux`, { title, detail: namesOf(ch.downloading) })
+      toast('info', tn('shell.app.downloading', k, { name }), { title, detail: namesOf(ch.downloading) })
       n++
     }
     if (ch.installed.length) {
       const k = ch.installed.length
-      toast('success', k === 1 ? `${ch.installed[0].name} est installé` : `${k} jeux installés`, {
+      toast('success', tn('shell.app.installed', k, { name: ch.installed[0].name }), {
         title,
-        detail: k === 1 ? `Prêt à jouer · ${PLATFORM_INFO[ch.installed[0].platform].name}` : namesOf(ch.installed),
+        detail: k === 1 ? t('shell.app.readyToPlay', { name: PLATFORM_INFO[ch.installed[0].platform].name }) : namesOf(ch.installed),
         detailKind: k === 1 ? 'text' : 'name'
       })
       n++
     }
     if (ch.uninstalled.length) {
       const k = ch.uninstalled.length
-      toast('info', k === 1 ? `${ch.uninstalled[0].name} n’est plus installé` : `${k} jeux ne sont plus installés`, {
+      toast('info', tn('shell.app.uninstalled', k, { name: ch.uninstalled[0].name }), {
         title,
-        detail: k === 1 ? `Désinstallé ${ofName(PLATFORM_INFO[ch.uninstalled[0].platform].name)} · temps de jeu gardé` : namesOf(ch.uninstalled),
+        detail: k === 1 ? t('shell.app.uninstalledDetail', { of: ofName(PLATFORM_INFO[ch.uninstalled[0].platform].name) }) : namesOf(ch.uninstalled),
         detailKind: k === 1 ? 'text' : 'name'
       })
       n++
@@ -444,7 +509,11 @@ export function App(): React.JSX.Element {
     for (const p of platforms.platforms) {
       const before = prev.platforms.find((x) => x.id === p.id)
       if (p.state === 'error' && before && before.state !== 'error')
-        toast('error', `Lecture ${ofName(p.name)} impossible.`, { title: 'Plateformes', detail: p.error ?? undefined, detailKind: 'text' })
+        toast('error', t('shell.app.platformFailed', { name: p.name, of: ofName(p.name) }), {
+          title: t('shell.sidebar.platforms'),
+          detail: p.error ?? undefined,
+          detailKind: 'text'
+        })
     }
   }, [platforms, toast])
 
@@ -454,11 +523,11 @@ export function App(): React.JSX.Element {
     try {
       setPlatforms(await api.syncPlatforms())
     } catch (err) {
-      toast('error', `Lecture des plateformes impossible : ${errorText(err)}`, { title: 'Plateformes' })
+      toast('error', t('shell.app.platformsFailed', { error: errorText(err) }), { title: t('shell.sidebar.platforms') })
       return
     }
     await new Promise((r) => setTimeout(r, 1400))
-    if (changeCount.current === before) toast('info', 'Bibliothèque à jour : rien de nouveau sur tes plateformes.', { title: 'Plateformes' })
+    if (changeCount.current === before) toast('info', t('shell.app.nothingNew'), { title: t('shell.sidebar.platforms') })
   }, [toast])
 
   // ---------- Bibliothèque : vue (Installés / Tous) et filtres de plateforme ----------
@@ -486,8 +555,8 @@ export function App(): React.JSX.Element {
   // Torrents désactivés : pas de moteur, l'écran part dès que la bibliothèque est lue.
 
   useEffect(() => {
-    const t = setTimeout(() => setSplash((s) => (s === 'on' ? 'out' : s)), SPLASH_MAX_MS)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => setSplash((s) => (s === 'on' ? 'out' : s)), SPLASH_MAX_MS)
+    return () => clearTimeout(timer)
   }, [])
   useEffect(() => {
     if (splash !== 'on' || !settings) return
@@ -511,8 +580,8 @@ export function App(): React.JSX.Element {
   }, [settingsKnown, torrentsOn])
   useEffect(() => {
     if (splash !== 'out') return
-    const t = setTimeout(() => setSplash('off'), prefersReducedMotion() ? 0 : 220)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => setSplash('off'), prefersReducedMotion() ? 0 : 220)
+    return () => clearTimeout(timer)
   }, [splash])
 
   const gameByTorrent = useMemo(() => {
@@ -523,32 +592,33 @@ export function App(): React.JSX.Element {
   const installing = useMemo(() => new Set(library.installing), [library.installing])
 
   const torrents = useMemo(() => snap?.torrents ?? [], [snap])
-  const byId = useMemo(() => new Map(torrents.map((t) => [t.id, t])), [torrents])
-  const numbers = useMemo(() => new Map(torrents.map((t, i) => [t.id, i + 1])), [torrents])
+  const byId = useMemo(() => new Map(torrents.map((x) => [x.id, x])), [torrents])
+  const numbers = useMemo(() => new Map(torrents.map((x, i) => [x.id, i + 1])), [torrents])
 
   const counts = useMemo(() => {
     const c = { all: 0, active: 0, done: 0, seeding: 0 } as Record<Filter, number>
-    for (const t of torrents) for (const f of FILTERS) if (matchesFilter(t, f.id)) c[f.id]++
+    for (const x of torrents) for (const f of FILTERS) if (matchesFilter(x, f.id)) c[f.id]++
     return c
   }, [torrents])
 
   const query = search.trim()
   const visible = useMemo(() => {
     const q = query.toLocaleLowerCase('fr')
-    const list = torrents.filter((t) => matchesFilter(t, filter) && (!q || t.name.toLocaleLowerCase('fr').includes(q)))
+    const list = torrents.filter((x) => matchesFilter(x, filter) && (!q || x.name.toLocaleLowerCase('fr').includes(q)))
+    const loc = locale(lang)
     return list.sort((a, b) => {
       const va = sortValue(a, sort.key)
       const vb = sortValue(b, sort.key)
-      const cmp = typeof va === 'string' ? va.localeCompare(vb as string, 'fr') : (va as number) - (vb as number)
+      const cmp = typeof va === 'string' ? va.localeCompare(vb as string, loc) : (va as number) - (vb as number)
       return cmp * sort.dir || a.addedAt - b.addedAt
     })
-  }, [torrents, filter, query, sort])
+  }, [torrents, filter, query, sort, lang])
 
   // La sélection et la ligne dont on voit les détails restent dans la liste affichée : un
   // torrent supprimé, ou masqué par le filtre ou la recherche, quitte la sélection. Ainsi
   // Suppr, les boutons de la barre d'outils et le pied de liste ne visent jamais une ligne
   // invisible.
-  const visibleIds = useMemo(() => new Set(visible.map((t) => t.id)), [visible])
+  const visibleIds = useMemo(() => new Set(visible.map((x) => x.id)), [visible])
   useEffect(() => {
     if (!snap) return
     setSelected((sel) => {
@@ -563,7 +633,7 @@ export function App(): React.JSX.Element {
   }, [focusId])
 
   const selectedList = useMemo(() => [...selected].map((id) => byId.get(id)).filter(Boolean) as TorrentSummary[], [selected, byId])
-  const canResume = selectedList.some((t) => !isRunning(t))
+  const canResume = selectedList.some((x) => !isRunning(x))
   const canPause = selectedList.some(isRunning)
 
   // ---------- Actions ----------
@@ -581,19 +651,19 @@ export function App(): React.JSX.Element {
     api.copyText(text)
     toast('info', what)
   }
-  const isDone = (t: TorrentSummary): boolean => t.progress >= 1
-  const install = (t: TorrentSummary): void => {
-    api.installTorrent(t.id)
-    toast('info', 'L’installateur s’ouvre. Windows peut te demander une autorisation.')
+  const isDone = (tor: TorrentSummary): boolean => tor.progress >= 1
+  const install = (tor: TorrentSummary): void => {
+    api.installTorrent(tor.id)
+    toast('info', t('shell.app.installerOpening'))
   }
   const play = (g: Game): void => {
     if (library.running[g.id]) return
     api.playGame(g.id)
-    toast('info', 'Lancement du jeu…', { detail: g.name })
+    toast('info', t('shell.app.launching'), { detail: g.name })
   }
-  const addToLibrary = async (t: TorrentSummary): Promise<void> => {
-    const exe = await api.pickExe(`${t.savePath}\\${t.name}`)
-    if (exe) setGameDialog({ mode: 'add', preset: { name: cleanGameName(t.name), exePath: exe, installDir: null, torrentId: t.id } })
+  const addToLibrary = async (tor: TorrentSummary): Promise<void> => {
+    const exe = await api.pickExe(`${tor.savePath}\\${tor.name}`)
+    if (exe) setGameDialog({ mode: 'add', preset: { name: cleanGameName(tor.name), exePath: exe, installDir: null, torrentId: tor.id } })
   }
   const addManualGame = async (): Promise<void> => {
     const exe = await api.pickExe()
@@ -603,28 +673,34 @@ export function App(): React.JSX.Element {
   // Pastille à droite du nom (SPEC 5.5) : installateur ouvert → INSTALLATION… ; jeu de la
   // bibliothèque lié au torrent → EN JEU s'il tourne, sinon JOUER ; fini avec installateur → INSTALLER.
   // Un clic sur une pastille ne change pas la sélection.
-  const renderAction = (t: TorrentSummary): React.ReactNode => {
-    const game = gameByTorrent.get(t.id)
+  const renderAction = (tor: TorrentSummary): React.ReactNode => {
+    const game = gameByTorrent.get(tor.id)
     const stop = (e: React.MouseEvent): void => e.stopPropagation()
-    if (installing.has(t.id))
+    if (installing.has(tor.id))
       return (
-        <span className="pill busy" title="L’installateur est ouvert" aria-label="Installation en cours" data-testid="row-pill" data-kind="installing">
+        <span
+          className="pill busy"
+          title={t('shell.pill.installerOpen')}
+          aria-label={t('shell.pill.installingLabel')}
+          data-testid="row-pill"
+          data-kind="installing"
+        >
           <LoaderCircle className="spin" />
-          <span className="lbl">Installation…</span>
+          <span className="lbl">{t('shell.pill.installing')}</span>
         </span>
       )
     if (game)
       return library.running[game.id] ? (
-        <span className="pill live" title={`${game.name} : jeu en cours`} aria-label="En jeu" data-testid="row-pill" data-kind="running">
+        <span className="pill live" title={t('shell.pill.runningTitle', { name: game.name })} aria-label={t('shell.pill.running')} data-testid="row-pill" data-kind="running">
           <span className="live-dot" />
-          <span className="lbl">En jeu</span>
+          <span className="lbl">{t('shell.pill.running')}</span>
         </span>
       ) : (
         <button
           type="button"
           className="pill play"
-          title={`Jouer à ${game.name}`}
-          aria-label={`Jouer à ${game.name}`}
+          title={t('shell.pill.playTitle', { name: game.name })}
+          aria-label={t('shell.pill.playTitle', { name: game.name })}
           data-testid="row-pill"
           data-kind="play"
           onMouseDown={stop}
@@ -632,24 +708,24 @@ export function App(): React.JSX.Element {
           onClick={() => play(game)}
         >
           <Play />
-          <span className="lbl">Jouer</span>
+          <span className="lbl">{t('shell.pill.play')}</span>
         </button>
       )
-    if (t.installer && isDone(t))
+    if (tor.installer && isDone(tor))
       return (
         <button
           type="button"
           className="pill"
-          title="Lancer l’installateur"
-          aria-label="Installer"
+          title={t('shell.pill.installTitle')}
+          aria-label={t('shell.pill.install')}
           data-testid="row-pill"
           data-kind="install"
           onMouseDown={stop}
           onDoubleClick={stop}
-          onClick={() => install(t)}
+          onClick={() => install(tor)}
         >
           <Package />
-          <span className="lbl">Installer</span>
+          <span className="lbl">{t('shell.pill.install')}</span>
         </button>
       )
     return null
@@ -657,7 +733,7 @@ export function App(): React.JSX.Element {
 
   function onRowClick(id: string, e: React.MouseEvent): void {
     if (e.shiftKey && anchorId) {
-      const ids = visible.map((t) => t.id)
+      const ids = visible.map((x) => x.id)
       const a = ids.indexOf(anchorId)
       const b = ids.indexOf(id)
       if (a !== -1 && b !== -1) {
@@ -696,26 +772,26 @@ export function App(): React.JSX.Element {
     const game = focus ? gameByTorrent.get(focus.id) : undefined
     const gameItems: (MenuItem | 'sep')[] = []
     if (focus && game)
-      gameItems.push({ label: 'Jouer', icon: <Gamepad2 />, disabled: !!library.running[game.id], onClick: () => play(game) }, 'sep')
+      gameItems.push({ label: t('shell.pill.play'), icon: <Gamepad2 />, disabled: !!library.running[game.id], onClick: () => play(game) }, 'sep')
     else if (focus && isDone(focus)) {
       if (focus.installer)
-        gameItems.push({ label: 'Installer', icon: <Package />, disabled: installing.has(focus.id), onClick: () => install(focus) })
-      gameItems.push({ label: 'Ajouter à la bibliothèque…', icon: <Gamepad2 />, onClick: () => addToLibrary(focus) }, 'sep')
+        gameItems.push({ label: t('shell.pill.install'), icon: <Package />, disabled: installing.has(focus.id), onClick: () => install(focus) })
+      gameItems.push({ label: t('shell.menu.addToLibrary'), icon: <Gamepad2 />, onClick: () => addToLibrary(focus) }, 'sep')
     }
     return [
       ...gameItems,
-      { label: 'Reprendre', icon: <Play />, disabled: !canResume, onClick: () => resume() },
-      { label: 'Pause', icon: <Pause />, disabled: !canPause, onClick: () => pause() },
+      { label: t('shell.toolbar.resume'), icon: <Play />, disabled: !canResume, onClick: () => resume() },
+      { label: t('shell.toolbar.pause'), icon: <Pause />, disabled: !canPause, onClick: () => pause() },
       'sep',
-      { label: 'Ouvrir le dossier', icon: <FolderOpen />, onClick: () => openFolder() },
+      { label: t('shell.toolbar.openFolder'), icon: <FolderOpen />, onClick: () => openFolder() },
       {
-        label: 'Copier le lien magnet',
+        label: t('shell.menu.copyMagnet'),
         icon: <Copy />,
         disabled: !focus,
-        onClick: () => focus && copy(focus.magnetURI, 'Lien magnet copié')
+        onClick: () => focus && copy(focus.magnetURI, t('shell.details.magnetCopied'))
       },
       'sep',
-      { label: 'Supprimer…', icon: <Trash2 />, danger: true, shortcut: 'Suppr', onClick: () => askRemove() }
+      { label: t('shell.menu.remove'), icon: <Trash2 />, danger: true, shortcut: t('shell.keys.del'), onClick: () => askRemove() }
     ]
   }
 
@@ -743,7 +819,7 @@ export function App(): React.JSX.Element {
         setRemoveIds([...selected])
       } else if (e.ctrlKey && e.key === 'a') {
         e.preventDefault()
-        setSelected(new Set(visible.map((t) => t.id)))
+        setSelected(new Set(visible.map((x) => x.id)))
       } else if (e.key === 'Escape') {
         setSelected(new Set())
         setFocusId(null)
@@ -810,11 +886,11 @@ export function App(): React.JSX.Element {
         return
       }
       if (!files.length) {
-        if (all.length) toast('error', 'Dépose un fichier .torrent.', { detail: all[0].name })
+        if (all.length) toast('error', t('shell.app.dropTorrent'), { detail: all[0].name })
         return
       }
       openAdd({ filePath: api.pathForFile(files[0]) })
-      if (all.length > 1) toast('info', 'Un seul fichier à la fois : le premier est ouvert.', { detail: files[0].name })
+      if (all.length > 1) toast('info', t('shell.app.oneFile'), { detail: files[0].name })
     }
     window.addEventListener('dragenter', onEnter)
     window.addEventListener('dragleave', onLeave)
@@ -866,7 +942,7 @@ export function App(): React.JSX.Element {
   // Avant le premier instantané, la liste n'est pas « vide » : le moteur démarre encore.
   const empty = !snap ? (
     <div className="noresult waiting" aria-busy="true">
-      <span className="cap">Démarrage du moteur…</span>
+      <span className="cap">{t('shell.app.engineStarting')}</span>
       <span className="scanbar">
         <i />
       </span>
@@ -875,38 +951,38 @@ export function App(): React.JSX.Element {
     <div className="empty">
       <Dust className="dust" count={40} bias={0} />
       <MarkAnim className="mark-anim" />
-      <span className="cap">01 · Aucun torrent</span>
-      <h2>Ajoute ton premier torrent</h2>
-      <p>Colle un lien magnet ou glisse un fichier .torrent dans la fenêtre.</p>
+      <span className="cap">{t('shell.app.noTorrent')}</span>
+      <h2>{t('shell.app.firstTorrent')}</h2>
+      <p>{t('shell.app.firstTorrentHint')}</p>
       <button type="button" className="btn btn-primary" onClick={() => openAdd()}>
         <Plus />
-        Ajouter un torrent
+        {t('shell.add.title')}
       </button>
       <div className="keys">
         <kbd className="k">Ctrl</kbd>
         <kbd className="k">V</kbd>
-        <span className="cap">coller un lien</span>
+        <span className="cap">{t('shell.app.pasteLink')}</span>
         <span className="cap deco">·</span>
         <kbd className="k">Ctrl</kbd>
         <kbd className="k">N</kbd>
-        <span className="cap">ajouter</span>
+        <span className="cap">{t('shell.keys.add')}</span>
       </div>
     </div>
   ) : query ? (
     <div className="noresult">
       <span>
-        Aucun torrent ne correspond à <q>{query}</q>.
+        {t('shell.app.noMatch')} <q>{query}</q>.
       </span>
       <button type="button" className="btn btn-line btn-sm" onClick={() => setSearch('')}>
         <X />
-        Effacer la recherche
+        {t('shell.search.clear')}
       </button>
     </div>
   ) : (
     <div className="noresult">
-      <span>{FILTER_EMPTY[filter]}</span>
+      <span>{filterEmpty(filter)}</span>
       <button type="button" className="btn btn-line btn-sm" onClick={() => setFilter('all')}>
-        Voir tous les torrents
+        {t('shell.app.seeAll')}
       </button>
     </div>
   )
@@ -941,244 +1017,260 @@ export function App(): React.JSX.Element {
   }, [])
 
   return (
-    <div className={`app${showTorrents ? '' : ' no-status'}${sideClosed ? ' side-closed' : ''}`}>
-      <header className="titlebar">
-        <button
-          type="button"
-          className="tb-side"
-          data-testid="titlebar-side"
-          title={sideClosed ? 'Afficher la barre latérale (Ctrl+B)' : 'Masquer la barre latérale (Ctrl+B)'}
-          aria-label={sideClosed ? 'Afficher la barre latérale' : 'Masquer la barre latérale'}
-          aria-pressed={!sideClosed}
-          onClick={toggleSide}
-        >
-          {sideClosed ? <PanelLeftOpen /> : <PanelLeftClose />}
-        </button>
-        <MarkSmall />
-        <span className="wordmark">CYBERDECK</span>
-        <span className="ver">{VERSION}</span>
-        {update?.status === 'available' && (
+    <LangProvider lang={lang}>
+      <div
+        className={`app${showTorrents ? '' : ' no-status'}${sideClosed ? ' side-closed' : ''}`}
+        style={sideWidth !== null && wide && !sideClosed ? ({ '--side-w': `${sideWidth}px` } as React.CSSProperties) : undefined}
+      >
+        <header className="titlebar">
           <button
             type="button"
-            className="tb-update"
-            data-testid="titlebar-update"
-            title={`CyberDeck ${update.latest} est disponible (tu as la ${update.current}) · ouvrir la page de téléchargement`}
-            onClick={() => api.openUpdate()}
+            className="tb-side"
+            data-testid="titlebar-side"
+            title={sideClosed ? t('shell.title.showSideKey') : t('shell.title.hideSideKey')}
+            aria-label={sideClosed ? t('shell.title.showSide') : t('shell.title.hideSide')}
+            aria-pressed={!sideClosed}
+            onClick={toggleSide}
           >
-            <ArrowDownToLine />
-            <span>Mise à jour {update.latest}</span>
+            {sideClosed ? <PanelLeftOpen /> : <PanelLeftClose />}
           </button>
-        )}
-        <span className="crumb">
-          {!showTorrents ? (
-            <span className="cap">
-              02 · Bibliothèque / <b>{libFilter === 'all' ? 'Mes jeux' : platformName(libFilter)}</b>
-            </span>
-          ) : (
-            <span className="cap">
-              01 · Torrents / <b>{FILTER_LABEL[filter]}</b>
-            </span>
+          <MarkSmall />
+          <span className="wordmark">CYBERDECK</span>
+          {update?.status === 'available' && (
+            <button
+              type="button"
+              className="tb-update"
+              data-testid="titlebar-update"
+              title={t('shell.update.chipTitle', { latest: update.latest ?? '', current: update.current })}
+              onClick={() => api.openUpdate()}
+            >
+              <ArrowDownToLine />
+              <span>{t('shell.update.chip', { latest: update.latest ?? '' })}</span>
+            </button>
           )}
-        </span>
-        {liveGame && (
-          <button
-            type="button"
-            className="tb-live"
-            data-testid="titlebar-live"
-            title={`${liveGame.game.name} est en cours · afficher dans Mes jeux`}
-            onClick={() => {
-              setLibFilter('all')
-              setView('library')
-            }}
-          >
-            <span className="live-dot" />
-            <span className="k">En jeu</span>
-            <span className="n">{liveGame.game.name}</span>
-            <span className="t">{formatClockText(Math.max(0, (now - liveGame.startedAt) / 1000))}</span>
-          </button>
-        )}
-      </header>
-
-      <Sidebar
-        view={showTorrents ? 'torrents' : 'library'}
-        filter={filter}
-        counts={counts}
-        gameCount={libCount}
-        playing={Object.keys(library.running).length > 0}
-        onFilter={(f) => {
-          setFilter(f)
-          setView('torrents')
-        }}
-        libFilter={libFilter}
-        libNav={libNav}
-        onLibrary={(f) => {
-          setLibFilter(f)
-          setView('library')
-        }}
-        onPlatforms={openPlatforms}
-        onSettings={openSettings}
-        syncing={!!platforms?.syncing}
-        torrentsEnabled={torrentsOn}
-        traffic={{ down: snap?.global.downloadSpeed ?? 0, up: snap?.global.uploadSpeed ?? 0, stamp: lastSnapAt }}
-        version={VERSION}
-      />
-
-      {!showTorrents ? (
-        <main className="main" ref={mainRef}>
-          <LibraryView
-            library={library}
-            platforms={platforms}
-            filter={libFilter}
-            show={libView}
-            canShowAll={canShowAll}
-            torrentsEnabled={torrentsOn}
-            onShow={chooseShow}
-            onFilter={setLibFilter}
-            onAdd={addManualGame}
-            onEdit={(game) => setGameDialog({ mode: 'edit', game })}
-            onOpenPlatforms={openPlatforms}
-            onToast={toast}
-          />
-        </main>
-      ) : (
-        <main className="main" ref={mainRef}>
-          <Toolbar
-            title={FILTER_LABEL[filter]}
-            count={counts[filter]}
-            empty={!hasTorrents}
-            canResume={canResume}
-            canPause={canPause}
-            hasSelection={selected.size > 0}
-            search={search}
-            onSearch={setSearch}
-            onAdd={() => openAdd()}
-            onResume={() => resume()}
-            onPause={() => pause()}
-            onRemove={() => askRemove()}
-            onOpenFolder={() => openFolder()}
-          />
-          <TorrentTable
-            torrents={visible}
-            numbers={numbers}
-            selected={selected}
-            sort={sort}
-            onSort={(key: SortKey) =>
-              setSort((s) => ({ key, dir: s.key === key ? (-s.dir as 1 | -1) : key === 'name' || key === 'addedAt' ? 1 : -1 }))
-            }
-            onRowClick={onRowClick}
-            onRowDoubleClick={(id) => openFolder(id)}
-            onRowContextMenu={onRowContextMenu}
-            renderAction={renderAction}
-            empty={empty}
-            {...tableExtra}
-          />
-          {hasTorrents && (
-            <div
-              className="splitter"
-              role="separator"
-              aria-orientation="horizontal"
-              aria-label="Hauteur du panneau de détails"
-              title="Glisser pour redimensionner (double-clic : hauteur par défaut)"
-              onMouseDown={startResize}
-              onDoubleClick={() => {
-                setChosenDetailsHeight(null)
-                storeHeight(null)
+          <span className="crumb">
+            {!showTorrents ? (
+              <span className="cap">
+                {t('shell.sidebar.library')} / <b>{libFilter === 'all' ? t('shell.sidebar.myGames') : platformName(libFilter)}</b>
+              </span>
+            ) : (
+              <span className="cap">
+                Torrents / <b>{filterLabel(filter)}</b>
+              </span>
+            )}
+          </span>
+          {liveGame && (
+            <button
+              type="button"
+              className="tb-live"
+              data-testid="titlebar-live"
+              title={t('shell.title.liveTitle', { name: liveGame.game.name })}
+              onClick={() => {
+                setLibFilter('all')
+                setView('library')
               }}
             >
-              <span className="grip" />
-            </div>
+              <span className="live-dot" />
+              <span className="k">{t('shell.pill.running')}</span>
+              <span className="n">{liveGame.game.name}</span>
+              <span className="t">{formatClockText(Math.max(0, (now - liveGame.startedAt) / 1000))}</span>
+            </button>
           )}
-          {hasTorrents && (
-            <DetailsPanel
-              torrent={focus}
-              details={snap?.details ?? null}
-              height={detailsHeight}
-              onCopy={copy}
-              onOpenFolder={(id) => openFolder(id)}
-              {...detailsExtra}
-            />
-          )}
-        </main>
-      )}
+        </header>
 
-      {showTorrents && <StatusBar stats={snap?.global ?? null} connected={connected} />}
-
-      {addPreset && settings && (
-        <AddDialog
-          preset={addPreset}
-          defaultSavePath={settings.defaultSavePath}
-          onClose={() => {
-            setAddPreset(null)
-            api.getSettings().then(setSettings)
-          }}
-          onAdded={(name) => {
-            toast('success', 'Torrent ajouté', name && name !== 'lien magnet' ? { detail: name } : {})
+        {/* bord droit de la barre latérale : glisser pour la largeur, double-clic pour la largeur par défaut */}
+        {wide && !sideClosed && (
+          <div
+            className="side-resize"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t('shell.title.sideWidth')}
+            title={t('shell.title.sideWidthTitle')}
+            data-testid="side-resize"
+            onPointerDown={startSideResize}
+            onDoubleClick={resetSideWidth}
+          />
+        )}
+        <Sidebar
+          view={showTorrents ? 'torrents' : 'library'}
+          filter={filter}
+          counts={counts}
+          gameCount={libCount}
+          playing={Object.keys(library.running).length > 0}
+          onFilter={(f) => {
+            setFilter(f)
             setView('torrents')
           }}
-          {...addExtra}
-        />
-      )}
-      {gameDialog && (
-        <GameDialog
-          key={gameDialog.game?.id ?? gameDialog.preset?.exePath ?? gameDialog.preset?.torrentId ?? 'nouveau'}
-          {...gameDialog}
-          game={gameDialog.game && (library.games.find((g) => g.id === gameDialog.game!.id) ?? gameDialog.game)}
-          onClose={() => setGameDialog(null)}
-          onToast={toast}
-        />
-      )}
-      {platformsOpen && (
-        <PlatformsDialog state={platforms} onClose={() => setPlatformsOpen(false)} onResync={resyncPlatforms} onToast={toast} />
-      )}
-      {settingsOpen && settings && (
-        <SettingsDialog
-          settings={settings}
-          torrents={torrents}
-          freeSpace={snap?.global.freeSpace ?? null}
-          onChange={changeSettings}
-          onClose={closeSettings}
-          onToast={toast}
-          update={update}
-          onCheckUpdate={() => api.checkUpdate()}
-        />
-      )}
-      {removeIds && (
-        <RemoveDialog
-          torrents={removeIds.map((id) => byId.get(id)).filter(Boolean) as TorrentSummary[]}
-          onCancel={() => setRemoveIds(null)}
-          onConfirm={(deleteFiles) => {
-            api.remove(removeIds, deleteFiles)
-            setRemoveIds(null)
-            setSelected(new Set())
-            setFocusId(null)
-            toast('info', deleteFiles ? 'Supprimé, fichiers mis à la corbeille' : 'Supprimé de la liste')
+          libFilter={libFilter}
+          libNav={libNav}
+          onLibrary={(f) => {
+            setLibFilter(f)
+            setView('library')
           }}
+          onPlatforms={openPlatforms}
+          onSettings={openSettings}
+          syncing={!!platforms?.syncing}
+          torrentsEnabled={torrentsOn}
+          traffic={{ down: snap?.global.downloadSpeed ?? 0, up: snap?.global.uploadSpeed ?? 0, stamp: lastSnapAt }}
         />
-      )}
-      {menu && <ContextMenu key={`${menu.x},${menu.y}`} x={menu.x} y={menu.y} items={menuItems()} onClose={() => setMenu(null)} />}
-      {dragOver && (
-        <div className="drop" data-testid="drop-overlay">
-          <div className="zone brackets" />
-          <div className="box">
-            <MarkAnim holdable={false} />
-            <span className="cap">Fichier .torrent · un seul à la fois</span>
-            <h2>Dépose le fichier .torrent ici</h2>
+
+        {!showTorrents ? (
+          <main className="main" ref={mainRef}>
+            <LibraryView
+              library={library}
+              platforms={platforms}
+              filter={libFilter}
+              show={libView}
+              canShowAll={canShowAll}
+              torrentsEnabled={torrentsOn}
+              onShow={chooseShow}
+              onFilter={setLibFilter}
+              onAdd={addManualGame}
+              onEdit={(game) => setGameDialog({ mode: 'edit', game })}
+              onOpenPlatforms={openPlatforms}
+              onToast={toast}
+            />
+          </main>
+        ) : (
+          <main className="main" ref={mainRef}>
+            <Toolbar
+              title={filterLabel(filter)}
+              count={counts[filter]}
+              empty={!hasTorrents}
+              canResume={canResume}
+              canPause={canPause}
+              hasSelection={selected.size > 0}
+              search={search}
+              onSearch={setSearch}
+              onAdd={() => openAdd()}
+              onResume={() => resume()}
+              onPause={() => pause()}
+              onRemove={() => askRemove()}
+              onOpenFolder={() => openFolder()}
+            />
+            <TorrentTable
+              torrents={visible}
+              numbers={numbers}
+              selected={selected}
+              sort={sort}
+              onSort={(key: SortKey) =>
+                setSort((s) => ({ key, dir: s.key === key ? (-s.dir as 1 | -1) : key === 'name' || key === 'addedAt' ? 1 : -1 }))
+              }
+              onRowClick={onRowClick}
+              onRowDoubleClick={(id) => openFolder(id)}
+              onRowContextMenu={onRowContextMenu}
+              renderAction={renderAction}
+              empty={empty}
+              {...tableExtra}
+            />
+            {hasTorrents && (
+              <div
+                className="splitter"
+                role="separator"
+                aria-orientation="horizontal"
+                aria-label={t('shell.title.detailsHeight')}
+                title={t('shell.title.detailsHeightTitle')}
+                onMouseDown={startResize}
+                onDoubleClick={() => {
+                  setChosenDetailsHeight(null)
+                  storeHeight(null)
+                }}
+              >
+                <span className="grip" />
+              </div>
+            )}
+            {hasTorrents && (
+              <DetailsPanel
+                torrent={focus}
+                details={snap?.details ?? null}
+                height={detailsHeight}
+                onCopy={copy}
+                onOpenFolder={(id) => openFolder(id)}
+                {...detailsExtra}
+              />
+            )}
+          </main>
+        )}
+
+        {showTorrents && <StatusBar stats={snap?.global ?? null} connected={connected} />}
+
+        {addPreset && settings && (
+          <AddDialog
+            preset={addPreset}
+            defaultSavePath={settings.defaultSavePath}
+            onClose={() => {
+              setAddPreset(null)
+              api.getSettings().then(setSettings)
+            }}
+            onAdded={(name) => {
+              toast('success', t('shell.app.torrentAdded'), name && name !== t('shell.add.magnetLink') ? { detail: name } : {})
+              setView('torrents')
+            }}
+            {...addExtra}
+          />
+        )}
+        {gameDialog && (
+          <GameDialog
+            key={gameDialog.game?.id ?? gameDialog.preset?.exePath ?? gameDialog.preset?.torrentId ?? 'nouveau'}
+            {...gameDialog}
+            game={gameDialog.game && (library.games.find((g) => g.id === gameDialog.game!.id) ?? gameDialog.game)}
+            onClose={() => setGameDialog(null)}
+            onToast={toast}
+          />
+        )}
+        {platformsOpen && (
+          <PlatformsDialog state={platforms} onClose={() => setPlatformsOpen(false)} onResync={resyncPlatforms} onToast={toast} />
+        )}
+        {settingsOpen && settings && (
+          <SettingsDialog
+            settings={settings}
+            torrents={torrents}
+            freeSpace={snap?.global.freeSpace ?? null}
+            onChange={changeSettings}
+            onClose={closeSettings}
+            onToast={toast}
+            update={update}
+            onCheckUpdate={() => api.checkUpdate()}
+          />
+        )}
+        {removeIds && (
+          <RemoveDialog
+            torrents={removeIds.map((id) => byId.get(id)).filter(Boolean) as TorrentSummary[]}
+            onCancel={() => setRemoveIds(null)}
+            onConfirm={(deleteFiles) => {
+              api.remove(removeIds, deleteFiles)
+              setRemoveIds(null)
+              setSelected(new Set())
+              setFocusId(null)
+              toast('info', deleteFiles ? t('shell.app.removedWithFiles') : t('shell.app.removed'))
+            }}
+          />
+        )}
+        {menu && <ContextMenu key={`${menu.x},${menu.y}`} x={menu.x} y={menu.y} items={menuItems()} onClose={() => setMenu(null)} />}
+        {dragOver && (
+          <div className="drop" data-testid="drop-overlay">
+            <div className="zone brackets" />
+            <div className="box">
+              <MarkAnim holdable={false} />
+              <span className="cap">{t('shell.app.dropCap')}</span>
+              <h2>{t('shell.app.dropTitle')}</h2>
+            </div>
           </div>
-        </div>
-      )}
-      <Toasts toasts={toasts} onDismiss={dismissToast} />
-      {splash !== 'off' && (
-        <div className={`splash${splash === 'out' ? ' out' : ''}`} aria-hidden={splash === 'out' ? true : undefined}>
-          <div className="in">
-            <MarkAnim holdable={false} />
-            <span className="wm">CYBERDECK</span>
-            <span className="cap">
-              {!settings ? 'Démarrage…' : settings.torrentsEnabled ? 'Démarrage du moteur…' : 'Chargement de la bibliothèque…'}
-            </span>
+        )}
+        <Toasts toasts={toasts} onDismiss={dismissToast} />
+        {splash !== 'off' && (
+          <div className={`splash${splash === 'out' ? ' out' : ''}`} aria-hidden={splash === 'out' ? true : undefined}>
+            <div className="in">
+              <MarkAnim holdable={false} />
+              <span className="wm">CYBERDECK</span>
+              <span className="cap">
+                {!settings ? t('shell.app.starting') : settings.torrentsEnabled ? t('shell.app.engineStarting') : t('shell.app.loadingLibrary')}
+              </span>
+            </div>
           </div>
-        </div>
-      )}
-      <div className="grain" aria-hidden="true" />
-    </div>
+        )}
+        <div className="grain" aria-hidden="true" />
+      </div>
+    </LangProvider>
   )
 }

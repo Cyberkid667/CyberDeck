@@ -1,4 +1,4 @@
-import { Blocks, Download, FolderInput, FolderOpen, Gamepad2, LoaderCircle, Pencil, Play, Plus, Trash2, X } from 'lucide-react'
+import { Blocks, Download, FolderInput, FolderOpen, Gamepad2, LoaderCircle, PackageX, Pencil, Play, Plus, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { gameLastPlayedAt, gamePlayTimeSeconds } from '../../../shared/platforms'
 import type { ActionResult, Game, LibraryState, PlatformsState } from '../../../shared/types'
@@ -6,6 +6,7 @@ import { errorText, formatClock, formatClockText, formatDay, formatPlayTime, for
 import { barcodeCSS } from '../fx/barcode'
 import { useCanvasHold } from '../fx/loop'
 import { HERO_MATRIX_FILTER } from '../fx/pixelMatrix'
+import { useT } from '../i18n'
 import {
   canPlayState,
   gameFolder,
@@ -29,6 +30,7 @@ import { ImportDialog } from './ImportDialog'
 import { PixelMatrix } from './PixelMatrix'
 import { PlatformTag } from './PlatformTag'
 import { RemoveGameDialog } from './RemoveGameDialog'
+import { UninstallDialog } from './UninstallDialog'
 import type { ToastOptions } from './Toasts'
 import { SearchBox, ViewTitle } from './Toolbar'
 
@@ -62,13 +64,14 @@ interface Props {
 
 type SortMode = 'recent' | 'name'
 
-const SORT_LABEL: Record<SortMode, string> = { recent: 'Joués récemment', name: 'Nom' }
+// clés des libellés (traduits au rendu)
+const SORT_LABEL: Record<SortMode, string> = { recent: 'library.view.sortRecent', name: 'library.view.sortName' }
 const SORTS: SortMode[] = ['recent', 'name']
 const SHOWS: LibraryShow[] = ['installed', 'owned']
-const SHOW_LABEL: Record<LibraryShow, string> = { installed: 'Installés', owned: 'Tous' }
+const SHOW_LABEL: Record<LibraryShow, string> = { installed: 'library.view.showInstalled', owned: 'library.view.showOwned' }
 const SHOW_TITLE: Record<LibraryShow, string> = {
-  installed: 'Jeux installés sur ce PC',
-  owned: 'Tous tes jeux : installés, et possédés sur Steam sans être installés'
+  installed: 'library.view.showInstalledTitle',
+  owned: 'library.view.showOwnedTitle'
 }
 
 /** Recherche sans accents ni casse : « pokemon » trouve « Pokémon ». */
@@ -140,6 +143,7 @@ interface HeroProps {
 }
 
 function Hero({ game: g, state, startedAt, launchedAt, now, onPlay, onInstall, onEdit }: HeroProps): React.JSX.Element {
+  const { t } = useT()
   const src = coverSrc(g)
   const live = state === 'running'
   const absent = state === 'installable' || state === 'absent' || state === 'downloading'
@@ -148,25 +152,26 @@ function Hero({ game: g, state, startedAt, launchedAt, now, onPlay, onInstall, o
   const [h, m, s] = formatClock(session)
   const barcode = useMemo(() => barcodeCSS(g.id, 72), [g.id])
   const lastPlayed = gameLastPlayedAt(g)
-  const label = live || state === 'launching' || lastPlayed ? 'Dernière partie' : 'Dernier ajout'
+  const label = live || state === 'launching' || lastPlayed ? t('library.hero.lastPlayed') : t('library.hero.lastAdded')
   // (la plateforme est sur l'étiquette au bout de la légende : pas de « via Steam » ici)
   const when =
     (startedAt !== null
-      ? `Lancé ${formatWhen(startedAt, now)}`
+      ? t('library.common.launched', { when: formatWhen(startedAt, now) })
       : state === 'launching' && launchedAt !== null
-        ? `Lancé ${formatWhen(launchedAt, now)} · en attente du jeu`
+        ? t('library.hero.launchedWaiting', { when: formatWhen(launchedAt, now) })
         : lastPlayed
-          ? `Joué ${formatWhen(lastPlayed, now)}`
-          : `Ajouté ${formatWhen(g.addedAt, now)}`) + (state === 'updating' && viaName ? ` · mise à jour par ${viaName}` : '')
+          ? t('library.hero.played', { when: formatWhen(lastPlayed, now) })
+          : t('library.hero.added', { when: formatWhen(g.addedAt, now) })) +
+    (state === 'updating' && viaName ? ` · ${t('library.hero.updatingBy', { platform: viaName })}` : '')
   const folder = gameFolder(g)
-  const path = absent ? (viaName ? `Pas installé sur ce PC · ${viaName}` : 'Pas installé sur ce PC') : (folder ?? '')
+  const path = absent ? (viaName ? `${t('library.common.notInstalledHere')} · ${viaName}` : t('library.common.notInstalledHere')) : (folder ?? '')
 
   let main: React.ReactNode
   if (live)
     main = (
-      <span className="live-chip" role="status" title={`${g.name} est en cours`}>
+      <span className="live-chip" role="status" title={t('library.hero.runningTitle', { name: g.name })}>
         <span className="live-dot" />
-        En jeu
+        {t('library.state.running')}
       </span>
     )
   else if (state === 'launching' || state === 'downloading')
@@ -174,10 +179,18 @@ function Hero({ game: g, state, startedAt, launchedAt, now, onPlay, onInstall, o
       <span
         className="live-chip busy"
         role="status"
-        title={state === 'launching' ? `${viaName ?? 'Le lanceur'} démarre le jeu` : `${viaName ?? 'La plateforme'} installe le jeu`}
+        title={
+          state === 'launching'
+            ? viaName
+              ? t('library.hero.startingVia', { platform: viaName })
+              : t('library.hero.startingDefault')
+            : viaName
+              ? t('library.hero.installingVia', { platform: viaName })
+              : t('library.hero.installingDefault')
+        }
       >
         <LoaderCircle className="spin" />
-        {state === 'launching' ? 'Démarrage…' : 'Téléchargement…'}
+        {state === 'launching' ? t('library.state.launching') : t('library.state.downloading')}
       </span>
     )
   else if (state === 'installable')
@@ -186,17 +199,17 @@ function Hero({ game: g, state, startedAt, launchedAt, now, onPlay, onInstall, o
         type="button"
         className="btn btn-line"
         data-testid="btn-hero-install"
-        title={`Ouvrir l’installation de ${g.name} dans Steam`}
+        title={t('library.hero.installTitle', { name: g.name })}
         onClick={() => onInstall(g)}
       >
         <Download />
-        Installer
+        {t('library.common.install')}
       </button>
     )
   else if (state === 'absent')
     main = (
       <span className="live-chip quiet" role="status">
-        Non installé
+        {t('library.state.notInstalled')}
       </span>
     )
   else
@@ -205,11 +218,11 @@ function Hero({ game: g, state, startedAt, launchedAt, now, onPlay, onInstall, o
         type="button"
         className="btn btn-primary"
         data-testid="btn-hero-play"
-        title={viaName ? `Jouer à ${g.name} via ${viaName}` : `Jouer à ${g.name}`}
+        title={viaName ? t('library.common.playGameVia', { name: g.name, platform: viaName }) : t('library.common.playGame', { name: g.name })}
         onClick={() => onPlay(g)}
       >
         <Play className="fill" />
-        Jouer
+        {t('library.common.play')}
       </button>
     )
 
@@ -235,7 +248,7 @@ function Hero({ game: g, state, startedAt, launchedAt, now, onPlay, onInstall, o
         )}
         <div className="hero-headline">
           <div className="hero-cap">
-            <span className="cap">02.1 · {label}</span>
+            <span className="cap">{label}</span>
             <span className="cap sep">—</span>
             <span className="cap when" title={when}>
               {when}
@@ -258,39 +271,39 @@ function Hero({ game: g, state, startedAt, launchedAt, now, onPlay, onInstall, o
               <button
                 type="button"
                 className="btn btn-line"
-                title="Ouvrir le dossier du jeu"
-                aria-label="Ouvrir le dossier"
+                title={t('library.hero.openFolderTitle')}
+                aria-label={t('library.common.openFolder')}
                 disabled={!folder}
                 onClick={() => window.essaim.openGameFolder(g.id)}
               >
                 <FolderOpen />
-                <span className="lbl">Ouvrir le dossier</span>
+                <span className="lbl">{t('library.common.openFolder')}</span>
               </button>
             )}
             <button
               type="button"
               className="btn"
-              title={viaName ? `Modifier le nom ou la jaquette (le jeu se lance par ${viaName})` : 'Modifier le nom, le programme ou la jaquette'}
-              aria-label="Modifier…"
+              title={viaName ? t('library.hero.editTitleVia', { platform: viaName }) : t('library.hero.editTitle')}
+              aria-label={t('library.common.edit')}
               onClick={() => onEdit(g)}
             >
               <Pencil />
-              <span className="lbl">Modifier…</span>
+              <span className="lbl">{t('library.common.edit')}</span>
             </button>
           </div>
           <div className="hero-specs">
             <div>
-              <span className="cap">Temps de jeu</span>
+              <span className="cap">{t('library.hero.playTime')}</span>
               <span className="v">{formatPlayTime(gamePlayTimeSeconds(g) + session)}</span>
             </div>
             <div>
-              <span className="cap">Ajouté le</span>
+              <span className="cap">{t('library.hero.addedOn')}</span>
               <span className="v">{formatDay(g.addedAt)}</span>
             </div>
           </div>
           {live && (
-            <div className="hero-timer" role="timer" aria-label={`Session en cours : ${h}:${m}:${s}`}>
-              <span className="cap">Session en cours</span>
+            <div className="hero-timer" role="timer" aria-label={t('library.hero.sessionAria', { time: `${h}:${m}:${s}` })}>
+              <span className="cap">{t('library.hero.session')}</span>
               <span className="t">
                 {h}:{m}
                 <span className="s">:{s}</span>
@@ -325,11 +338,13 @@ export function LibraryView({
   onOpenPlatforms,
   onToast
 }: Props): React.JSX.Element {
+  const { t, tn, locale } = useT()
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortMode>('recent')
   const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null)
   const [importing, setImporting] = useState(false)
   const [removing, setRemoving] = useState<Game | null>(null)
+  const [uninstalling, setUninstalling] = useState<Game | null>(null)
   const launching = useRef(new Map<string, number>())
   const installing = useRef(new Map<string, number>())
   const toolbarRef = useRef<HTMLDivElement>(null)
@@ -394,7 +409,9 @@ export function LibraryView({
     if (Date.now() - last < 1500) return
     launching.current.set(g.id, Date.now())
     window.essaim.playGame(g.id)
-    toast('info', g.platform === 'local' ? 'Lancement du jeu…' : `Lancement via ${platformName(g.platform)}…`, { detail: g.name })
+    toast('info', g.platform === 'local' ? t('library.view.launchingGame') : t('library.view.launchingVia', { platform: platformName(g.platform) }), {
+      detail: g.name
+    })
   }, [])
   const install = useCallback(async (g: Game) => {
     const { onToast: toast } = latest.current
@@ -407,8 +424,8 @@ export function LibraryView({
     } catch (err) {
       res = { ok: false, error: errorText(err) }
     }
-    if (res.ok) toast('info', 'Steam ouvre sa fenêtre d’installation.', { detail: g.name })
-    else toast('error', res.error ?? 'Installation impossible.', { detail: g.name })
+    if (res.ok) toast('info', t('library.view.steamInstallOpening'), { detail: g.name })
+    else toast('error', res.error ?? t('library.view.installFailed'), { detail: g.name })
   }, [])
   const edit = useCallback((g: Game) => latest.current.onEdit(g), [])
   const openMenu = useCallback((g: Game, x: number, y: number) => setMenu({ x, y, id: g.id }), [])
@@ -419,10 +436,10 @@ export function LibraryView({
     onToast(
       'info',
       g.platform === 'local'
-        ? 'Retiré de la bibliothèque. Le jeu reste installé.'
+        ? t('library.view.removedLocal')
         : g.installed
-          ? `Retiré de la bibliothèque. Le jeu reste installé dans ${platformName(g.platform)}.`
-          : 'Retiré de la bibliothèque.',
+          ? t('library.view.removedInstalled', { platform: platformName(g.platform) })
+          : t('library.view.removed'),
       { detail: g.name }
     )
   }
@@ -431,14 +448,16 @@ export function LibraryView({
   const menuItems = (g: Game): (MenuItem | 'sep')[] => {
     const s = gameState(g, library)
     const items: (MenuItem | 'sep')[] = []
-    if (s === 'installable') items.push({ label: 'Installer via Steam', icon: <Download />, onClick: () => void install(g) })
+    if (s === 'installable') items.push({ label: t('library.view.menuInstallSteam'), icon: <Download />, onClick: () => void install(g) })
     else if (s !== 'absent' && s !== 'downloading') items.push({ label: playLabel(g), icon: <Play />, disabled: !canPlayState(s), onClick: () => play(g) })
     if (g.platform === 'local' || onThisPc(g))
-      items.push({ label: 'Ouvrir le dossier', icon: <FolderOpen />, disabled: !gameFolder(g), onClick: () => window.essaim.openGameFolder(g.id) })
-    items.push({ label: 'Modifier…', icon: <Pencil />, onClick: () => onEdit(g) })
+      items.push({ label: t('library.common.openFolder'), icon: <FolderOpen />, disabled: !gameFolder(g), onClick: () => window.essaim.openGameFolder(g.id) })
+    items.push({ label: t('library.common.edit'), icon: <Pencil />, onClick: () => onEdit(g) })
     items.push('sep')
+    if (g.installed && s !== 'downloading')
+      items.push({ label: t('library.view.menuUninstall'), icon: <PackageX />, danger: true, disabled: s === 'running' || s === 'launching', onClick: () => setUninstalling(g) })
     items.push({
-      label: g.platform === 'local' ? 'Retirer de la bibliothèque' : 'Retirer de la bibliothèque…',
+      label: g.platform === 'local' ? t('library.view.menuRemove') : t('library.view.menuRemoveAsk'),
       icon: <Trash2 />,
       danger: true,
       onClick: () => (g.platform === 'local' ? removeNow(g) : setRemoving(g))
@@ -482,7 +501,7 @@ export function LibraryView({
     if (j >= 0 && j < cards.length && j !== i) cards[j].focus()
   }
 
-  const title = filter === 'all' ? 'Mes jeux' : platformName(filter)
+  const title = filter === 'all' ? t('library.view.myGames') : platformName(filter)
   const absentCount = show === 'owned' ? listGames.filter((g) => !onThisPc(g)).length : 0
   // filtre de plateforme vide dans « Installés » alors que la plateforme a des jeux possédés
   const ownedElsewhere =
@@ -490,31 +509,31 @@ export function LibraryView({
 
   return (
     <>
-      <div className="toolbar" role="toolbar" aria-label="Actions de la bibliothèque" ref={toolbarRef}>
-        <ViewTitle cap="02 · Bibliothèque" title={title} count={total} />
+      <div className="toolbar" role="toolbar" aria-label={t('library.view.toolbarAria')} ref={toolbarRef}>
+        <ViewTitle cap={t('library.view.cap')} title={title} count={total} />
         <button
           type="button"
           className="btn btn-primary"
           data-testid="btn-add-game"
-          title="Ajouter un jeu déjà installé"
+          title={t('library.view.addTitle')}
           onClick={onAdd}
         >
           <Plus />
-          Ajouter un jeu
+          {t('library.view.add')}
         </button>
         <button
           type="button"
           className="btn"
           data-testid="btn-import-folder"
-          title="Importer un dossier de jeux"
-          aria-label="Importer un dossier"
+          title={t('library.common.importFolder')}
+          aria-label={t('library.view.importAria')}
           onClick={() => setImporting(true)}
         >
           <FolderInput />
-          <span className="lbl">Importer un dossier</span>
+          <span className="lbl">{t('library.view.importAria')}</span>
         </button>
         <div className="tsep" />
-        <div className={`seg${noGames ? ' dis' : ''}`} role="radiogroup" aria-label="Tri" onKeyDown={segKeys(SORTS, sort, setSort)}>
+        <div className={`seg${noGames ? ' dis' : ''}`} role="radiogroup" aria-label={t('library.view.sortAria')} onKeyDown={segKeys(SORTS, sort, setSort)}>
           {SORTS.map((s) => (
             <button
               key={s}
@@ -527,12 +546,12 @@ export function LibraryView({
               disabled={noGames}
               onClick={() => setSort(s)}
             >
-              {SORT_LABEL[s]}
+              {t(SORT_LABEL[s])}
             </button>
           ))}
         </div>
         <div className="spacer" />
-        <SearchBox value={search} onChange={setSearch} placeholder="Rechercher un jeu" testId="library-search" disabled={noGames} />
+        <SearchBox value={search} onChange={setSearch} placeholder={t('library.view.search')} testId="library-search" disabled={noGames} />
       </div>
 
       <div className="lib" ref={libRef}>
@@ -545,39 +564,39 @@ export function LibraryView({
               </div>
               <div className="s" />
             </div>
-            <span className="cap">02 · Bibliothèque vide</span>
-            <h2>Ta bibliothèque est vide</h2>
+            <span className="cap">{t('library.view.emptyCap')}</span>
+            <h2>{t('library.view.emptyTitle')}</h2>
             {torrentsEnabled ? (
               <p>
-                Quand un jeu a fini de se télécharger, clique sur « Installer » dans la liste des torrents.
+                {t('library.view.emptyTorrents')}
                 <br />
-                Tu peux aussi ajouter les jeux déjà installés sur ton PC.
+                {t('library.view.emptyTorrents2')}
               </p>
             ) : (
-              <p>Ajoute les jeux déjà installés sur ton PC : un par un, ou tout un dossier d’un coup.</p>
+              <p>{t('library.view.emptyNoTorrents')}</p>
             )}
             <div className="row-btns">
               <button type="button" className="btn btn-primary" onClick={() => setImporting(true)}>
                 <FolderInput />
-                Importer un dossier de jeux
+                {t('library.common.importFolder')}
               </button>
               <button type="button" className="btn btn-line" onClick={onAdd}>
                 <Plus />
-                Ajouter un jeu
+                {t('library.view.add')}
               </button>
             </div>
             <div className="plat-note" aria-live="polite">
               {syncing ? (
                 <>
                   <LoaderCircle className="spin" />
-                  <span>Recherche des jeux de Steam, Epic Games, Xbox et des autres lanceurs…</span>
+                  <span>{t('library.view.emptySyncing')}</span>
                 </>
               ) : (
                 <>
-                  <span>Les jeux de Steam, Epic Games, Xbox et des autres lanceurs arrivent ici tout seuls.</span>
+                  <span>{t('library.view.emptyAuto')}</span>
                   <button type="button" className="btn btn-sm" onClick={onOpenPlatforms}>
                     <Blocks />
-                    Plateformes
+                    {t('library.common.platforms')}
                   </button>
                 </>
               )}
@@ -598,11 +617,11 @@ export function LibraryView({
               />
             )}
             <div className="sect">
-              <span className="cap">02.2 · {filter === 'all' ? 'Collection' : platformName(filter)}</span>
+              <span className="cap">{filter === 'all' ? t('library.view.collection') : platformName(filter)}</span>
               <span className="cap">
                 {query ? (
                   <>
-                    <b>{games.length}</b> {gamesWord(games.length)} sur {total}
+                    <b>{games.length}</b> {gamesWord(games.length)} {t('library.view.ofTotal', { total })}
                   </>
                 ) : (
                   <>
@@ -610,7 +629,7 @@ export function LibraryView({
                     {absentCount > 0 && (
                       <>
                         {' '}
-                        · <b>{absentCount}</b> pas installé{absentCount > 1 ? 's' : ''}
+                        · <b>{absentCount}</b> {tn('library.view.notInstalledCount', absentCount)}
                       </>
                     )}
                   </>
@@ -622,7 +641,7 @@ export function LibraryView({
                 <div
                   className="seg sm"
                   role="radiogroup"
-                  aria-label="Jeux affichés"
+                  aria-label={t('library.view.showAria')}
                   data-testid="library-installed-switch"
                   onKeyDown={segKeys(SHOWS, show, onShow)}
                 >
@@ -634,16 +653,16 @@ export function LibraryView({
                       aria-checked={show === s}
                       tabIndex={show === s ? 0 : -1}
                       className={show === s ? 'on' : undefined}
-                      title={SHOW_TITLE[s]}
+                      title={t(SHOW_TITLE[s])}
                       data-testid={`library-show-${s}`}
                       onClick={() => onShow(s)}
                     >
-                      {SHOW_LABEL[s]}
+                      {t(SHOW_LABEL[s])}
                     </button>
                   ))}
                 </div>
               )}
-              <span className="cap">Tri · {SORT_LABEL[sort].toLocaleLowerCase('fr')}</span>
+              <span className="cap">{t('library.view.sortCap', { mode: t(SORT_LABEL[sort]).toLocaleLowerCase(locale) })}</span>
             </div>
             {games.length ? (
               <div className="ggrid" onKeyDown={onGridKey}>
@@ -668,7 +687,7 @@ export function LibraryView({
             ) : query ? (
               <div className="noresult">
                 <span>
-                  Aucun jeu ne correspond à <q>{query}</q>.
+                  {t('library.view.noMatch')} <q>{query}</q>.
                 </span>
                 <button
                   type="button"
@@ -679,23 +698,23 @@ export function LibraryView({
                   }}
                 >
                   <X />
-                  Effacer la recherche
+                  {t('library.view.clearSearch')}
                 </button>
               </div>
             ) : (
               <div className="noresult">
                 <span>
                   {filter === 'all'
-                    ? 'Aucun jeu installé pour l’instant.'
-                    : `Aucun jeu ${platformName(filter)} ${show === 'installed' ? 'installé ' : ''}pour l’instant.`}
+                    ? t('library.view.noneInstalled')
+                    : t(show === 'installed' ? 'library.view.nonePlatformInstalled' : 'library.view.nonePlatform', { platform: platformName(filter) })}
                 </span>
                 {ownedElsewhere || (filter === 'all' && canShowAll && show === 'installed') ? (
                   <button type="button" className="btn btn-line btn-sm" onClick={() => onShow('owned')}>
-                    Voir aussi les jeux pas installés
+                    {t('library.view.seeNotInstalled')}
                   </button>
                 ) : filter !== 'all' ? (
                   <button type="button" className="btn btn-line btn-sm" onClick={() => onFilter('all')}>
-                    Voir tous les jeux
+                    {t('library.view.seeAll')}
                   </button>
                 ) : null}
               </div>
@@ -706,6 +725,7 @@ export function LibraryView({
 
       {menu && menuGame && <ContextMenu key={`${menu.id},${menu.x},${menu.y}`} x={menu.x} y={menu.y} items={menuItems(menuGame)} onClose={closeMenu} />}
       {importing && <ImportDialog onClose={() => setImporting(false)} onToast={onToast} />}
+      {uninstalling && <UninstallDialog game={uninstalling} onClose={() => setUninstalling(null)} onToast={onToast} />}
       {removing && (
         <RemoveGameDialog
           game={removing}

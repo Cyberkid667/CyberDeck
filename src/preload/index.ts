@@ -57,7 +57,10 @@ const api: EssaimApi = {
   getUpdate: () => ipcRenderer.invoke('update:get'),
   onUpdate: (cb) => subscribe<UpdateState>('update', cb),
   checkUpdate: () => ipcRenderer.invoke('update:check'),
-  openUpdate: () => ipcRenderer.send('update:open')
+  openUpdate: () => ipcRenderer.send('update:open'),
+
+  uninstallPlan: (id) => ipcRenderer.invoke('library:uninstall-plan', id),
+  uninstallGame: (id, removeFromList) => ipcRenderer.invoke('library:uninstall', id, removeFromList)
 }
 
 contextBridge.exposeInMainWorld('essaim', api)

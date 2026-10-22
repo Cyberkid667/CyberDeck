@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react'
 import type { PeerInfo, TorrentSummary } from '../../../shared/types'
 import { countParts, formatSpeed, shownDownload, splitAddress } from '../format'
 import { createGlobe, peerLatLon, type Globe, type GlobeCallout, type GlobePeer } from '../fx'
+import { useT } from '../i18n'
 
 // Plaque du globe des pairs (onglet Pairs, SPEC 5.8) : sphère de points qui tourne,
 // flux vertical du logo, pairs placés par une empreinte de leur adresse (pas une
@@ -82,6 +83,7 @@ interface Props {
 }
 
 export function PeerGlobe({ torrent, peers, active }: Props): React.JSX.Element {
+  const { t, tn } = useT()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const calloutRefs = useRef<(HTMLDivElement | null)[]>([])
   const globe = useRef<Globe | null>(null)
@@ -174,34 +176,32 @@ export function PeerGlobe({ torrent, peers, active }: Props): React.JSX.Element 
 
   return (
     <div className={`plate${idle ? ' idle' : ''}`} data-testid="peer-globe">
-      <canvas ref={canvasRef} role="img" aria-label={`Globe des pairs connectés : ${n} pair${n > 1 ? 's' : ''}`} />
+      <canvas ref={canvasRef} role="img" aria-label={tn('shell.globe.label', n)} />
       <div className="frame brackets" />
       <div className="corner c-tl">
-        <span className="cap">Essaim</span>
-        <span className="v">
-          {n} {n > 1 ? 'pairs connectés' : 'pair connecté'}
-        </span>
+        <span className="cap">{t('shell.globe.swarm')}</span>
+        <span className="v">{tn('shell.globe.connected', n)}</span>
       </div>
       <div className="corner c-tr">
-        <span className="cap">↓ Réception</span>
+        <span className="cap">↓ {t('shell.globe.download')}</span>
         <span className="v">{down >= 1 ? formatSpeed(down) : <span className="nil">—</span>}</span>
       </div>
       <div className="corner c-bl">
-        <span className="cap">Sources · Pairs</span>
+        <span className="cap">{t('shell.globe.seedsPeers')}</span>
         <span className="v">
           <Count n={torrent?.seeds ?? 0} total={torrent?.seedsTotal ?? null} /> ·{' '}
           <Count n={torrent?.peers ?? 0} total={torrent?.peersTotal ?? null} />
         </span>
       </div>
       <div className="corner c-br">
-        <span className="cap">Connexions</span>
+        <span className="cap">{t('shell.globe.connections')}</span>
         <span className="v">
           uTP {utp} · TCP {tcp}
           {other > 0 && ` · Web ${other}`}
         </span>
       </div>
-      <div className="schem cap" title="La position d’un pair vient d’une empreinte de son adresse, pas de sa localisation">
-        Vue schématique
+      <div className="schem cap" title={t('shell.globe.schematicTitle')}>
+        {t('shell.globe.schematic')}
       </div>
       {MARKS.map((label, i) => {
         const p = peers[i]
@@ -231,8 +231,8 @@ export function PeerGlobe({ torrent, peers, active }: Props): React.JSX.Element 
       })}
       {idle && (
         <div className="plate-empty">
-          <span className="cap">Aucun pair connecté</span>
-          <span>Le globe s’anime dès qu’un pair répond.</span>
+          <span className="cap">{t('shell.globe.empty')}</span>
+          <span>{t('shell.globe.emptyHint')}</span>
         </div>
       )}
     </div>

@@ -7,7 +7,7 @@ dist/
 # Restent sur ce PC, jamais dans le dépôt public (voir PUBLIC_FILES.md)
 design/
 tests/revue/
-tests/outils/first-run.mjs
+tests/tools/first-run.mjs
 
 # Données de test ou personnelles
 *.torrent

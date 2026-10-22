@@ -16,6 +16,7 @@ import { scanSteam, type SteamScanExtra } from './steam'
 import type { PlatformScan, ScanContext } from './types'
 import { scanUbisoft } from './ubisoft'
 import { isInside, sameDir, skip } from './util'
+import { t } from '../../shared/i18n'
 import { scanXbox } from './xbox'
 
 export type { DetectedGame, PlatformScan } from './types'
@@ -60,7 +61,7 @@ export async function scanPlatforms(opts: ScanOptions): Promise<{ reg: RegistryS
     try {
       scan = await scanners[p]()
     } catch (err: any) {
-      scan = { platform: p, ok: false, clientPath: null, detected: false, games: [], excluded: 0, error: `Lecture impossible : ${err?.message ?? err}` }
+      scan = { platform: p, ok: false, clientPath: null, detected: false, games: [], excluded: 0, error: t('main.scan.failed', { error: err?.message ?? String(err) }) }
     }
     // Sans le registre, l'absence d'un jeu ne prouve rien : on n'en retire aucun.
     if (!reg.ok && !FILE_ONLY.has(p)) {

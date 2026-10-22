@@ -1,6 +1,7 @@
 import { memo, type CSSProperties } from 'react'
 import type { TorrentStatus, TorrentSummary } from '../../../shared/types'
 import { formatPercent, percentVar, statusText } from '../format'
+import { useT } from '../i18n'
 
 // Barres segmentées (SPEC 5.4) : piste + remplissage découpés en segments par un
 // masque CSS ; seule la variable --p change chaque seconde (aucune mise en page).
@@ -29,11 +30,13 @@ export const StatusProgress = memo(function StatusProgress({
   progress,
   error
 }: Pick<TorrentSummary, 'status' | 'progress' | 'error'>): React.JSX.Element {
+  const { t } = useT()
   // « En attente de pairs » devient « En attente » sous 1100 px (barre de 160 px) au lieu d'être coupé
   const label =
     status === 'stalled' ? (
       <>
-        En attente<span className="st-more"> de pairs</span>
+        {t('shell.status.stalledShort')}
+        <span className="st-more">{t('shell.status.stalledMore')}</span>
       </>
     ) : (
       statusText({ status, error })
@@ -54,6 +57,7 @@ export const StatusProgress = memo(function StatusProgress({
 
 /** Mini-barre de 40 px (5 segments) + pourcentage : blanc en cours, vert à 100 %. */
 export function MiniProgress({ value }: { value: number }): React.JSX.Element {
+  useT() // pourcentage dans la langue en cours
   return (
     <div className={`mini${value >= 1 ? ' full' : ''}`}>
       <div className="bar">
