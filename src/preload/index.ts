@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { EssaimApi, InstallResult, LibraryState, Notice, PlatformsState, Settings, Snapshot, UpdateState } from '../shared/types'
+import type { DownloadProgress, EssaimApi, InstallResult, LibraryState, Notice, PlatformsState, Settings, Snapshot, UpdateState } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (value: T) => void): () => void {
   const listener = (_e: unknown, value: T): void => cb(value)
@@ -60,7 +60,12 @@ const api: EssaimApi = {
   openUpdate: () => ipcRenderer.send('update:open'),
 
   uninstallPlan: (id) => ipcRenderer.invoke('library:uninstall-plan', id),
-  uninstallGame: (id, removeFromList) => ipcRenderer.invoke('library:uninstall', id, removeFromList)
+  uninstallGame: (id, removeFromList) => ipcRenderer.invoke('library:uninstall', id, removeFromList),
+
+  getGameDetails: (id, refresh) => ipcRenderer.invoke('details:get', id, refresh === true),
+  getDownloads: () => ipcRenderer.invoke('downloads:get'),
+  onDownloads: (cb) => subscribe<Record<string, DownloadProgress>>('downloads', cb),
+  openExternalLink: (url) => ipcRenderer.send('link:open', url)
 }
 
 contextBridge.exposeInMainWorld('essaim', api)

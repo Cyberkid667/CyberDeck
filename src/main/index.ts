@@ -56,6 +56,8 @@ import {
   testSteamKey
 } from './platformSync'
 import { fetchUpdate, openReleasePage } from './updates'
+import { forgetGameDetails, getGameDetails, initGameDetails, openExternalLink } from './gameDetails'
+import { downloadsState, initSteamDownloads, onLibraryChanged, stopSteamDownloads } from './steamDownloads'
 import { isLang, setLang, t, tn } from '../shared/i18n'
 
 /** Nom public de l'app (fenêtre, journal, Gestionnaire des tâches). */
@@ -492,6 +494,7 @@ function quitGracefully(): void {
   if (quitting) return
   quitting = true
   stopPlatforms()
+  stopSteamDownloads()
   stopAllSessions()
   if (win && !win.isDestroyed()) win.hide()
   stopEngine().then(() => app.exit(0))
@@ -681,6 +684,7 @@ function registerIpc(): void {
   // un jeu de plateforme retiré change le nombre de jeux retirés (fenêtre Plateformes, « Remettre »)
   ipcMain.on('library:remove', (_e, id: string) => {
     removeGame(id)
+    forgetGameDetails(String(id))
     send('platforms', platformsState())
   })
   ipcMain.on('library:play', (_e, id: string) =>
@@ -720,6 +724,15 @@ function registerIpc(): void {
 
   ipcMain.handle('library:uninstall-plan', (_e, id: unknown) => uninstallPlan(String(id)))
   ipcMain.handle('library:uninstall', (_e, id: unknown, removeFromList: unknown) => uninstallGame(String(id), removeFromList === true))
+
+  // ---------- Page détaillée d'un jeu et téléchargements Steam ----------
+
+  ipcMain.handle('details:get', (_e, id: unknown, refresh?: unknown) => getGameDetails(String(id), refresh === true))
+  ipcMain.handle('downloads:get', () => downloadsState())
+  // adresses https et fiches des lanceurs seulement (vérifié par openExternalLink)
+  ipcMain.on('link:open', (_e, url: unknown) => {
+    if (typeof url === 'string') openExternalLink(url)
+  })
 
   ipcMain.handle('update:get', () => update)
   ipcMain.handle('update:check', () => checkUpdates(true))
@@ -772,10 +785,20 @@ app.whenReady().then(() => {
   settings = loadSettings()
   setLang(settings.language)
   Menu.setApplicationMenu(null)
+  initGameDetails({ log })
+  initSteamDownloads({
+    log,
+    send: (d) => send('downloads', d),
+    resync: () => void syncPlatforms({ only: ['steam'] })
+  })
   initLibrary({
     log,
     notice: sendNotice,
-    broadcast: (s) => send('library', s),
+    broadcast: (s) => {
+      send('library', s)
+      // jeux Steam qui téléchargent : suivi de leur progression
+      onLibraryChanged(s)
+    },
     installDone: (r) => send('install-done', r),
     torrentById: (id) => lastSnapshot?.torrents.find((t) => t.id === id),
     releaseTorrent,
@@ -798,6 +821,8 @@ app.whenReady().then(() => {
   registerImageProtocol()
   registerIpc()
   createWindow()
+  // téléchargement en cours au démarrage (état enregistré, confirmé par la première lecture de Steam)
+  onLibraryChanged(libraryState())
   // torrents désactivés : aucun moteur, donc aucun port ouvert
   if (settings.torrentsEnabled) startEngine()
   else log('Torrents désactivés : moteur torrent non démarré')

@@ -25,11 +25,15 @@ No administrator rights needed: the app installs for your Windows account only.
 - **One library**: covers, the platform's logo on every game, filters by platform, sort by recently played or by name, search.
 - **Play**: each game starts through its own launcher (Steam, Epic…), or directly for local games. CyberDeck shows "In game" while you play and counts your play time.
 - **Automatic detection**: games installed by your launchers appear by themselves, and the list updates when you install or uninstall one.
+- **Game pages**: click a game to see its page: big artwork, description, news, DLC, and links to its store, community hub, discussions, guides, workshop and support pages. With your Steam API key, also your achievements and the friends who play it.
+- **Download progress**: follow a Steam download or update from CyberDeck (progress, speed, time remaining).
 - **Uninstall games**: right-click a game › Uninstall. CyberDeck goes through the game's launcher (Steam…) or its own uninstaller, and never deletes a folder by itself.
 - **Your other games**: add a game by hand, or import a whole folder (for example `D:\Games`) with a review window before anything is added.
 - **Owned Steam games** (optional): with your Steam Web API key, you also see games you own but haven't installed.
 - **Torrents** (optional, off by default): a small torrent client, to enable in Settings.
 - **Languages**: English by default, French in Settings › Language.
+
+![A game page in CyberDeck](docs/game-page.png)
 
 ## Supported platforms
 
@@ -49,6 +53,7 @@ A game is missing? Add it by hand with **Add a game**, or open an issue on GitHu
 - **Updates**: at startup and every 12 hours, CyberDeck asks GitHub (`api.github.com`) for the latest published version number. Nothing is downloaded or installed without you. Can be turned off in Settings.
 - To find covers, **game names** are sent to the Steam store, then to Wikipedia if Steam finds nothing. Epic covers are read from the Epic launcher's cache.
 - **Only if you enter your Steam API key**: the key and your SteamID are sent to Valve to read your game list. The key is encrypted on disk by Windows.
+- **Game pages**: opening a game's page asks the Steam store and news API about that game (its Steam id), or Wikipedia when it isn't on Steam, and loads their images. With your Steam API key, your achievements and your friends list are read from Valve too. Pages are cached in `%APPDATA%\CyberDeck\details`.
 - Other platforms are read **on your PC only**.
 - **Torrents**: as with any torrent client, your IP address is visible to other peers.
 - Everything else (library, settings, log) stays in `%APPDATA%\CyberDeck`.

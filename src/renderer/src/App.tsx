@@ -216,6 +216,8 @@ export function App(): React.JSX.Element {
   const [gameDialog, setGameDialog] = useState<GameDialogState | null>(null)
   const [platforms, setPlatforms] = useState<PlatformsState | null>(null)
   const [platformsOpen, setPlatformsOpen] = useState(false)
+  // clic sur une entrée « Bibliothèque » de la barre latérale : la page d'un jeu ouverte se ferme
+  const [libNavKey, setLibNavKey] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [libFilter, setLibFilter] = useState<LibraryFilter>('all')
   const [libShow, setLibShow] = useState<LibraryShow>(readStoredShow)
@@ -1106,6 +1108,7 @@ export function App(): React.JSX.Element {
           onLibrary={(f) => {
             setLibFilter(f)
             setView('library')
+            setLibNavKey((n) => n + 1)
           }}
           onPlatforms={openPlatforms}
           onSettings={openSettings}
@@ -1129,6 +1132,7 @@ export function App(): React.JSX.Element {
               onEdit={(game) => setGameDialog({ mode: 'edit', game })}
               onOpenPlatforms={openPlatforms}
               onToast={toast}
+              navKey={libNavKey}
             />
           </main>
         ) : (

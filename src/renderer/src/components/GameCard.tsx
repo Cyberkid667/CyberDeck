@@ -1,12 +1,13 @@
 import { Download, Ellipsis, LoaderCircle, Play, RefreshCw } from 'lucide-react'
-import { memo } from 'react'
+import { memo, useEffect, useRef, type CSSProperties } from 'react'
 import { t } from '../../../shared/i18n'
 import { gameLastPlayedAt, gamePlayTimeSeconds } from '../../../shared/platforms'
-import type { Game } from '../../../shared/types'
-import { formatLastPlayed, formatPlayTimeShort } from '../format'
+import type { DownloadProgress, Game } from '../../../shared/types'
+import { formatLastPlayed, formatPercent, formatPlayTimeShort, formatSpeed, percentVar } from '../format'
 import { useT } from '../i18n'
 import { platformName, type GameState } from '../platformUi'
 import { Cover } from './Cover'
+import { downloadFraction, downloadPhaseLabel, downloadTitle } from './DownloadPanel'
 import { PlatformLogo } from './PlatformLogo'
 
 // Carte-billet d'un jeu (SPEC 5.10) : jaquette 2:3 + talon perforé (nom Inter
@@ -18,8 +19,11 @@ import { PlatformLogo } from './PlatformLogo'
 // le bandeau). Jeu de plateforme lancé, en attente de son processus : puce
 // « DÉMARRAGE… ». Jeu pas installé : billet fantôme (bord en tirets, jaquette
 // éteinte en gris) et « INSTALLER » (contour) à la place de « JOUER ».
-// Entrée ou double-clic = action principale ; clic droit, « … », touche Menu
+// Entrée ou double-clic = action principale ; clic simple ou Espace = page du jeu (le clic attend
+// un peu : un double-clic n'ouvre pas la page) ; clic droit, « … », touche Menu
 // ou Maj+F10 = menu. Mémoïsée : seule la carte du jeu lancé se redessine chaque seconde.
+// Téléchargement Steam en cours : pourcentage dans la puce, fine barre en bas de la jaquette,
+// « 42,0 % · 18,4 Mo/s » dans le talon.
 
 interface Props {
   game: Game
@@ -30,10 +34,17 @@ interface Props {
   today: number
   /** le menu de ce jeu est ouvert : la carte garde son aspect survolé */
   menuOpen: boolean
+  /** téléchargement Steam en cours (installation ou mise à jour) */
+  download?: DownloadProgress | null
   onPlay: (game: Game) => void
   onInstall: (game: Game) => void
   onMenu: (game: Game, x: number, y: number) => void
+  /** ouvre la page du jeu */
+  onOpen: (game: Game) => void
 }
+
+/** Attente d'un 2e clic avant d'ouvrir la page du jeu (le double-clic garde « Jouer »). */
+const CLICK_WAIT_MS = 280
 
 /**
  * Relevé du talon : « < 1 min · aujourd’hui », « 3 h 05 · hier », « 235 h · il y a 2 j »,
@@ -63,7 +74,7 @@ function absentMeta(g: Game, full = false): string {
 const stop = (e: React.SyntheticEvent): void => e.stopPropagation()
 
 /** Puce d'état en haut à gauche de la jaquette (EN JEU, DÉMARRAGE…, TÉLÉCHARGEMENT…, MISE À JOUR). */
-function StateChip({ state }: { state: GameState }): React.JSX.Element | null {
+function StateChip({ state, pct }: { state: GameState; pct: string | null }): React.JSX.Element | null {
   const { t } = useT()
   if (state === 'running')
     return (
@@ -72,25 +83,32 @@ function StateChip({ state }: { state: GameState }): React.JSX.Element | null {
         {t('library.state.running')}
       </span>
     )
+  // téléchargement suivi : le pourcentage remplace le mot (la puce tient dans la plus petite carte)
   if (state === 'launching' || state === 'downloading')
     return (
       <span className="live-chip sm badge busy" aria-hidden="true">
         <LoaderCircle className="spin" />
-        {state === 'launching' ? t('library.state.launching') : t('library.state.downloading')}
+        {state === 'downloading' && pct ? pct : state === 'launching' ? t('library.state.launching') : t('library.state.downloading')}
       </span>
     )
   if (state === 'updating')
     return (
       <span className="live-chip sm badge quiet" aria-hidden="true">
         <RefreshCw />
-        {t('library.state.updating')}
+        {pct ?? t('library.state.updating')}
       </span>
     )
   return null
 }
 
-function GameCardBase({ game: g, state, session, menuOpen, onPlay, onInstall, onMenu }: Props): React.JSX.Element {
+function GameCardBase({ game: g, state, session, menuOpen, download, onPlay, onInstall, onMenu, onOpen }: Props): React.JSX.Element {
   const { t } = useT()
+  const clickTimer = useRef(0)
+  useEffect(() => () => clearTimeout(clickTimer.current), [])
+  // téléchargement suivi seulement pendant une installation ou une mise à jour par la plateforme
+  const dl = download && (state === 'downloading' || state === 'updating') ? download : null
+  const dlP = dl ? downloadFraction(dl) : 0
+  const pct = dl ? formatPercent(dlP) : null
   const menuAt = (el: HTMLElement, fromButton: boolean): void => {
     const r = el.getBoundingClientRect()
     if (fromButton) onMenu(g, r.left, r.bottom + 4)
@@ -184,9 +202,20 @@ function GameCardBase({ game: g, state, session, menuOpen, onPlay, onInstall, on
       tabIndex={0}
       title={g.name}
       aria-label={label}
-      onDoubleClick={primary}
+      onClick={(e) => {
+        if (e.button !== 0 || e.detail > 1 || e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return
+        clearTimeout(clickTimer.current)
+        clickTimer.current = window.setTimeout(() => onOpen(g), CLICK_WAIT_MS)
+      }}
+      onDoubleClick={() => {
+        clearTimeout(clickTimer.current)
+        // pas d'action principale (jeu lancé, pas installable…) : la page du jeu s'ouvre
+        if (state === 'installable' || state === 'ready' || state === 'updating') primary()
+        else onOpen(g)
+      }}
       onContextMenu={(e) => {
         e.preventDefault()
+        clearTimeout(clickTimer.current)
         onMenu(g, e.clientX, e.clientY)
       }}
       onKeyDown={(e) => {
@@ -194,6 +223,9 @@ function GameCardBase({ game: g, state, session, menuOpen, onPlay, onInstall, on
         if (e.key === 'Enter') {
           e.preventDefault()
           primary()
+        } else if (e.key === ' ' && !e.repeat) {
+          e.preventDefault()
+          onOpen(g)
         } else if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
           e.preventDefault()
           menuAt(e.currentTarget, false)
@@ -201,7 +233,7 @@ function GameCardBase({ game: g, state, session, menuOpen, onPlay, onInstall, on
       }}
     >
       <Cover game={g}>
-        <StateChip state={state} />
+        <StateChip state={state} pct={pct} />
         <button
           type="button"
           className="more"
@@ -227,6 +259,11 @@ function GameCardBase({ game: g, state, session, menuOpen, onPlay, onInstall, on
         >
           <PlatformLogo platform={g.platform} />
         </span>
+        {dl && (
+          <span className={`cov-dl ph-${dl.phase}`} data-testid="card-download-progress" title={downloadTitle(dl)} aria-hidden="true">
+            <i style={{ '--p': percentVar(dlP) } as CSSProperties} />
+          </span>
+        )}
       </Cover>
       <div className="stub">
         <div className="gname">{g.name}</div>
@@ -242,6 +279,13 @@ function GameCardBase({ game: g, state, session, menuOpen, onPlay, onInstall, on
           <div className="gmeta live">
             <span className="t" title={viaName ? t('library.card.startingVia', { platform: viaName }) : t('library.state.launching')}>
               {t('library.state.launching')}
+            </span>
+          </div>
+        ) : dl ? (
+          // « 42,0 % · 18,4 Mo/s » (« 42,0 % · En pause » sans débit) ; tout le détail dans la bulle
+          <div className="gmeta dl">
+            <span className="t" title={downloadTitle(dl)}>
+              {pct} · {dl.phase === 'downloading' && dl.speed > 0 ? formatSpeed(dl.speed) : downloadPhaseLabel(dl)}
             </span>
           </div>
         ) : state === 'downloading' ? (

@@ -187,6 +187,10 @@ export interface SteamAppInfo {
   icon: string | null
   /** chemin de la jaquette portrait (2x de préférence) sous store_item_assets/steam/apps/<appid>/ */
   capsule: string | null
+  /** bandeau de la bibliothèque (library_hero), même dossier ; null si inconnu */
+  hero: string | null
+  /** logo de la bibliothèque (library_logo), même dossier ; null si inconnu */
+  logo: string | null
   launch: SteamLaunchEntry[]
 }
 
@@ -195,11 +199,12 @@ let appInfoCache: { stamp: string; apps: Map<number, SteamAppInfo | null> } | nu
 function toAppInfo(kv: KvMap): SteamAppInfo {
   const common = kvGet(kv, 'appinfo', 'common') as KvMap | undefined
   const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : typeof v === 'number' ? String(v) : null)
-  const capsuleOf = (k: string): string | null => {
-    const node = kvGet(common, 'library_assets_full', 'library_capsule', k) as KvMap | undefined
+  const assetOf = (asset: string, k: string): string | null => {
+    const node = kvGet(common, 'library_assets_full', asset, k) as KvMap | undefined
     if (!node || typeof node !== 'object') return null
     return str(node.english) ?? str(Object.values(node)[0])
   }
+  const capsuleOf = (k: string): string | null => assetOf('library_capsule', k)
   const launchNode = kvGet(kv, 'appinfo', 'config', 'launch')
   const launch: SteamLaunchEntry[] = []
   if (launchNode && typeof launchNode === 'object') {
@@ -223,6 +228,8 @@ function toAppInfo(kv: KvMap): SteamAppInfo {
     parent: Number.isFinite(parent) && parent > 0 ? parent : null,
     icon: str(kvGet(common, 'icon')),
     capsule: capsuleOf('image2x') ?? capsuleOf('image'),
+    hero: assetOf('library_hero', 'image') ?? assetOf('library_hero', 'image2x'),
+    logo: assetOf('library_logo', 'image2x') ?? assetOf('library_logo', 'image'),
     launch
   }
 }

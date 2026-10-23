@@ -9,6 +9,7 @@ import './styles/base.css'
 import './styles/shell.css'
 import './styles/torrents.css'
 import './styles/library.css'
+import './styles/details.css'
 import './styles/dialogs.css'
 
 import { LucideProvider } from 'lucide-react'

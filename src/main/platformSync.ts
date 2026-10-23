@@ -138,6 +138,18 @@ export const protocolAvailable = (scheme: string): boolean => (reg?.ok ? protoco
 
 export const steamAvatarFile = (): string | null => account?.avatarFile ?? null
 
+/** SteamID64 du compte Steam de ce PC (null : pas encore lu, ou aucun compte). */
+export const steamAccountId = (): string | null => account?.steamId ?? null
+
+/**
+ * Clé Web API déchiffrée et SteamID du compte de ce PC, pour la page d'un jeu (succès, amis) ;
+ * null sans clé ou sans compte. La clé ne doit jamais aller dans le journal.
+ */
+export function steamApiCredentials(): { key: string; steamId: string } | null {
+  const key = readKey()
+  return key && account ? { key, steamId: account.steamId } : null
+}
+
 // ---------- État ----------
 
 function steamState(): SteamAccountState {

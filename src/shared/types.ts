@@ -143,6 +143,122 @@ export interface Settings {
 /** Réglages modifiables depuis la fenêtre « Réglages » (le reste est géré par l'app). */
 export type SettingsPatch = Partial<Pick<Settings, 'torrentsEnabled' | 'defaultSavePath' | 'gamesFolder' | 'checkUpdates' | 'language'>>
 
+// ---------- Page détaillée d'un jeu (passe 3) ----------
+
+/**
+ * Lien de la page d'un jeu. Le libellé est traduit par l'interface d'après l'id (le nom de la
+ * plateforme est ajouté pour 'launcher'). Ouvert par openExternalLink : les pages Steam s'ouvrent
+ * dans le client Steam quand il est installé.
+ */
+export type GameLinkId =
+  | 'store' // page du jeu sur la boutique de sa plateforme
+  | 'dlc' // contenus additionnels
+  | 'hub' // centre de la communauté
+  | 'points' // boutique des points
+  | 'discussions'
+  | 'guides'
+  | 'workshop' // seulement si le jeu le propose
+  | 'support'
+  | 'news' // toutes les actualités
+  | 'achievements' // « mes succès » (profil Steam)
+  | 'website' // site officiel du jeu
+  | 'launcher' // ouvrir le jeu dans son lanceur (Epic, GOG Galaxy, Battle.net, Microsoft Store…)
+
+export interface GameLink {
+  id: GameLinkId
+  url: string
+}
+
+export interface GameNewsItem {
+  id: string
+  title: string
+  url: string
+  /** date de publication (ms) */
+  date: number
+  /** type d'actualité tel que donné par la source (« Patch notes », « Community Announcements »…) */
+  feed: string
+  /** début du texte, sans balises, quelques phrases */
+  excerpt: string
+  /** image d'illustration (hôte de IMAGE_HOSTS) ou null */
+  image: string | null
+}
+
+export interface GameAchievement {
+  id: string
+  name: string
+  description: string
+  /** icône (couleur si débloqué, grisée sinon), hôte de IMAGE_HOSTS */
+  icon: string | null
+  achieved: boolean
+  /** date de déblocage (ms) ou null */
+  unlockedAt: number | null
+}
+
+export interface GameFriend {
+  steamid: string
+  name: string
+  avatar: string | null
+}
+
+export interface GameDetails {
+  gameId: string
+  /** appid Steam d'où viennent les infos (jeu Steam, ou jeu d'une autre plateforme trouvé sur Steam) ; 0 si aucun */
+  steamAppId: number
+  /** grande image de fond (bandeau) ; null : l'interface utilise la jaquette floutée */
+  heroUrl: string | null
+  /** logo du jeu (titre dessiné) ; null : l'interface écrit le nom */
+  logoUrl: string | null
+  /** présentation courte, texte brut */
+  description: string | null
+  developers: string[]
+  publishers: string[]
+  /** date de sortie telle que donnée par la source (texte) */
+  releaseDate: string | null
+  genres: string[]
+  links: GameLink[]
+  /** actualités récentes (5 au plus), de la plus récente à la plus ancienne */
+  news: GameNewsItem[]
+  /** null : pas de clé d'API Steam, jeu sans succès, ou plateforme sans succès lisibles */
+  achievements: { unlocked: number; total: number; items: GameAchievement[] } | null
+  /** null : pas de clé d'API Steam ou liste d'amis privée */
+  friends: { playingNow: GameFriend[]; played: GameFriend[]; total: number } | null
+  /** contenus additionnels connus (nom), le plus récent d'abord */
+  dlc: { appid: number; name: string }[]
+  /** d'où viennent la présentation et les images */
+  source: 'steam' | 'wikipedia' | 'none'
+  fetchedAt: number
+  /** problème rencontré (hors ligne…), déjà traduit, ou null */
+  error: string | null
+}
+
+/** Hôtes d'images autorisés dans la fenêtre (CSP img-src) : les autres images ne sont pas renvoyées. */
+export const IMAGE_HOSTS = [
+  'https://*.steamstatic.com',
+  'https://*.akamaihd.net',
+  'https://*.steampowered.com',
+  'https://*.steamusercontent.com',
+  'https://upload.wikimedia.org'
+] as const
+
+/** Téléchargement en cours d'un jeu Steam (lu dans son appmanifest, relevé toutes les 1,5 s). */
+export interface DownloadProgress {
+  gameId: string
+  /** 'installing' : fichiers téléchargés, Steam les écrit (staging) */
+  phase: 'downloading' | 'installing' | 'paused' | 'queued'
+  /** octets téléchargés / à télécharger */
+  downloaded: number
+  total: number
+  /** octets écrits / à écrire (installation) */
+  staged: number
+  toStage: number
+  /** octets/s, moyenne glissante ; 0 si inconnu */
+  speed: number
+  /** secondes restantes estimées ; null si inconnu */
+  eta: number | null
+  /** vitesses des 60 derniers relevés (octets/s), la plus ancienne d'abord (courbe façon Steam) */
+  history: number[]
+}
+
 /** Dernière vérification des mises à jour (Release la plus récente du dépôt GitHub). */
 export interface UpdateState {
   /** 'idle' : pas encore vérifié ; 'available' : une version plus récente est publiée */
@@ -501,4 +617,13 @@ export interface EssaimApi {
   uninstallPlan(id: string): Promise<UninstallPlan>
   /** lance la désinstallation décrite par uninstallPlan ; removeFromList : 'folder' seulement */
   uninstallGame(id: string, removeFromList: boolean): Promise<ActionResult>
+
+  // ---- Page détaillée d'un jeu et téléchargements ----
+  /** infos de la page d'un jeu (cache sur le disque ; refresh : relit tout) */
+  getGameDetails(id: string, refresh?: boolean): Promise<GameDetails>
+  /** téléchargements Steam en cours, par id de jeu */
+  getDownloads(): Promise<Record<string, DownloadProgress>>
+  onDownloads(cb: (d: Record<string, DownloadProgress>) => void): () => void
+  /** ouvre un lien d'une page de jeu (adresses http(s) et protocoles des lanceurs seulement) */
+  openExternalLink(url: string): void
 }

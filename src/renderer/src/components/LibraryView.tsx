@@ -1,8 +1,8 @@
-import { Blocks, Download, FolderInput, FolderOpen, Gamepad2, LoaderCircle, PackageX, Pencil, Play, Plus, Trash2, X } from 'lucide-react'
+import { Blocks, Download, FolderInput, FolderOpen, Gamepad2, Info, LoaderCircle, PackageX, Pencil, Play, Plus, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { gameLastPlayedAt, gamePlayTimeSeconds } from '../../../shared/platforms'
-import type { ActionResult, Game, LibraryState, PlatformsState } from '../../../shared/types'
-import { errorText, formatClock, formatClockText, formatDay, formatPlayTime, formatWhen } from '../format'
+import type { ActionResult, DownloadProgress, Game, LibraryState, PlatformsState } from '../../../shared/types'
+import { errorText, formatClock, formatClockText, formatDay, formatPercent, formatPlayTime, formatWhen } from '../format'
 import { barcodeCSS } from '../fx/barcode'
 import { useCanvasHold } from '../fx/loop'
 import { HERO_MATRIX_FILTER } from '../fx/pixelMatrix'
@@ -24,8 +24,10 @@ import {
 } from '../platformUi'
 import { ContextMenu, type MenuItem } from './ContextMenu'
 import { Cover, coverSrc, ExeIcon } from './Cover'
+import { DownloadPanel, downloadFraction } from './DownloadPanel'
 import { Dust } from './Dust'
 import { GameCard } from './GameCard'
+import { GameDetailView } from './GameDetailView'
 import { ImportDialog } from './ImportDialog'
 import { PixelMatrix } from './PixelMatrix'
 import { PlatformTag } from './PlatformTag'
@@ -42,6 +44,11 @@ import { SearchBox, ViewTitle } from './Toolbar'
 // cartes-billets, menu d'un jeu, bibliothèque vide et recherche sans résultat. Le filtre
 // de plateforme et la fenêtre « Plateformes » sont dans la barre latérale. Sous 760 px de
 // haut, le bandeau tient sur une ligne de 64 px (CSS).
+// Page d'un jeu (passe 3) : clic sur une carte, Espace, « Page du jeu » dans le menu ou clic sur
+// le bandeau ; elle remplace la barre d'outils et la grille (gardées montées, cachées) ; Échap ou
+// « ← Bibliothèque » ramène la grille au même défilement, avec le même filtre et la même recherche.
+// Téléchargements Steam : lus une fois ici (getDownloads + onDownloads) et passés aux cartes, au
+// bandeau et à la page du jeu.
 
 interface Props {
   library: LibraryState
@@ -60,6 +67,8 @@ interface Props {
   onEdit: (game: Game) => void
   onOpenPlatforms: () => void
   onToast: (level: 'info' | 'success' | 'error', message: string, opts?: ToastOptions) => void
+  /** change à chaque clic sur une entrée « Bibliothèque » de la barre latérale : la page d'un jeu se ferme */
+  navKey?: number
 }
 
 type SortMode = 'recent' | 'name'
@@ -137,13 +146,18 @@ interface HeroProps {
   /** heure du clic si le jeu démarre par sa plateforme */
   launchedAt: number | null
   now: number
+  /** téléchargement Steam en cours (installation ou mise à jour) */
+  download: DownloadProgress | null
   onPlay: (game: Game) => void
   onInstall: (game: Game) => void
   onEdit: (game: Game) => void
+  /** ouvre la page du jeu (clic sur le bandeau hors des boutons, ou sur le titre) */
+  onOpen: (game: Game) => void
 }
 
-function Hero({ game: g, state, startedAt, launchedAt, now, onPlay, onInstall, onEdit }: HeroProps): React.JSX.Element {
+function Hero({ game: g, state, startedAt, launchedAt, now, download, onPlay, onInstall, onEdit, onOpen }: HeroProps): React.JSX.Element {
   const { t } = useT()
+  const dl = download && (state === 'downloading' || state === 'updating') ? download : null
   const src = coverSrc(g)
   const live = state === 'running'
   const absent = state === 'installable' || state === 'absent' || state === 'downloading'
@@ -191,6 +205,7 @@ function Hero({ game: g, state, startedAt, launchedAt, now, onPlay, onInstall, o
       >
         <LoaderCircle className="spin" />
         {state === 'launching' ? t('library.state.launching') : t('library.state.downloading')}
+        {state === 'downloading' && dl && <span className="pct">{formatPercent(downloadFraction(dl))}</span>}
       </span>
     )
   else if (state === 'installable')
@@ -228,10 +243,16 @@ function Hero({ game: g, state, startedAt, launchedAt, now, onPlay, onInstall, o
 
   return (
     <section
-      className={`hero${live ? ' live' : ''}${absent ? ' absent' : ''}`}
+      className={`hero openable${live ? ' live' : ''}${absent ? ' absent' : ''}${dl ? ' dl' : ''}`}
       data-testid="library-hero"
       data-state={state}
       aria-label={label}
+      onClick={(e) => {
+        // clic sur le bandeau hors des boutons et du chemin (texte sélectionnable) : page du jeu
+        const el = e.target as HTMLElement
+        if (e.button !== 0 || el.closest('button, a, .hero-path, .dlp')) return
+        onOpen(g)
+      }}
     >
       {src && <PixelMatrix className="hero-px" src={src} cell={6} filter={HERO_MATRIX_FILTER} focus={0.35} />}
       <div className="hero-topo" />
@@ -256,7 +277,9 @@ function Hero({ game: g, state, startedAt, launchedAt, now, onPlay, onInstall, o
             <PlatformTag platform={g.platform} />
           </div>
           <h2 className="hero-title" title={g.name}>
-            <span className="nmx">{g.name}</span>
+            <button type="button" className="nmx hero-open" data-testid="hero-open-details" title={t('library.details.openTitle', { name: g.name })} onClick={() => onOpen(g)}>
+              {g.name}
+            </button>
             <span className="lead" aria-hidden="true" />
           </h2>
         </div>
@@ -291,16 +314,20 @@ function Hero({ game: g, state, startedAt, launchedAt, now, onPlay, onInstall, o
               <span className="lbl">{t('library.common.edit')}</span>
             </button>
           </div>
-          <div className="hero-specs">
-            <div>
-              <span className="cap">{t('library.hero.playTime')}</span>
-              <span className="v">{formatPlayTime(gamePlayTimeSeconds(g) + session)}</span>
+          {dl ? (
+            <DownloadPanel download={dl} update={state === 'updating'} compact />
+          ) : (
+            <div className="hero-specs">
+              <div>
+                <span className="cap">{t('library.hero.playTime')}</span>
+                <span className="v">{formatPlayTime(gamePlayTimeSeconds(g) + session)}</span>
+              </div>
+              <div>
+                <span className="cap">{t('library.hero.addedOn')}</span>
+                <span className="v">{formatDay(g.addedAt)}</span>
+              </div>
             </div>
-            <div>
-              <span className="cap">{t('library.hero.addedOn')}</span>
-              <span className="v">{formatDay(g.addedAt)}</span>
-            </div>
-          </div>
+          )}
           {live && (
             <div className="hero-timer" role="timer" aria-label={t('library.hero.sessionAria', { time: `${h}:${m}:${s}` })}>
               <span className="cap">{t('library.hero.session')}</span>
@@ -336,7 +363,8 @@ export function LibraryView({
   onAdd,
   onEdit,
   onOpenPlatforms,
-  onToast
+  onToast,
+  navKey = 0
 }: Props): React.JSX.Element {
   const { t, tn, locale } = useT()
   const [search, setSearch] = useState('')
@@ -345,15 +373,66 @@ export function LibraryView({
   const [importing, setImporting] = useState(false)
   const [removing, setRemoving] = useState<Game | null>(null)
   const [uninstalling, setUninstalling] = useState<Game | null>(null)
+  /** jeu dont la page est ouverte */
+  const [detailId, setDetailId] = useState<string | null>(null)
+  /** téléchargements Steam en cours, par id de jeu */
+  const [downloads, setDownloads] = useState<Record<string, DownloadProgress>>({})
   const launching = useRef(new Map<string, number>())
   const installing = useRef(new Map<string, number>())
   const toolbarRef = useRef<HTMLDivElement>(null)
   const libRef = useRef<HTMLDivElement>(null)
+  /** défilement de la grille au moment d'ouvrir la page d'un jeu (rendu au retour) */
+  const savedScroll = useRef(0)
 
-  // Autre plateforme ou autre vue : on repart du haut (bandeau compris)
+  // Autre plateforme ou autre vue : la page du jeu se ferme et on repart du haut (bandeau compris)
   useEffect(() => {
+    savedScroll.current = 0
+    setDetailId(null)
     libRef.current?.scrollTo({ top: 0 })
   }, [filter, show])
+  // Entrée « Bibliothèque » de la barre latérale cliquée : retour à la grille (même défilement)
+  useEffect(() => {
+    if (navKey) setDetailId(null)
+  }, [navKey])
+
+  // Téléchargements Steam : état initial puis relevés poussés par le processus principal
+  useEffect(() => {
+    let alive = true
+    let off: (() => void) | undefined
+    try {
+      window.essaim.getDownloads().then(
+        (d) => alive && setDownloads(d ?? {}),
+        () => {}
+      )
+      off = window.essaim.onDownloads((d) => setDownloads(d ?? {}))
+    } catch {
+      /* pont pas encore prêt (ancienne version du preload) */
+    }
+    return () => {
+      alive = false
+      off?.()
+    }
+  }, [])
+
+  const openDetail = useCallback((g: Game) => {
+    savedScroll.current = libRef.current?.scrollTop ?? 0
+    setMenu(null)
+    setDetailId(g.id)
+  }, [])
+  const closeDetail = useCallback(() => setDetailId(null), [])
+
+  // Retour à la grille : même défilement, focus sur la carte du jeu (sans faire défiler)
+  const prevDetail = useRef<string | null>(null)
+  useLayoutEffect(() => {
+    const was = prevDetail.current
+    prevDetail.current = detailId
+    if (detailId !== null || was === null) return
+    const lib = libRef.current
+    if (!lib) return
+    lib.scrollTop = savedScroll.current
+    const card = [...lib.querySelectorAll<HTMLElement>('.gcard')].find((c) => c.dataset.id === was)
+    card?.focus({ preventScroll: true })
+  }, [detailId])
 
   // Dernières props, pour des rappels stables : les cartes mémoïsées ne se
   // redessinent pas à chaque rendu de l'app (une fois par seconde).
@@ -397,7 +476,13 @@ export function LibraryView({
   const heroStart = hero ? (library.running[hero.id] ?? null) : null
   const heroLaunch = hero ? (launchingMap[hero.id] ?? null) : null
   const firstStart = Object.values(library.running)[0] ?? null
-  useSessionTick(heroStart ?? firstStart)
+  const detailGame = detailId ? (library.games.find((g) => g.id === detailId) ?? null) : null
+  const detailStart = detailGame ? (library.running[detailGame.id] ?? null) : null
+  useSessionTick(detailStart ?? heroStart ?? firstStart)
+  // jeu retiré de la bibliothèque pendant que sa page est ouverte : retour à la grille
+  useEffect(() => {
+    if (detailId && !detailGame) setDetailId(null)
+  }, [detailId, detailGame])
   const now = Date.now()
   const today = startOfDay(now)
 
@@ -450,6 +535,7 @@ export function LibraryView({
     const items: (MenuItem | 'sep')[] = []
     if (s === 'installable') items.push({ label: t('library.view.menuInstallSteam'), icon: <Download />, onClick: () => void install(g) })
     else if (s !== 'absent' && s !== 'downloading') items.push({ label: playLabel(g), icon: <Play />, disabled: !canPlayState(s), onClick: () => play(g) })
+    if (detailId !== g.id) items.push({ label: t('library.details.menu'), icon: <Info />, onClick: () => openDetail(g) })
     if (g.platform === 'local' || onThisPc(g))
       items.push({ label: t('library.common.openFolder'), icon: <FolderOpen />, disabled: !gameFolder(g), onClick: () => window.essaim.openGameFolder(g.id) })
     items.push({ label: t('library.common.edit'), icon: <Pencil />, onClick: () => onEdit(g) })
@@ -509,7 +595,7 @@ export function LibraryView({
 
   return (
     <>
-      <div className="toolbar" role="toolbar" aria-label={t('library.view.toolbarAria')} ref={toolbarRef}>
+      <div className="toolbar" role="toolbar" aria-label={t('library.view.toolbarAria')} ref={toolbarRef} hidden={!!detailGame}>
         <ViewTitle cap={t('library.view.cap')} title={title} count={total} />
         <button
           type="button"
@@ -554,7 +640,7 @@ export function LibraryView({
         <SearchBox value={search} onChange={setSearch} placeholder={t('library.view.search')} testId="library-search" disabled={noGames} />
       </div>
 
-      <div className="lib" ref={libRef}>
+      <div className="lib" ref={libRef} hidden={!!detailGame}>
         {noGames ? (
           <div className="empty">
             <Dust className="dust" count={40} bias={0} />
@@ -611,9 +697,11 @@ export function LibraryView({
                 startedAt={heroStart}
                 launchedAt={heroLaunch}
                 now={now}
+                download={downloads[hero.id] ?? null}
                 onPlay={play}
                 onInstall={install}
                 onEdit={edit}
+                onOpen={openDetail}
               />
             )}
             <div className="sect">
@@ -677,9 +765,11 @@ export function LibraryView({
                       session={state === 'running' ? formatClockText((now - started) / 1000) : null}
                       today={today}
                       menuOpen={menu?.id === g.id}
+                      download={downloads[g.id] ?? null}
                       onPlay={play}
                       onInstall={install}
                       onMenu={openMenu}
+                      onOpen={openDetail}
                     />
                   )
                 })}
@@ -722,6 +812,24 @@ export function LibraryView({
           </>
         )}
       </div>
+
+      {detailGame && (
+        <GameDetailView
+          game={detailGame}
+          state={gameState(detailGame, library)}
+          startedAt={detailStart}
+          now={now}
+          download={downloads[detailGame.id] ?? null}
+          platforms={platforms}
+          onBack={closeDetail}
+          onPlay={play}
+          onInstall={install}
+          onEdit={edit}
+          onUninstall={setUninstalling}
+          onMenu={openMenu}
+          onOpenPlatforms={onOpenPlatforms}
+        />
+      )}
 
       {menu && menuGame && <ContextMenu key={`${menu.id},${menu.x},${menu.y}`} x={menu.x} y={menu.y} items={menuItems(menuGame)} onClose={closeMenu} />}
       {importing && <ImportDialog onClose={() => setImporting(false)} onToast={onToast} />}

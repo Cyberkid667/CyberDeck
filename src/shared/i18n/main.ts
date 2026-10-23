@@ -47,6 +47,11 @@ const messages: Messages = {
     'main.trash.failed.one': '{n} file couldn’t be moved to the Recycle Bin.',
     'main.trash.failed.other': '{n} files couldn’t be moved to the Recycle Bin.',
 
+    // ---------- Page détaillée d'un jeu ----------
+    'main.details.offline': 'You’re offline: showing the info saved last time.',
+    'main.details.offlineNoCache': 'You’re offline: this game’s info can’t be loaded right now.',
+    'main.details.failed': 'This game’s info couldn’t be loaded.',
+
     // ---------- Mises à jour (texte placé entre parenthèses par l'interface) ----------
     'main.update.httpStatus': 'GitHub replied {status}',
     'main.update.badVersion': 'unreadable version number',
@@ -195,6 +200,11 @@ const messages: Messages = {
     'main.engine.actionFailed': 'Action impossible : {message}',
     'main.trash.failed.one': '{n} fichier n’a pas pu aller à la corbeille.',
     'main.trash.failed.other': '{n} fichiers n’ont pas pu aller à la corbeille.',
+
+    // ---------- Page détaillée d'un jeu ----------
+    'main.details.offline': 'Hors ligne : voici les infos enregistrées la dernière fois.',
+    'main.details.offlineNoCache': 'Hors ligne : impossible de charger les infos de ce jeu pour l’instant.',
+    'main.details.failed': 'Impossible de charger les infos de ce jeu.',
 
     // ---------- Mises à jour (texte placé entre parenthèses par l'interface) ----------
     'main.update.httpStatus': 'GitHub a répondu {status}',
