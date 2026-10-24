@@ -119,7 +119,7 @@ async function pool<T>(items: T[], limit: number, fn: (item: T) => Promise<void>
 
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', hellip: '…', mdash: '—', ndash: '–', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“' }
 
-function decodeEntities(s: string): string {
+export function decodeEntities(s: string): string {
   return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
     if (e[0] === '#') {
       const code = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)
@@ -130,7 +130,7 @@ function decodeEntities(s: string): string {
 }
 
 /** Texte brut d'un contenu HTML ou BBCode (actualités Steam, présentation de la boutique). */
-function plainText(s: string): string {
+export function plainText(s: string): string {
   return decodeEntities(
     s
       .replace(/\[(img|video|previewyoutube|url=[^\]]*\]\s*\[img)[^\]]*\][\s\S]*?\[\/(img|video|previewyoutube)\]/gi, ' ')
@@ -147,7 +147,7 @@ function plainText(s: string): string {
 }
 
 /** Quelques phrases au plus (coupé sur un mot). */
-function excerpt(s: string, max = 320): string {
+export function excerpt(s: string, max = 320): string {
   if (s.length <= max) return s
   const cut = s.slice(0, max)
   const sentence = cut.lastIndexOf('. ')
@@ -156,7 +156,7 @@ function excerpt(s: string, max = 320): string {
 }
 
 /** Première image d'une actualité ([img]…[/img], [img src="…"], <img src="…">), hôte autorisé. */
-function firstImage(contents: string): string | null {
+export function firstImage(contents: string): string | null {
   const found: string[] = []
   for (const m of contents.matchAll(/\[img(?:\s+src=["']?([^"'\]\s]+)["']?)?[^\]]*\]([^[]*)/gi)) found.push((m[1] || m[2] || '').trim())
   for (const m of contents.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)) found.push(m[1].trim())

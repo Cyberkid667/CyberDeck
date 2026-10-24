@@ -2,7 +2,7 @@
    CyberDeck — base : jetons, règles globales, couches d'effets, défilement
    et primitives partagées (boutons, champs, recherche, bascule, case, étiquettes,
    touches). Repris de la feuille de référence finale (_src/base.css).
-   Ordre d'import : base, shell, torrents, library, dialogs (main.tsx).
+   Ordre d'import : base, shell, torrents, library, details, dialogs, launchers (main.tsx).
    Les icônes Lucide reçoivent toutes la classe « i » (LucideProvider dans main.tsx) :
    leur taille et leur trait viennent UNIQUEMENT de ces feuilles.
    ========================================================================== */
@@ -72,7 +72,7 @@
   --status-h: 28px;
 
   /* tableau des torrents : une seule grille pour groupes, en-tête, lignes, repères */
-  --cols: 44px minmax(220px, 1fr) 84px 232px 100px 96px 104px 88px 80px 64px;
+  --cols: minmax(220px, 1fr) 84px 232px 100px 96px 104px 88px 80px 64px;
   --tpad: 12px;
   --bar-w: 216px;       /* 27 segments de 8 px */
 
@@ -99,7 +99,7 @@
 @media (max-width: 1359px) {
   :root {
     --side-w: 208px;
-    --cols: 28px minmax(150px, 1fr) 70px 196px 84px 78px 92px 74px 66px 44px;
+    --cols: minmax(150px, 1fr) 70px 196px 84px 78px 92px 74px 66px 44px;
     --tpad: 8px;
     --bar-w: 176px;     /* 22 segments de 8 px */
     --details-h: 300px;
@@ -109,7 +109,7 @@
 @media (max-width: 1099px) {
   :root {
     --side-w: 60px;
-    --cols: 28px minmax(140px, 1fr) 70px 180px 84px 78px 92px 74px 66px 44px;
+    --cols: minmax(140px, 1fr) 70px 180px 84px 78px 92px 74px 66px 44px;
     --bar-w: 160px;
   }
 }

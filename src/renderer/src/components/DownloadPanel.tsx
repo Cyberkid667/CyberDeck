@@ -2,13 +2,15 @@ import { Clock, LoaderCircle, Pause } from 'lucide-react'
 import { memo, type CSSProperties } from 'react'
 import { t } from '../../../shared/i18n'
 import type { DownloadProgress } from '../../../shared/types'
-import { formatBytes, formatEta, formatPercent, formatSpeed, percentVar } from '../format'
+import { formatBytes, formatEta, formatPercent, formatSpeed } from '../format'
 import { useT } from '../i18n'
+import { formatClock, LiveBar, useElapsed, type LiveMode } from './LiveProgress'
 
 // Téléchargement d'un jeu Steam, façon page « Téléchargements » de Steam, aux couleurs de l'app :
 // phase (Téléchargement / Installation des fichiers / En pause / En file d'attente), pourcentage,
-// barre segmentée, « 3,50 Go / 5,90 Go », vitesse, temps restant et petit graphique des derniers
-// relevés (barres blanches, la plus récente à droite). Le processus principal relève l'appmanifest
+// barre bleue vivante (LiveBar : rayures qui défilent pendant le travail, balayage bleu et compteur
+// « 0:42 » quand la part faite est inconnue, éteinte en pause), « 3,50 Go / 5,90 Go », vitesse,
+// temps restant et petit graphique des derniers relevés (barres bleues, la plus récente à droite). Le processus principal relève l'appmanifest
 // toutes les 1,5 s : seule la variable --p et la hauteur des barres changent.
 //   compact : version du bandeau de la bibliothèque (une ligne de relevés, petit graphique à droite).
 
@@ -17,6 +19,13 @@ export function downloadFraction(d: DownloadProgress): number {
   if (d.phase === 'installing' && d.toStage > 0) return d.staged / d.toStage
   return d.total > 0 ? d.downloaded / d.total : 0
 }
+
+/** Part faite inconnue : en file d'attente, ou écriture des fichiers sans total connu. */
+export const downloadIndeterminate = (d: DownloadProgress): boolean =>
+  d.phase === 'queued' || (d.phase === 'installing' && d.toStage <= 0) || (d.phase === 'downloading' && d.total <= 0)
+
+/** Allure de la barre selon la phase. */
+export const downloadMode = (d: DownloadProgress): LiveMode => (d.phase === 'paused' ? 'paused' : downloadIndeterminate(d) ? 'ind' : 'active')
 
 /** Libellé de la phase dans la langue en cours. */
 export const downloadPhaseLabel = (d: DownloadProgress): string => t(`library.download.${d.phase}`)
@@ -37,8 +46,6 @@ export function downloadTitle(d: DownloadProgress): string {
   })
 }
 
-const fill = (value: number): CSSProperties => ({ '--p': percentVar(value) }) as CSSProperties
-
 const SLOTS = 60
 
 /** Graphique des vitesses (barres blanches, la plus récente à droite ; cases vides à gauche au début). */
@@ -56,7 +63,7 @@ const SpeedGraph = memo(function SpeedGraph({ history, compact }: { history: num
       </div>
       <div className="dlp-bars" style={{ '--n': slots } as CSSProperties}>
         {Array.from({ length: pad }, (_, i) => (
-          <i key={`p${i}`} className="empty" />
+          <i key={`p${i}`} className="pad" />
         ))}
         {list.map((v, i) => (
           <i
@@ -85,6 +92,9 @@ export function DownloadPanel({ download: d, update = false, compact = false }: 
   const active = d.phase === 'downloading' || d.phase === 'installing'
   const pct = formatPercent(p)
   const speed = active && d.phase === 'downloading' ? d.speed : 0
+  const mode = downloadMode(d)
+  // part inconnue : un compteur montre que ça vit (« En file d'attente · 0:42 »)
+  const elapsed = useElapsed(mode === 'ind' ? `dl:${d.gameId}:${d.phase}` : null)
   return (
     <section
       className={`dlp${compact ? ' compact' : ''} ph-${d.phase}`}
@@ -98,12 +108,16 @@ export function DownloadPanel({ download: d, update = false, compact = false }: 
           <span className="cap st">
             {update && <span className="upd">{t('library.download.update')} · </span>}
             {phase}
+            {mode === 'ind' && (
+              <span className="clock" title={t('library.launchers.elapsed')}>
+                {' · '}
+                {formatClock(elapsed)}
+              </span>
+            )}
           </span>
           <span className="pct">{pct}</span>
         </div>
-        <div className="dlp-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(p * 100)} aria-label={phase}>
-          <i style={fill(p)} />
-        </div>
+        <LiveBar value={p} mode={mode} className="dlp-bar" label={phase} />
         <div className="dlp-stats">
           <div>
             <span className="cap">{d.phase === 'installing' && d.toStage > 0 ? t('library.download.written') : t('library.download.downloaded')}</span>

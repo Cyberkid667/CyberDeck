@@ -1,50 +1,23 @@
-import { useEffect, useLayoutEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { CENTROIDS } from '../../../shared/geoCentroids'
 import type { PeerInfo, TorrentSummary } from '../../../shared/types'
-import { countParts, formatSpeed, shownDownload, splitAddress } from '../format'
-import { createGlobe, peerLatLon, type Globe, type GlobeCallout, type GlobePeer } from '../fx'
+import { formatPercent, formatSpeed, shownDownload, splitAddress } from '../format'
+import { createEarth, type Earth, type EarthPeer } from '../fx/earth'
 import { useT } from '../i18n'
 
-// Plaque du globe des pairs (onglet Pairs, SPEC 5.8) : sphère de points qui tourne,
-// flux vertical du logo, pairs placés par une empreinte de leur adresse (pas une
-// géolocalisation), repères A, B, C reliés aux 3 premières lignes du tableau des pairs.
+// Plaque du globe des pairs (onglet Pairs) : Terre en points qu'on fait tourner (glisser,
+// inertie), zoom à la molette ou au pincement, double-clic pour recentrer, rotation lente
+// quand on n'y touche pas. Chaque pair est placé à son PAYS réel : le moteur le trouve hors
+// ligne dans la table DB-IP livrée avec l'app (main/geoip.ts), aucune adresse ne sort du PC.
+// Survol d'un pair : bulle (pays, client, débits, connexion, adresse masquée) ; clic : le
+// globe se tourne vers lui. Dessin et gestes : fx/earth.ts.
 //
-// Le globe est créé UNE fois (à la première ouverture de l'onglet, pour mesurer la
-// plaque), puis seulement mis à jour : setPeers / setCallouts / set('streamRate').
-// La boucle (30 images/s au plus) s'arrête quand l'onglet est caché, la plaque hors
-// de l'écran, la fenêtre cachée, un dialogue ouvert, ou quand il n'y a aucun pair.
-//
-// Les particules et les tirets du flux avancent en « temps × vitesse » : une vitesse
-// qui change d'une seconde à l'autre les ferait sauter. Les poids des pairs (pas de
-// 0,2) et la vitesse du flux (quelques paliers) ne changent donc qu'au-delà d'un
-// petit écart, et les pairs sont passés au globe dans un ordre stable (par adresse).
+// Le globe est créé UNE fois (à la première ouverture de l'onglet, pour mesurer la plaque),
+// puis seulement mis à jour (setPeers). Sa boucle s'arrête quand l'onglet est caché, la
+// plaque hors de l'écran, la fenêtre cachée ou un dialogue ouvert, et quand rien ne bouge.
 
-const MIB = 1024 * 1024
-/** Paliers de vitesse du flux : clamp(réception / 8 Mio/s, 0,15, 2,5) arrondi au palier le plus proche. */
-const RATE_LEVELS = [0.15, 0.25, 0.4, 0.6, 1, 1.6, 2.5]
-/**
- * Repères des 3 pairs les plus rapides. La lettre suit le pair ; la place de l'étiquette
- * (à gauche, à droite en haut ou en bas) est choisie par le globe selon la position du
- * pair sur la sphère (attribut data-slot, voir fx/globe.ts et torrents.css).
- */
-const MARKS = ['A', 'B', 'C'] as const
-/** Valeur jamais égale à une signature : force l'envoi des repères au globe. */
-const RESEND = '\u0000'
-
-/** Vitesse du flux : 0 sans réception (pas de tirets) ; on garde le palier tant que l'écart reste sous 30 %. */
-function streamRateFor(prev: number, down: number): number {
-  if (!(down >= 1)) return 0
-  const raw = Math.min(2.5, Math.max(0.15, down / (8 * MIB)))
-  if (prev > 0 && raw >= prev / 1.3 && raw <= prev * 1.3) return prev
-  let best = RATE_LEVELS[0]
-  for (const l of RATE_LEVELS) if (Math.abs(Math.log(l / raw)) < Math.abs(Math.log(best / raw))) best = l
-  return best
-}
-
-/** Poids d'un pair au pas de 0,2 ; l'ancienne valeur reste tant que l'écart est faible (pas de clignotement). */
-function weightFor(raw: number, prev: number | undefined): number {
-  if (prev !== undefined && Math.abs(raw - prev) < 0.14) return prev
-  return Math.round(Math.max(0, Math.min(1, raw)) * 5) / 5
-}
+/** échange en cours au-delà de 512 o/s (réception ou émission) : le point pulse */
+const ACTIVE = 512
 
 /** Clé stable d'un pair (adresse, numérotée si deux pairs partagent la même). */
 function keyed(peers: PeerInfo[]): { p: PeerInfo; key: string }[] {
@@ -56,98 +29,144 @@ function keyed(peers: PeerInfo[]): { p: PeerInfo; key: string }[] {
   })
 }
 
-/** Ligne « ↓ 3,82 Mo/s » d'une étiquette (« ↑ » pour un pair qui ne fait que recevoir). */
-function rateLine(p: PeerInfo | undefined): string {
-  if (!p) return ''
-  if (p.downloadSpeed >= 1) return `↓ ${formatSpeed(p.downloadSpeed)}`
-  if (p.uploadSpeed >= 1) return `↑ ${formatSpeed(p.uploadSpeed)}`
-  return '↓ —'
+/** Poids d'un pair au pas de 0,1 ; l'ancienne valeur reste tant que l'écart est faible (pas de clignotement). */
+function weightFor(raw: number, prev: number | undefined): number {
+  if (prev !== undefined && Math.abs(raw - prev) < 0.08) return prev
+  return Math.round(Math.max(0, Math.min(1, raw)) * 10) / 10
 }
 
-function Count({ n, total }: { n: number; total: number | null }): React.JSX.Element {
-  const c = countParts(n, total)
-  return (
-    <>
-      {c.n}
-      {c.total && <span className="tot">{c.total}</span>}
-    </>
-  )
+/** Adresse masquée pour la bulle : « 81.23.x.x », « 2a01:e0a:x:x:… ». */
+export function maskedAddress(address: string): string {
+  const { host } = splitAddress(address)
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(host)
+  if (v4) return `${v4[1]}.${v4[2]}.x.x`
+  const bare = host.replace(/^\[|\]$/g, '')
+  if (bare.includes(':')) {
+    const groups = bare.split(':').filter(Boolean)
+    return `${groups.slice(0, 2).join(':')}:x:x:…`
+  }
+  return '—'
 }
+
+// ---------- Pays de l'utilisateur (repère « vous ») : langue puis fuseau du système, sans réseau ----------
+
+/** Quelques fuseaux courants → pays, quand la langue du système ne donne pas de région. */
+const TZ_COUNTRY: Record<string, string> = {
+  'Europe/Paris': 'FR', 'Europe/Brussels': 'BE', 'Europe/Zurich': 'CH', 'Europe/Luxembourg': 'LU', 'Europe/Monaco': 'MC',
+  'Europe/London': 'GB', 'Europe/Dublin': 'IE', 'Europe/Berlin': 'DE', 'Europe/Vienna': 'AT', 'Europe/Madrid': 'ES',
+  'Europe/Lisbon': 'PT', 'Europe/Rome': 'IT', 'Europe/Amsterdam': 'NL', 'Europe/Stockholm': 'SE', 'Europe/Oslo': 'NO',
+  'Europe/Copenhagen': 'DK', 'Europe/Helsinki': 'FI', 'Europe/Warsaw': 'PL', 'Europe/Prague': 'CZ', 'Europe/Budapest': 'HU',
+  'Europe/Athens': 'GR', 'Europe/Bucharest': 'RO', 'Europe/Kyiv': 'UA', 'Europe/Kiev': 'UA', 'Europe/Moscow': 'RU',
+  'Europe/Istanbul': 'TR', 'America/New_York': 'US', 'America/Chicago': 'US', 'America/Denver': 'US', 'America/Phoenix': 'US',
+  'America/Los_Angeles': 'US', 'America/Anchorage': 'US', 'Pacific/Honolulu': 'US', 'America/Toronto': 'CA',
+  'America/Montreal': 'CA', 'America/Vancouver': 'CA', 'America/Mexico_City': 'MX', 'America/Sao_Paulo': 'BR',
+  'America/Argentina/Buenos_Aires': 'AR', 'America/Bogota': 'CO', 'America/Lima': 'PE', 'America/Santiago': 'CL',
+  'Africa/Casablanca': 'MA', 'Africa/Algiers': 'DZ', 'Africa/Tunis': 'TN', 'Africa/Dakar': 'SN', 'Africa/Abidjan': 'CI',
+  'Africa/Lagos': 'NG', 'Africa/Cairo': 'EG', 'Africa/Johannesburg': 'ZA', 'Africa/Nairobi': 'KE', 'Asia/Tokyo': 'JP',
+  'Asia/Seoul': 'KR', 'Asia/Shanghai': 'CN', 'Asia/Hong_Kong': 'HK', 'Asia/Taipei': 'TW', 'Asia/Singapore': 'SG',
+  'Asia/Kolkata': 'IN', 'Asia/Calcutta': 'IN', 'Asia/Dubai': 'AE', 'Asia/Jakarta': 'ID', 'Asia/Bangkok': 'TH',
+  'Asia/Manila': 'PH', 'Asia/Ho_Chi_Minh': 'VN', 'Australia/Sydney': 'AU', 'Australia/Melbourne': 'AU',
+  'Australia/Perth': 'AU', 'Pacific/Auckland': 'NZ', 'Indian/Reunion': 'RE', 'America/Martinique': 'MQ',
+  'America/Guadeloupe': 'GP', 'America/Cayenne': 'GF', 'Pacific/Noumea': 'NC', 'Pacific/Tahiti': 'PF'
+}
+
+function homeCountry(): string | null {
+  try {
+    for (const l of navigator.languages ?? [navigator.language]) {
+      const region = new Intl.Locale(l).region
+      if (region && CENTROIDS[region]) return region
+    }
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+    const cc = TZ_COUNTRY[tz]
+    if (cc && CENTROIDS[cc]) return cc
+  } catch {
+    /* langue ou fuseau illisible : pas de repère « vous » */
+  }
+  return null
+}
+
+/** Nom du pays dans la langue de l'interface (« France », « Allemagne »), sinon le code. */
+const namesCache = new Map<string, Intl.DisplayNames | null>()
+export function countryName(cc: string, loc: string): string {
+  let dn = namesCache.get(loc)
+  if (dn === undefined) {
+    try {
+      dn = new Intl.DisplayNames([loc], { type: 'region' })
+    } catch {
+      dn = null
+    }
+    namesCache.set(loc, dn)
+  }
+  try {
+    return dn?.of(cc) ?? cc
+  } catch {
+    return cc
+  }
+}
+
+/** « uTP entrant » → « uTP · entrant ». */
+const connection = (c: string): string => c.replace(/^(uTP|TCP) /, '$1 · ')
 
 interface Props {
   torrent: TorrentSummary | null
-  /** pairs triés par débit total décroissant : le même ordre que le tableau (A, B, C = 3 premières lignes) */
+  /** pairs triés par débit total décroissant (même ordre que le tableau) */
   peers: PeerInfo[]
   /** onglet Pairs affiché avec des données : sinon la boucle est figée */
   active: boolean
 }
 
 export function PeerGlobe({ torrent, peers, active }: Props): React.JSX.Element {
-  const { t, tn } = useT()
+  const { t, tn, locale } = useT()
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const calloutRefs = useRef<(HTMLDivElement | null)[]>([])
-  const globe = useRef<Globe | null>(null)
-  const sent = useRef({ peers: '', callouts: '', rate: -1 })
+  const tipRef = useRef<HTMLDivElement>(null)
+  const earth = useRef<Earth | null>(null)
   const weights = useRef(new Map<string, number>())
+  const [hoverKey, setHoverKey] = useState<string | null>(null)
+  const home = useMemo(homeCountry, [])
+  const youLabel = t('shell.globe.you')
 
-  // Création, à la première ouverture de l'onglet (plaque mesurable : nombre de points « auto »).
+  // Création, à la première ouverture de l'onglet (plaque mesurable).
   useLayoutEffect(() => {
-    if (!active || globe.current || !canvasRef.current) return
-    globe.current = createGlobe(canvasRef.current, { dots: 'auto', idleWhenEmpty: true })
-    sent.current = { peers: '', callouts: RESEND, rate: -1 }
-  }, [active])
-
-  // Mise à jour à chaque instantané (sur le même globe), seulement quand quelque chose change.
-  useLayoutEffect(() => {
-    const g = globe.current
-    if (!g) return
-    const top = keyed(peers.slice(0, 200))
-    const byKey = [...top].sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
-    let maxDown = 0
-    let maxUp = 0
-    for (const { p } of top) {
-      maxDown = Math.max(maxDown, p.downloadSpeed)
-      maxUp = Math.max(maxUp, p.uploadSpeed)
-    }
-    const nextWeights = new Map<string, number>()
-    const list: GlobePeer[] = byKey.map(({ p, key }) => {
-      // pair qui ne fait que recevoir de nous : poids d'après l'émission (particules grises vers lui)
-      const up = p.downloadSpeed < 1 && p.uploadSpeed >= 1
-      const raw = up ? p.uploadSpeed / (maxUp || 1) : p.downloadSpeed / (maxDown || 1)
-      const w = weightFor(raw, weights.current.get(key))
-      nextWeights.set(key, w)
-      return { ...peerLatLon(p.address === '—' ? key : p.address), w, seed: p.isSeeder, up }
+    if (!active || earth.current || !canvasRef.current) return
+    const c = home ? CENTROIDS[home] : null
+    earth.current = createEarth(canvasRef.current, {
+      onHover: setHoverKey,
+      tooltip: tipRef.current,
+      home: c ? { lat: c[0], lon: c[1] } : null,
+      homeLabel: youLabel
     })
-    weights.current = nextWeights
-    const peersSig = byKey.map(({ key }, i) => `${key}|${list[i].w}|${list[i].seed ? 1 : 0}${list[i].up ? 1 : 0}`).join(';')
-    if (peersSig !== sent.current.peers) {
-      g.setPeers(list)
-      sent.current.peers = peersSig
-      // les index ont pu changer : les repères sont toujours renvoyés après une nouvelle liste
-      sent.current.callouts = RESEND
+  }, [active, home, youLabel])
+
+  // libellé « vous » dans la langue de l'interface
+  useEffect(() => {
+    const c = home ? CENTROIDS[home] : null
+    earth.current?.setHome(c ? { lat: c[0], lon: c[1] } : null, youLabel)
+  }, [home, youLabel])
+
+  const list = useMemo(() => keyed(peers.slice(0, 300)), [peers])
+
+  // Pairs du globe à chaque instantané : seuls ceux qui ont un lieu (pays connu).
+  useLayoutEffect(() => {
+    const g = earth.current
+    if (!g) return
+    let max = 0
+    for (const { p } of list) max = Math.max(max, p.downloadSpeed + p.uploadSpeed)
+    const next = new Map<string, number>()
+    const out: EarthPeer[] = []
+    for (const { p, key } of list) {
+      if (p.lat === undefined || p.lon === undefined) continue
+      const rate = p.downloadSpeed + p.uploadSpeed
+      const w = weightFor(max > 0 ? Math.sqrt(rate / max) : 0, weights.current.get(key))
+      next.set(key, w)
+      out.push({ key, lat: p.lat, lon: p.lon, w, seed: p.isSeeder, active: rate >= ACTIVE, up: p.uploadSpeed > p.downloadSpeed })
     }
-    // repères A, B, C : les 3 premiers pairs du tableau, retrouvés dans la liste du globe
-    const marks = top.slice(0, 3).map(({ p }) => byKey.findIndex((x) => x.p === p))
-    const calloutSig = marks.join(',')
-    if (calloutSig !== sent.current.callouts) {
-      const list2: GlobeCallout[] = []
-      marks.forEach((peer, i) => {
-        const el = calloutRefs.current[i]
-        if (el && peer >= 0) list2.push({ peer, el, label: MARKS[i] })
-      })
-      g.setCallouts(list2)
-      sent.current.callouts = calloutSig
-    }
-    const rate = streamRateFor(sent.current.rate, torrent ? shownDownload(torrent) : 0)
-    if (rate !== sent.current.rate) {
-      g.set('streamRate', rate)
-      sent.current.rate = rate
-    }
-  })
+    weights.current = next
+    g.setPeers(out)
+  }, [list, active])
 
   // Onglet caché ou détails en route : image figée, aucune boucle.
   useLayoutEffect(() => {
-    const g = globe.current
+    const g = earth.current
     if (!g) return
     g.hold(!active, 'tab')
     if (active) g.relayout()
@@ -155,8 +174,8 @@ export function PeerGlobe({ torrent, peers, active }: Props): React.JSX.Element 
 
   useEffect(
     () => () => {
-      globe.current?.stop()
-      globe.current = null
+      earth.current?.stop()
+      earth.current = null
     },
     []
   )
@@ -166,21 +185,31 @@ export function PeerGlobe({ torrent, peers, active }: Props): React.JSX.Element 
   let utp = 0
   let tcp = 0
   let other = 0
+  const countries = new Set<string>()
   for (const p of peers) {
     if (p.connection.startsWith('uTP')) utp++
     else if (p.connection.startsWith('TCP')) tcp++
     else other++
+    if (p.country) countries.add(p.country)
   }
-  // torrent complet : réception résiduelle du protocole affichée « — » (flux sans tirets)
+  // torrent complet : réception résiduelle du protocole affichée « — »
   const down = torrent ? shownDownload(torrent) : 0
+  const hovered = hoverKey ? list.find((x) => x.key === hoverKey)?.p : undefined
 
   return (
     <div className={`plate${idle ? ' idle' : ''}`} data-testid="peer-globe">
-      <canvas ref={canvasRef} role="img" aria-label={tn('shell.globe.label', n)} />
+      <canvas
+        ref={canvasRef}
+        data-testid="globe-canvas"
+        tabIndex={0}
+        role="img"
+        aria-label={`${tn('shell.globe.label', n)}. ${t('shell.globe.keys')}`}
+      />
       <div className="frame brackets" />
       <div className="corner c-tl">
         <span className="cap">{t('shell.globe.swarm')}</span>
         <span className="v">{tn('shell.globe.connected', n)}</span>
+        {countries.size > 0 && <span className="v sub">{tn('shell.globe.countries', countries.size)}</span>}
       </div>
       <div className="corner c-tr">
         <span className="cap">↓ {t('shell.globe.download')}</span>
@@ -189,8 +218,7 @@ export function PeerGlobe({ torrent, peers, active }: Props): React.JSX.Element 
       <div className="corner c-bl">
         <span className="cap">{t('shell.globe.seedsPeers')}</span>
         <span className="v">
-          <Count n={torrent?.seeds ?? 0} total={torrent?.seedsTotal ?? null} /> ·{' '}
-          <Count n={torrent?.peers ?? 0} total={torrent?.peersTotal ?? null} />
+          {tn('shell.globe.seeds', torrent?.seeds ?? 0)} · {tn('shell.globe.peers', torrent?.peers ?? 0)}
         </span>
       </div>
       <div className="corner c-br">
@@ -200,35 +228,37 @@ export function PeerGlobe({ torrent, peers, active }: Props): React.JSX.Element 
           {other > 0 && ` · Web ${other}`}
         </span>
       </div>
-      <div className="schem cap" title={t('shell.globe.schematicTitle')}>
-        {t('shell.globe.schematic')}
-      </div>
-      {MARKS.map((label, i) => {
-        const p = peers[i]
-        const a = p ? splitAddress(p.address) : { host: '', port: '' }
-        return (
-          // data-slot (place de l'étiquette) est écrit par le globe, jamais par React
-          <div
-            key={label}
-            ref={(el) => {
-              calloutRefs.current[i] = el
-            }}
-            className="callout"
-            hidden={!p}
-          >
-            {/* adresse puis lettre ; à droite, la ligne s'inverse (CSS) : la lettre reste du côté de la sphère */}
-            <div className="k">
-              <span className="ad" title={p?.address}>
-                {p?.address === '—' ? <span className="nil">—</span> : a.host}
-                <span className="port">{a.port}</span>
-              </span>
-              <span className="mk">{label}</span>
+      {!idle && (
+        <div className="globe-foot">
+          <span className="hint">{t('shell.globe.hint')}</span>
+          <span className="attr" title={t('shell.globe.attributionTitle')}>
+            {t('shell.globe.attribution')}
+          </span>
+        </div>
+      )}
+      {/* bulle du pair survolé : position (--x, --y, data-side) écrite par le globe à chaque image */}
+      <div className="globe-tip" ref={tipRef} data-testid="globe-tooltip" hidden={!hovered} aria-live="polite">
+        {hovered && (
+          <div className="tip-in">
+            <div className="tip-h">
+              {hovered.country && <span className="cc">{hovered.country}</span>}
+              <span className="nm">{hovered.country ? countryName(hovered.country, locale) : t('shell.globe.unknownCountry')}</span>
             </div>
-            <div className="s">{rateLine(p)}</div>
-            <div className="s">{p?.client}</div>
+            <div className="tip-r cl">{hovered.client}</div>
+            <div className="tip-r">
+              <span className={hovered.downloadSpeed >= 1 ? 'hi' : ''}>↓ {hovered.downloadSpeed >= 1 ? formatSpeed(hovered.downloadSpeed) : '—'}</span>
+              <span className="sep">·</span>
+              <span className={hovered.uploadSpeed >= 1 ? 'hi' : ''}>↑ {hovered.uploadSpeed >= 1 ? formatSpeed(hovered.uploadSpeed) : '—'}</span>
+            </div>
+            <div className="tip-r">
+              {connection(hovered.connection)}
+              <span className="sep">·</span>
+              {hovered.isSeeder ? t('shell.globe.tip.seed') : t('shell.globe.tip.peer', { p: formatPercent(hovered.progress) })}
+            </div>
+            <div className="tip-r ip">{maskedAddress(hovered.address)}</div>
           </div>
-        )
-      })}
+        )}
+      </div>
       {idle && (
         <div className="plate-empty">
           <span className="cap">{t('shell.globe.empty')}</span>

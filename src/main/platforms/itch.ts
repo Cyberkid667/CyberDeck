@@ -2,16 +2,51 @@
 // (copie temporaire, node:sqlite intégré). La table profiles (jeton du compte)
 // n'est jamais lue. Pas d'adresse publique pour lancer un jeu : le programme du
 // jeu est lancé directement (comme le fait l'application itch).
+import fs from 'node:fs'
 import path from 'node:path'
 import type { PlatformScan, ScanContext } from './types'
 import { withSqliteCopy, tableColumns } from './sqlite'
 import { t } from '../../shared/i18n'
 import { cleanDir, cleanTitle, isDir, isFile, largestExeSync, localAppData, normDir, roamingAppData, skip } from './util'
 
+/**
+ * Programme d'itch dans son dossier d'installation. Ancienne version : itch.exe à la racine ;
+ * version actuelle (programme d'installation « itch-setup ») : app-<version>\itch.exe, la version
+ * en cours étant notée dans state.json, et itch-setup.exe à la racine.
+ */
+function itchExeIn(dir: string): string | null {
+  const root = path.join(dir, 'itch.exe')
+  if (isFile(root)) return root
+  let current: string | null = null
+  try {
+    const st = JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8')) as { current?: unknown }
+    current = typeof st.current === 'string' && st.current ? st.current : null
+  } catch {
+    // pas de state.json : on cherche le dossier app-* le plus récent
+  }
+  const versions: string[] = []
+  try {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) if (e.isDirectory() && /^app-\d/i.test(e.name)) versions.push(e.name)
+  } catch {
+    return null
+  }
+  versions.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+  for (const v of current ? [`app-${current}`, ...versions] : versions) {
+    const exe = path.join(dir, v, 'itch.exe')
+    if (isFile(exe)) return exe
+  }
+  const setup = path.join(dir, 'itch-setup.exe')
+  return isFile(setup) ? setup : null
+}
+
 export function itchClient(ctx: ScanContext): string | null {
   const entry = ctx.reg.uninstall.find((e) => e.view === 'HKCU' && /^itch$/i.test(e.name.trim()))
-  const candidates = [entry?.location ? path.join(cleanDir(entry.location), 'itch.exe') : null, path.join(localAppData(), 'itch', 'itch.exe')]
-  for (const c of candidates) if (isFile(c)) return c
+  const dirs = [entry?.location ? cleanDir(entry.location) : null, path.join(localAppData(), 'itch')]
+  for (const d of dirs) {
+    if (!d || !isDir(d)) continue
+    const exe = itchExeIn(d)
+    if (exe) return exe
+  }
   return null
 }
 

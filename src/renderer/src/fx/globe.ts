@@ -1,4 +1,5 @@
-// Globe des pairs (onglet Pairs) et sphère du billet « Lecture du lien » (mode scan).
+// Sphère du billet « Lecture du lien » (mode scan, AddDialog). L'ancien globe schématique de
+// l'onglet Pairs (repères A, B, C) est remplacé par le globe interactif de earth.ts.
 // Canvas 2D, 30 images/s au plus, ≈ 0,4 ms par image : points regroupés en
 // 10 niveaux de gris (10 changements de couleur par image), halos en image
 // pré-calculée, jamais de shadowBlur. Voir SPEC 5.8.

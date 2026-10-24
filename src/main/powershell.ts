@@ -23,6 +23,8 @@ export const PS_RESTRICTED_CHECK = `if ($ExecutionContext.SessionState.LanguageM
 // guillemets, de crochets ou d'esperluettes dans les noms de dossiers.
 // Peut lever une exception (lancement refusé par Windows) : runPs la transforme en code -1.
 export function startPs(script: string, env: Record<string, string> = {}): ChildProcess {
+  // hors Windows (Linux) : jamais de powershell.exe ; les appelants ont leur propre chemin
+  if (process.platform !== 'win32') throw new Error('PowerShell is only used on Windows')
   const encoded = Buffer.from(script, 'utf16le').toString('base64')
   return spawn(POWERSHELL, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], {
     env: { ...process.env, ...env },

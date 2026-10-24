@@ -30,6 +30,8 @@ export interface Loop {
   hold(on: boolean, reason?: string): void
   /** Arrête et libère tout (observateurs, écouteurs). */
   stop(): void
+  /** Change la cadence (images par seconde) ; prend effet à l'image suivante. */
+  setFps(fps: number): void
   /** true tant que la boucle tourne. */
   readonly running: boolean
 }
@@ -61,7 +63,7 @@ export function useCanvasHold(active = true): void {
 
 export function createLoop(el: Element, fps: number, draw: DrawFn, opts: LoopOptions = {}): Loop {
   const holdable = opts.holdable !== false
-  const step = 1000 / fps
+  let step = 1000 / fps
   const holds = new Set<string>()
   let raf = 0
   let timer = 0
@@ -144,6 +146,9 @@ export function createLoop(el: Element, fps: number, draw: DrawFn, opts: LoopOpt
       document.removeEventListener('visibilitychange', onVisibility)
       offReduced()
       REFRESH.delete(refresh)
+    },
+    setFps(n) {
+      step = 1000 / Math.max(1, n)
     },
     get running() {
       return running

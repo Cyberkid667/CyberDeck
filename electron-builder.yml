@@ -11,6 +11,8 @@ directories:
 files:
   - out/**/*
   - package.json
+  # crédits des données livrées (DB-IP, CC BY 4.0 ; Natural Earth)
+  - ATTRIBUTION.md
 # Les modules natifs (uTP, WebRTC) sont livrés précompilés en N-API :
 # pas besoin de les recompiler pour Electron.
 npmRebuild: false
@@ -30,3 +32,18 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: CyberDeck
   deleteAppDataOnUninstall: false
+# Linux (Steam et jeux locaux seulement, voir README) : construit par .github/workflows/linux.yml
+# sur ubuntu-latest, où `npm ci` installe les modules natifs précompilés pour Linux.
+linux:
+  icon: build/icon.png
+  category: Game
+  maintainer: Cyberkid667
+  vendor: Cyberkid667
+  synopsis: Unified game library for Steam
+  executableName: cyberdeck
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: tar.gz
+      arch: [x64]
+  artifactName: CyberDeck-${version}-x86_64.${ext}

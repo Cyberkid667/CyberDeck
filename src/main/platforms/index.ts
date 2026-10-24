@@ -2,7 +2,7 @@
 // (PowerShell) puis chaque plateforme lue à part. Une plateforme qui plante
 // n'empêche pas les autres ; ses jeux ne sont alors pas marqués désinstallés.
 import type { LauncherPlatform } from '../../shared/types'
-import { PLATFORM_ORDER } from '../../shared/platforms'
+import { platformsFor } from '../../shared/platforms'
 import { scanAmazon } from './amazon'
 import { scanBattlenet } from './battlenet'
 import { scanEa } from './ea'
@@ -34,7 +34,9 @@ export interface ScanOptions {
 }
 
 export async function scanPlatforms(opts: ScanOptions): Promise<{ reg: RegistrySnapshot; scans: PlatformScan[] }> {
-  const wanted = opts.only?.length ? PLATFORM_ORDER.filter((p) => opts.only!.includes(p)) : PLATFORM_ORDER
+  // Linux : Steam seul (les autres lanceurs n'existent que sous Windows)
+  const supported = platformsFor(process.platform)
+  const wanted = opts.only?.length ? supported.filter((p) => opts.only!.includes(p)) : supported
   const needAppx = wanted.includes('xbox')
   let reg = opts.reg ?? null
   if (!reg || (needAppx && reg.appx === null && reg.ok)) reg = await takeSnapshot(undefined, true)

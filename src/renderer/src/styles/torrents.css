@@ -50,8 +50,6 @@
 .tr { scroll-margin-top: calc(var(--groups-h) + var(--thead-h)); scroll-margin-bottom: var(--tfoot-h); }
 .td { padding: 0 8px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: 400 12px/1 var(--font-mono); color: var(--tx-2); }
 .td.r { text-align: right; }
-.td.idx { color: var(--tx-3); font-size: 11px; }
-.tr.focus .td.idx, .tr.sel .td.idx { color: var(--tx-2); }
 .td.name { display: flex; align-items: center; gap: 10px; overflow: hidden; }
 .nm { font: 450 13.5px/1.2 var(--font-sans); color: var(--tx-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; letter-spacing: -0.003em; }
 .nm.dim { color: var(--tx-2); }                                  /* en pause, recherche des infos */
@@ -195,33 +193,38 @@
 .c-bl { left: 22px; bottom: 18px; }
 .c-br { right: 22px; bottom: 18px; text-align: right; align-items: flex-end; }
 .c-br .cap { color: var(--tx-3); }
-.callout { position: absolute; display: flex; flex-direction: column; gap: 4px; pointer-events: none; transition: opacity .3s; }
-.callout .k { display: flex; align-items: center; gap: 7px; font: 500 11px/1 var(--font-mono); color: var(--tx-1); white-space: nowrap; }
-.callout .s { font: 400 10px/1.2 var(--font-mono); color: var(--tx-3); white-space: nowrap; letter-spacing: .02em; }
-.callout .ad { min-width: 0; max-width: 190px; overflow: hidden; text-overflow: ellipsis; }   /* IPv6 longue : coupée */
-/* Places des étiquettes A, B, C : choisies par le globe d'après la position projetée du pair
-   (data-slot, voir fx/globe.ts) : à gauche à 30 % de la hauteur, à droite à 24 % et à 56 %.
-   Chaque ligne garde sa propre largeur : le trait de rappel part toujours du cercle lettré,
-   placé du côté de la sphère (à droite, la ligne .k s'inverse). */
-.callout:not([data-slot]) { visibility: hidden; }
-.callout[data-slot="l"] { left: 22px; top: 30%; align-items: flex-start; }
-.callout[data-slot="rt"], .callout[data-slot="rb"] { right: 22px; align-items: flex-end; text-align: right; }
-.callout[data-slot="rt"] { top: 24%; }
-.callout[data-slot="rb"] { top: 56%; }
-.callout[data-slot="rt"] .k, .callout[data-slot="rb"] .k { flex-direction: row-reverse; }
-/* Lignes 2 et 3 (débit, client) : jamais sur la sphère. Place libre entre le bord de la plaque
-   et la sphère : 50 % de la largeur − rayon (≈ 36 % de la hauteur) − marges ; 210 px au plus. */
-.callout .s { max-width: max(60px, min(210px, calc(50cqw - 36cqh - 30px))); overflow: hidden; text-overflow: ellipsis; }
-/* Repère lettré A / B / C : lettre de 10 px dans un cercle de 16 px (lien entre le globe et le tableau) */
-.mk { width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(255,255,255,.75); display: inline-grid; place-items: center; font: 500 10px/1 var(--font-mono); color: var(--tx-1); flex: none; }
-.schem { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); white-space: nowrap; pointer-events: auto; cursor: help; }
-.plate-empty { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center; white-space: nowrap; font: 400 12px/1.4 var(--font-sans); color: var(--tx-3); pointer-events: none; }
-.plate.idle .schem { display: none; }
+.corner .v.sub { font-size: 10.5px; color: var(--tx-3); }
+/* le globe zoomé passe sous les coins : un léger halo sombre garde les textes lisibles */
+.plate .corner, .globe-foot { text-shadow: 0 0 3px #000, 0 0 8px #000, 0 0 14px #000; }
+/* Globe interactif (fx/earth.ts) : le canevas reçoit les gestes et le focus clavier */
+.plate canvas:focus { outline: none; }
+.plate canvas:focus-visible { outline: 1px dashed rgba(255,255,255,.35); outline-offset: -14px; }
+/* Pied : aide des gestes + crédit DB-IP (licence CC BY 4.0), entre les coins du bas */
+.globe-foot { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; white-space: nowrap; pointer-events: none; }
+.globe-foot .hint { font: 400 10px/1 var(--font-mono); letter-spacing: .04em; color: var(--tx-3); opacity: 0; transition: opacity .3s; }
+.plate:hover .globe-foot .hint, .plate:focus-within .globe-foot .hint { opacity: 1; }
+.globe-foot .attr { font: 400 9.5px/1 var(--font-mono); letter-spacing: .04em; color: var(--tx-4); pointer-events: auto; cursor: help; }
+/* Bulle du pair survolé : le globe écrit --x / --y (point d'ancrage) et data-side (l / r) */
+.globe-tip { position: absolute; left: 0; top: 0; transform: translate(var(--x, -999px), var(--y, -999px)); pointer-events: none; z-index: 2; }
+.globe-tip .tip-in { position: absolute; left: 0; top: 0; transform: translate(0, -50%); min-width: 150px; max-width: 250px; padding: 9px 11px 10px;
+  display: flex; flex-direction: column; gap: 5px; background: rgba(10,10,10,.94); border: 1px solid rgba(255,255,255,.22);
+  box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.globe-tip[data-side="l"] .tip-in { transform: translate(-100%, -50%); }
+.globe-tip .tip-h { display: flex; align-items: center; gap: 8px; font: 500 12px/1.2 var(--font-sans); color: var(--tx-1); }
+.globe-tip .tip-h .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.globe-tip .tip-r { font: 400 10.5px/1.25 var(--font-mono); color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.globe-tip .tip-r.cl { font: 400 11.5px/1.25 var(--font-sans); color: var(--tx-2); }
+.globe-tip .tip-r .hi { color: var(--tx-1); }
+.globe-tip .tip-r .sep { margin: 0 6px; color: var(--tx-4); }
+.globe-tip .tip-r.ip { color: var(--tx-4); letter-spacing: .02em; }
+/* Code pays (« FR ») : pastille mono à bord fin, dans la bulle et le tableau des pairs */
+.cc { display: inline-grid; place-items: center; min-width: 20px; height: 14px; padding: 0 3px; border: 1px solid rgba(255,255,255,.4); font: 500 9px/1 var(--font-mono); letter-spacing: .06em; color: var(--tx-1); flex: none; }
+/* Aucun pair : message au centre, sur le globe atténué (les coins du bas restent lisibles) */
+.plate-empty { position: absolute; left: 50%; top: 52%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 10px 14px; text-align: center; white-space: nowrap; font: 400 12px/1.4 var(--font-sans); color: var(--tx-3); background: rgba(10,10,10,.82); pointer-events: none; }
 .plate.idle canvas { opacity: .55; }
-@container plate (max-height: 250px) { .c-bl, .c-br, .schem, .callout .s + .s { display: none; } }
-@container plate (max-width: 520px) { .callout, .schem { display: none; } }
-/* panneau réduit au minimum : les étiquettes chevaucheraient les coins, le canevas dessine les pastilles lettrées */
-@container plate (max-height: 180px) { .callout { display: none; } }
+@container plate (max-height: 250px) { .c-bl, .c-br, .globe-foot { display: none; } }
+@container plate (max-width: 520px) { .globe-foot .hint { display: none; } }
+@container plate (max-width: 460px) { .globe-foot, .corner .v.sub { display: none; } }
 
 /* ---------- Tableaux secondaires (pairs, fichiers, trackers) ---------- */
 .dtable { height: 100%; overflow: auto; }
@@ -234,7 +237,6 @@
 .drow .r, .dhead .r { text-align: right; }
 .drow .cl { font: 400 12px/1 var(--font-sans); color: var(--tx-2); }
 .drow .hi { color: var(--tx-1); }
-.drow.mark { background: rgba(255,255,255,.025); }
 .peers .dhead, .peers .drow { grid-template-columns: 24px minmax(150px, 1.35fr) minmax(90px, 1fr) 104px 100px 80px 76px; }
 .peers .c-conn { color: var(--tx-3); }
 .mini { display: flex; align-items: center; gap: 8px; }
@@ -242,15 +244,13 @@
 .mini .bar > i { background: #d9d9d9; }
 .mini.full .bar > i { background: var(--ok); }
 .mini span { width: 40px; text-align: right; font: 400 10.5px/1 var(--font-mono); color: var(--tx-2); flex: none; }
-.drow .mk { width: 16px; height: 16px; }
+.drow .cc { height: 15px; }
 @media (max-width: 1359px) {
   .peers .dhead, .peers .drow { grid-template-columns: 22px minmax(118px, 1.3fr) minmax(80px, 1fr) 0 96px 76px 72px; }
   .peers .c-conn { visibility: hidden; padding: 0 !important; }
   .td { padding: 0 7px; font-size: 11.5px; }
   .td.name { gap: 8px; }
   .th { padding: 0 7px; }
-  /* colonne # de 28 px : « # ↑ » déborde à gauche dans la marge du tableau au lieu d'être coupé */
-  .th:first-child { overflow: visible; gap: 3px; }
   .drow > div { font-size: 11px; }
 }
 

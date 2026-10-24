@@ -5,7 +5,6 @@ import {
   countParts,
   formatBytes,
   formatEta,
-  formatIndex,
   formatRatio,
   formatSpeed,
   isHashName,
@@ -41,7 +40,6 @@ export interface Sort {
 // Libellés : « shell.table.col.<clé> » (en-tête) et « shell.table.sort.<clé> » (pied de liste :
 // « TRI : RÉCEPTION ↓ ») ; title : clé de la bulle (sinon « Trier par … »).
 const COLUMNS: { key: SortKey; r?: boolean; title?: string }[] = [
-  { key: 'addedAt', r: true, title: 'shell.table.addedOrder' },
   { key: 'name' },
   { key: 'size', r: true },
   { key: 'progress' },
@@ -151,20 +149,16 @@ export function TorrentTable(p: Props): React.JSX.Element {
       <div className="tinner gridded" role="grid" aria-label="Torrents" aria-multiselectable="true" aria-rowcount={count + 1}>
         <div className="tcap">
           <div className="tgroups" aria-hidden="true">
-            <div style={{ gridColumn: 'span 3' }}>
-              <b>A</b>
+            <div style={{ gridColumn: 'span 2' }}>
               {t('shell.table.group.torrent')}
             </div>
             <div style={{ gridColumn: 'span 1' }}>
-              <b>B</b>
               {t('shell.table.group.state')}
             </div>
             <div style={{ gridColumn: 'span 3' }}>
-              <b>C</b>
               {t('shell.table.group.rate')}
             </div>
             <div style={{ gridColumn: 'span 3' }}>
-              <b>D</b>
               {t('shell.table.group.swarm')}
             </div>
           </div>
@@ -217,8 +211,7 @@ export function TorrentTable(p: Props): React.JSX.Element {
         {total > 0 && (
           <>
             <div className="tfoot">
-              <span className="sl">//</span>
-              <b>{formatIndex(count)}</b>
+              <b>{count}</b>
               {`${tn('shell.table.foot.torrents', count)}${filtered ? t('shell.table.foot.of', { total }) : ''}`}
               <span className="dot">·</span>
               <b>{nSel}</b>
@@ -230,7 +223,7 @@ export function TorrentTable(p: Props): React.JSX.Element {
               </b>
             </div>
             <div className="guides" aria-hidden="true">
-              <div style={{ gridColumn: 'span 3' }} />
+              <div style={{ gridColumn: 'span 2' }} />
               <div className="g" style={{ gridColumn: 'span 1' }} />
               <div className="g" style={{ gridColumn: 'span 3' }} />
               <div className="g" style={{ gridColumn: 'span 3' }} />
@@ -291,9 +284,6 @@ const Row = memo(
         onDoubleClick={() => handlers.current.onRowDoubleClick(t.id)}
         onContextMenu={(e) => handlers.current.onRowContextMenu(t.id, e)}
       >
-        <div className="td idx r" role="gridcell">
-          {formatIndex(num)}
-        </div>
         <div className="td name" role="gridcell">
           {hash ? (
             <span className="nm hash" title={tr('shell.table.unnamedMagnet', { hash: t.id })}>

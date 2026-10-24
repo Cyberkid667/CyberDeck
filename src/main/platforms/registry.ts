@@ -206,6 +206,9 @@ $result = [pscustomobject]@{ keys = $keys; uninstall = $uninst.ToArray(); appx =
 const asArray = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : v ? [v as T] : [])
 
 export async function takeSnapshot(reads: RegRead[] = READS, withAppx = true): Promise<RegistrySnapshot> {
+  // Hors Windows (Linux) : pas de registre ni de PowerShell. Photo vide mais valide : Steam se
+  // lit alors dans ses fichiers (voir steamLinux.ts), les autres lanceurs ne sont pas lus.
+  if (process.platform !== 'win32') return { ok: true, error: null, keys: {}, uninstall: [], appx: [], startApps: [], takenAt: Date.now() }
   const spec = JSON.stringify({ reads, appx: withAppx })
   const res = await runPs(SNAPSHOT_SCRIPT, { ESSAIM_SPEC: spec }, 90_000)
   const empty: RegistrySnapshot = { ok: false, error: null, keys: {}, uninstall: [], appx: null, startApps: [], takenAt: Date.now() }

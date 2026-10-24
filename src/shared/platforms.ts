@@ -17,6 +17,9 @@ export const PLATFORM_ORDER: LauncherPlatform[] = [
   'riot'
 ]
 
+/** Plateformes lues sur ce système (process.platform) : toutes sous Windows, Steam seul ailleurs (Linux). */
+export const platformsFor = (os: string): LauncherPlatform[] => (os === 'win32' ? PLATFORM_ORDER : ['steam'])
+
 /** name : nom complet ; short : badge en capitales (IBM Plex Mono). */
 export const PLATFORM_INFO: Record<GamePlatform, { name: string; short: string }> = {
   local: { name: 'Local', short: 'LOCAL' },

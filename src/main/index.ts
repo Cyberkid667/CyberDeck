@@ -3,7 +3,8 @@ import type { UtilityProcess } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import icon from '../../build/icon.ico?asset'
+import iconIco from '../../build/icon.ico?asset'
+import iconPng from '../../build/icon.png?asset'
 import type {
   AddRequest,
   AddResult,
@@ -13,8 +14,12 @@ import type {
   Settings,
   SettingsPatch,
   Snapshot,
+  StoreListKind,
+  WorkshopSort,
   ToEngine,
   TorrentFileInfo,
+  TwitchCategory,
+  TwitchStreamsQuery,
   UpdateState
 } from '../shared/types'
 import {
@@ -56,12 +61,31 @@ import {
   testSteamKey
 } from './platformSync'
 import { fetchUpdate, openReleasePage } from './updates'
+import { cancelLauncherOp, getLaunchers, initLaunchers, installLauncher, notifyLaunchers, uninstallLauncher } from './launchers'
 import { forgetGameDetails, getGameDetails, initGameDetails, openExternalLink } from './gameDetails'
 import { downloadsState, initSteamDownloads, onLibraryChanged, stopSteamDownloads } from './steamDownloads'
+import { getSteamCollections } from './steamCollections'
+import { getStoreApp, getStoreHome, getStoreList, initSteamStore, searchStore } from './steamStore'
+import { getSteamFriends, getSteamProfile, initSteamProfile } from './steamProfile'
+import { getCommunityArticle, getCommunityNews, getWorkshopGames, getWorkshopItem, getWorkshopPage, initSteamCommunity } from './steamCommunity'
 import { isLang, setLang, t, tn } from '../shared/i18n'
+import {
+  cancelTwitchSignIn,
+  getTwitchStreams,
+  initTwitch,
+  openTwitchActivate,
+  searchTwitchCategories,
+  secureTwitchWebviews,
+  setTwitchCategory,
+  startTwitchSignIn,
+  twitchSignOut,
+  twitchState
+} from './twitch'
 
 /** Nom public de l'app (fenêtre, journal, Gestionnaire des tâches). */
 const APP_NAME = 'CyberDeck'
+/** Icône de la fenêtre : .ico sous Windows, .png ailleurs (Linux ne lit pas les .ico). */
+const icon = process.platform === 'win32' ? iconIco : iconPng
 
 nativeTheme.themeSource = 'dark'
 // Même identifiant que l'appId d'electron-builder.yml (regroupement dans la barre des tâches).
@@ -71,6 +95,8 @@ app.setAppUserModelId('app.cyberdeck.launcher')
 // Tests : CYBERDECK_USER_DATA=<dossier> lance l'app avec un profil séparé, sans toucher au vrai.
 const testUserData = process.env.CYBERDECK_USER_DATA
 if (testUserData) app.setPath('userData', testUserData)
+// Tests (fenêtre hors écran) : Windows la croirait cachée et le lecteur Twitch ne démarrerait pas.
+if (process.env.CYBERDECK_TEST_QUIET) app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion')
 
 // ---------- Journal ----------
 
@@ -128,6 +154,8 @@ const LEGACY_DATA = ['settings.json', 'state.json', 'library.json', 'platforms.j
  * « CyberDeck » (CYBERDECK_USER_DATA) reprend donc les copies posées à côté de lui, jamais les vrais.
  */
 function migrateLegacyData(): void {
+  // anciennes versions : Windows seulement (Linux : ~/.config/CyberDeck dès la première version)
+  if (process.platform !== 'win32') return
   const dir = app.getPath('userData')
   // seulement le dossier de CyberDeck (pas %APPDATA%\Electron d'un lancement de développement)
   if (path.basename(dir).toLowerCase() !== 'cyberdeck') return
@@ -523,6 +551,8 @@ function createWindow(): void {
       sandbox: true,
       contextIsolation: true,
       spellcheck: false,
+      // lecteur et chat Twitch de la page d'un jeu (verrouillés par secureTwitchWebviews)
+      webviewTag: true,
       // hors écran, la fenêtre de test doit continuer à dessiner normalement
       backgroundThrottling: !quiet
     }
@@ -531,6 +561,7 @@ function createWindow(): void {
   // retour sur la fenêtre : un jeu installé entre-temps dans un lanceur apparaît
   win.on('focus', () => onWindowFocus())
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  secureTwitchWebviews(win.webContents, () => send('twitch:escape'))
   // Si l'affichage plante, on note la raison et on recharge la fenêtre
   // (le moteur et les téléchargements continuent pendant ce temps).
   win.webContents.on('render-process-gone', (_e, details) => {
@@ -729,10 +760,56 @@ function registerIpc(): void {
 
   ipcMain.handle('details:get', (_e, id: unknown, refresh?: unknown) => getGameDetails(String(id), refresh === true))
   ipcMain.handle('downloads:get', () => downloadsState())
+  // collections Steam du compte (Favoris, collections, cachés) : lecture seule du stockage cloud local
+  ipcMain.handle('steam:collections', () => getSteamCollections())
   // adresses https et fiches des lanceurs seulement (vérifié par openExternalLink)
   ipcMain.on('link:open', (_e, url: unknown) => {
     if (typeof url === 'string') openExternalLink(url)
   })
+
+  // ---------- Magasin Steam (adresses publiques de la boutique, sans compte ni cookie) ----------
+
+  ipcMain.handle('store:home', (_e, refresh?: unknown) => getStoreHome(refresh === true))
+  ipcMain.handle('store:list', (_e, kind: unknown, refresh?: unknown) => getStoreList(String(kind) as StoreListKind, refresh === true))
+  ipcMain.handle('store:search', (_e, term: unknown) => searchStore(typeof term === 'string' ? term : ''))
+  ipcMain.handle('store:app', (_e, appid: unknown, refresh?: unknown) => getStoreApp(Number(appid), refresh === true))
+
+  // ---------- Profil Steam et amis (Web API, clé et SteamID de l'utilisateur seulement) ----------
+
+  ipcMain.handle('steam:profile', (_e, refresh?: unknown) => getSteamProfile(refresh === true))
+  ipcMain.handle('steam:friends', (_e, refresh?: unknown) => getSteamFriends(refresh === true))
+
+  // ---------- Communauté Steam (actualités publiques ; Workshop avec la clé de l'utilisateur) ----------
+
+  ipcMain.handle('community:news', (_e, refresh?: unknown) => getCommunityNews(refresh === true))
+  ipcMain.handle('community:article', (_e, appid: unknown, id: unknown) => getCommunityArticle(Number(appid), String(id)))
+  ipcMain.handle('community:workshop-games', (_e, refresh?: unknown) => getWorkshopGames(refresh === true))
+  ipcMain.handle('community:workshop-page', (_e, appid: unknown, sort: unknown, cursor?: unknown, refresh?: unknown) =>
+    getWorkshopPage(Number(appid), String(sort) as WorkshopSort, typeof cursor === 'string' ? cursor : null, refresh === true)
+  )
+  ipcMain.handle('community:workshop-item', (_e, id: unknown) => getWorkshopItem(String(id)))
+
+  // ---------- Page Lanceurs (jamais d'installation sans clic) ----------
+
+  ipcMain.handle('launchers:get', () => getLaunchers())
+  ipcMain.handle('launchers:install', (_e, id: unknown) => installLauncher(id))
+  ipcMain.handle('launchers:uninstall', (_e, id: unknown) => uninstallLauncher(id))
+  ipcMain.on('launchers:cancel', (_e, id: unknown) => cancelLauncherOp(id))
+
+  // ---------- Twitch (connexion par code d'appareil, streams du jeu) ----------
+
+  ipcMain.handle('twitch:state', () => twitchState())
+  ipcMain.handle('twitch:sign-in', () => startTwitchSignIn())
+  ipcMain.on('twitch:cancel-sign-in', () => cancelTwitchSignIn())
+  ipcMain.handle('twitch:sign-out', () => twitchSignOut())
+  ipcMain.on('twitch:open-activate', () => openTwitchActivate())
+  ipcMain.handle('twitch:streams', (_e, gameId: unknown, query?: unknown) =>
+    getTwitchStreams(String(gameId), query && typeof query === 'object' ? (query as TwitchStreamsQuery) : {})
+  )
+  ipcMain.handle('twitch:search-categories', (_e, query: unknown) => searchTwitchCategories(typeof query === 'string' ? query : ''))
+  ipcMain.handle('twitch:set-category', (_e, gameId: unknown, category: unknown) =>
+    setTwitchCategory(String(gameId), category && typeof category === 'object' ? (category as TwitchCategory) : null)
+  )
 
   ipcMain.handle('update:get', () => update)
   ipcMain.handle('update:check', () => checkUpdates(true))
@@ -742,7 +819,8 @@ function registerIpc(): void {
     const res = await dialog.showOpenDialog(win!, {
       title: t('main.dialog.exeTitle'),
       defaultPath,
-      filters: [{ name: t('main.dialog.exeFilter'), extensions: ['exe'] }],
+      // Linux : binaires sans extension, AppImage, scripts : tous les fichiers
+      ...(process.platform === 'win32' ? { filters: [{ name: t('main.dialog.exeFilter'), extensions: ['exe'] }] } : {}),
       properties: ['openFile']
     })
     return res.canceled ? null : res.filePaths[0]
@@ -786,6 +864,10 @@ app.whenReady().then(() => {
   setLang(settings.language)
   Menu.setApplicationMenu(null)
   initGameDetails({ log })
+  initSteamStore({ log })
+  initSteamProfile({ log })
+  initSteamCommunity({ log })
+  initTwitch({ log, broadcast: (s) => send('twitch', s) })
   initSteamDownloads({
     log,
     send: (d) => send('downloads', d),
@@ -809,7 +891,11 @@ app.whenReady().then(() => {
   try {
     initPlatforms({
       log,
-      broadcast: (s) => send('platforms', s),
+      broadcast: (s) => {
+        send('platforms', s)
+        // lanceur apparu ou disparu : la page Lanceurs suit
+        notifyLaunchers()
+      },
       apply: applyPlatformScans,
       forgetOwned: forgetSteamOwned,
       hiddenCount,
@@ -818,6 +904,7 @@ app.whenReady().then(() => {
   } catch (err) {
     log(`Plateformes indisponibles : ${(err as Error)?.stack ?? err}`)
   }
+  initLaunchers({ log, broadcast: (s) => send('launchers', s) })
   registerImageProtocol()
   registerIpc()
   createWindow()

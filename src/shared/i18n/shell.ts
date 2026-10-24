@@ -229,7 +229,7 @@ const entries: Record<string, [en: string, fr: string]> = {
   'shell.table.group.state': ['Status', 'État'],
   'shell.table.group.rate': ['Speed', 'Débit'],
   'shell.table.group.swarm': ['Swarm', 'Essaim'],
-  'shell.table.col.addedAt': ['#', '#'],
+  'shell.table.col.addedAt': ['Added', 'Ajout'],
   'shell.table.col.name': ['Name', 'Nom'],
   'shell.table.col.size': ['Size', 'Taille'],
   'shell.table.col.progress': ['Progress and status', 'Progression et statut'],
@@ -380,6 +380,10 @@ const entries: Record<string, [en: string, fr: string]> = {
   'shell.sidebar.platforms': ['Platforms', 'Plateformes'],
   'shell.sidebar.platformsSyncing': ['Platforms: reading…', 'Plateformes : lecture en cours…'],
   'shell.sidebar.platformsTitle': ['Platforms: detected launchers and Steam account', 'Plateformes : lanceurs détectés et compte Steam'],
+  'shell.sidebar.launchers': ['Launchers', 'Lanceurs'],
+  'shell.sidebar.launchersSyncing': ['Launchers: reading…', 'Lanceurs : lecture en cours…'],
+  'shell.sidebar.launchersTitle': ['Launchers: install or remove launchers, Steam account', 'Lanceurs : installer ou retirer les lanceurs, compte Steam'],
+  'shell.app.openLaunchers': ['Open Launchers', 'Ouvrir Lanceurs'],
   'shell.sidebar.settings': ['Settings', 'Réglages'],
   'shell.sidebar.settingsTitle': ['Settings: torrents, default folders, updates, version', 'Réglages : torrents, dossiers par défaut, mises à jour, version'],
 
@@ -439,7 +443,28 @@ const entries: Record<string, [en: string, fr: string]> = {
     'La position d’un pair vient d’une empreinte de son adresse, pas de sa localisation'
   ],
   'shell.globe.empty': ['No peers connected', 'Aucun pair connecté'],
-  'shell.globe.emptyHint': ['The globe comes alive as soon as a peer responds.', 'Le globe s’anime dès qu’un pair répond.']
+  'shell.globe.emptyHint': ['The globe comes alive as soon as a peer responds.', 'Le globe s’anime dès qu’un pair répond.'],
+  // globe interactif : pays réels (table DB-IP hors ligne), bulle d'un pair, aide des gestes
+  'shell.globe.countries.one': ['in {n} country', 'dans {n} pays'],
+  'shell.globe.countries.other': ['in {n} countries', 'dans {n} pays'],
+  'shell.globe.seeds.one': ['{n} seed', '{n} source'],
+  'shell.globe.seeds.other': ['{n} seeds', '{n} sources'],
+  'shell.globe.peers.one': ['{n} peer', '{n} pair'],
+  'shell.globe.peers.other': ['{n} peers', '{n} pairs'],
+  'shell.globe.hint': ['Drag · Scroll · Double-click', 'Glisser · Molette · Double-clic'],
+  'shell.globe.attribution': ['IP geolocation by DB-IP', 'Géolocalisation IP par DB-IP'],
+  'shell.globe.attributionTitle': [
+    'Country lookup done offline on this PC (DB-IP IP to Country Lite, CC BY 4.0): peer addresses are never sent anywhere.',
+    'Pays trouvé hors ligne sur ce PC (DB-IP IP to Country Lite, CC BY 4.0) : les adresses des pairs ne sont envoyées nulle part.'
+  ],
+  'shell.globe.you': ['You', 'Vous'],
+  'shell.globe.unknownCountry': ['Unknown location', 'Lieu inconnu'],
+  'shell.globe.tip.seed': ['Seed', 'Source'],
+  'shell.globe.tip.peer': ['Peer · {p}', 'Pair · {p}'],
+  'shell.globe.keys': [
+    'Peers globe: arrow keys rotate, + and − zoom, 0 resets the view',
+    'Globe des pairs : flèches pour tourner, + et − pour zoomer, 0 pour recentrer'
+  ]
 }
 
 const pick = (i: 0 | 1): Dict => Object.fromEntries(Object.entries(entries).map(([k, v]) => [k, v[i]]))

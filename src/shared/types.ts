@@ -51,6 +51,14 @@ export interface PeerInfo {
   downloadSpeed: number
   uploadSpeed: number
   isSeeder: boolean
+  /**
+   * Pays du pair (ISO 3166-1 alpha-2, « FR »), trouvé HORS LIGNE dans la table DB-IP livrée
+   * avec l'app (main/geoip.ts) ; absent pour une adresse inconnue, privée ou une source web.
+   */
+  country?: string
+  /** position sur le globe (degrés) : point du pays + petit écart stable tiré de l'adresse */
+  lat?: number
+  lon?: number
 }
 
 export interface TrackerInfo {
@@ -231,14 +239,433 @@ export interface GameDetails {
   error: string | null
 }
 
+// ---------- Magasin Steam (vue Steam, onglet MAGASIN) ----------
+
+/** Listes du magasin (barre du magasin) : Offres, Meilleures ventes, Nouveautés, Prochainement. */
+export type StoreListKind = 'specials' | 'topsellers' | 'newreleases' | 'comingsoon'
+
+/** 'offline' : pas de réseau ; 'unavailable' : réponse inattendue de Steam ; 'notFound' : jeu absent du magasin (ou pas vendu dans ce pays). */
+export type StoreError = 'offline' | 'unavailable' | 'notFound'
+
+/** Prix tel que formaté par Steam dans la devise du pays (choisi par Steam d'après l'adresse IP). */
+export interface StorePrice {
+  free: boolean
+  /** prix payé (« CHF 16.79 ») ; null si gratuit */
+  final: string | null
+  /** prix avant réduction, seulement s'il y a une réduction */
+  original: string | null
+  /** réduction en pour cent (0 : aucune) */
+  discount: number
+}
+
+/** Article du magasin (tuiles, listes, résultats de recherche). Images : hôtes de IMAGE_HOSTS. */
+export interface StoreItem {
+  appid: number
+  name: string
+  type: 'game' | 'dlc' | 'demo' | 'software' | 'other'
+  /** en-tête 460×215 */
+  header: string | null
+  /** grande capsule 616×353 (vitrine) */
+  capsule: string | null
+  /** petite capsule 231×87 (listes) */
+  small: string | null
+  /** bandeau de la bibliothèque (fond) */
+  hero: string | null
+  /** null : prix inconnu (pas encore en vente…) */
+  price: StorePrice | null
+  comingSoon: boolean
+  /** date de sortie (ms) ou null */
+  releaseDate: number | null
+  /** texte de sortie donné par l'éditeur (« Prochainement », « 2027 »…) */
+  releaseText: string | null
+  /** évaluations des joueurs (libellé traduit par Steam : « Très positives ») ; null : pas assez */
+  review: { score: number; label: string; percent: number } | null
+  tags: string[]
+  description: string | null
+  /** quelques captures (vitrine seulement) */
+  screenshots: string[]
+  platforms: { windows: boolean; mac: boolean; linux: boolean }
+  /** contenu pour adultes (filtré par le processus principal, jamais montré) */
+  adult: boolean
+}
+
+export interface StoreHome {
+  /** grand carrousel de la vitrine */
+  hero: StoreItem[]
+  shelves: Record<StoreListKind, StoreItem[]>
+  fetchedAt: number
+  error: StoreError | null
+}
+
+export interface StoreList {
+  kind: StoreListKind
+  items: StoreItem[]
+  fetchedAt: number
+  error: StoreError | null
+}
+
+export interface StoreSearch {
+  term: string
+  items: StoreItem[]
+  fetchedAt: number
+  error: StoreError | null
+}
+
+/** Page d'un jeu du magasin. */
+export interface StoreApp {
+  appid: number
+  name: string
+  /** article (évaluations, étiquettes, images) ; null si GetItems n'a rien rendu */
+  item: StoreItem | null
+  description: string | null
+  screenshots: { thumb: string; full: string }[]
+  /** bandes-annonces : vignette seulement (lecture sur Steam) */
+  movies: { thumb: string; name: string }[]
+  background: string | null
+  genres: string[]
+  /** fonctionnalités (Solo, Multijoueur, Succès Steam…) */
+  categories: string[]
+  developers: string[]
+  publishers: string[]
+  /** date de sortie telle que donnée par Steam (texte) */
+  releaseDate: string | null
+  comingSoon: boolean
+  metacritic: { score: number; url: string | null } | null
+  platforms: { windows: boolean; mac: boolean; linux: boolean }
+  price: StorePrice | null
+  requiredAge: number
+  dlc: StoreItem[]
+  fetchedAt: number
+  error: StoreError | null
+}
+
+// ---------- Profil Steam et amis (vue Steam, onglet PROFIL) ----------
+
+/**
+ * Présence Steam (GetPlayerSummaries) : 'ingame' quand un jeu est indiqué ; 'online' regroupe
+ * en ligne, « cherche à échanger » et « cherche à jouer ».
+ */
+export type SteamPresence = 'ingame' | 'online' | 'away' | 'busy' | 'snooze' | 'offline'
+
+/** 'no-account' : aucun compte Steam sur ce PC ; 'no-key' : pas de clé Web API ; 'invalid-key' : clé refusée ;
+ *  'private' : liste d'amis privée ; 'offline' : Steam injoignable ; 'unavailable' : réponse inattendue. */
+export type SteamProfileError = 'no-account' | 'no-key' | 'invalid-key' | 'private' | 'offline' | 'unavailable'
+
+export interface SteamProfileGame {
+  appid: number
+  name: string
+  /** petite icône du jeu (hôte de IMAGE_HOSTS) */
+  icon: string | null
+  /** temps de jeu des deux dernières semaines, minutes */
+  minutes2Weeks: number
+  /** temps de jeu total, minutes */
+  minutesTotal: number
+  /** dernière partie (ms) ou null */
+  lastPlayedAt: number | null
+}
+
+export interface SteamProfileBadge {
+  badgeId: number
+  /** badge d'un jeu (cartes à échanger) : appid ; sinon null */
+  appid: number | null
+  /** nom du jeu (badge de jeu) ; null pour les badges Steam (l'interface les nomme d'après badgeId) */
+  gameName: string | null
+  /** icône du jeu (badge de jeu) ; null pour les badges Steam */
+  icon: string | null
+  level: number
+  xp: number
+  /** date d'obtention (ms) ou null */
+  earnedAt: number | null
+  /** brillant (badge « métallique » d'un jeu) */
+  foil: boolean
+}
+
+export interface SteamProfileAchievement {
+  appid: number
+  game: string
+  id: string
+  name: string
+  description: string
+  icon: string | null
+  unlockedAt: number | null
+  /** part des joueurs qui l'ont (0 à 100) ; null si inconnue */
+  percent: number | null
+}
+
+export interface SteamProfile {
+  steamId: string
+  personaName: string
+  /** grand avatar (hôte de IMAGE_HOSTS) */
+  avatar: string | null
+  /** seulement si l'utilisateur l'a rendu public */
+  realName: string | null
+  /** code pays ISO (« FR ») seulement s'il est public */
+  country: string | null
+  profileUrl: string
+  /** création du compte (ms) ou null */
+  memberSince: number | null
+  status: SteamPresence
+  /** jeu en cours (statut 'ingame') */
+  gameName: string | null
+  /** dernière déconnexion (ms) ou null */
+  lastOnline: number | null
+  /** niveau Steam, XP et XP à gagner pour le niveau suivant ; null : inconnus (profil privé) */
+  level: number | null
+  xp: number | null
+  xpToNext: number | null
+  badgeCount: number | null
+  /** badges mis en avant : les plus récents d'abord (12 au plus) */
+  badges: SteamProfileBadge[]
+  /** jeux possédés et temps de jeu total (minutes) ; null : détails des jeux privés */
+  gamesOwned: number | null
+  totalMinutes: number | null
+  /** jeux des deux dernières semaines, le plus joué d'abord */
+  recent: SteamProfileGame[]
+  /** succès débloqués des jeux récents : les plus rares d'abord */
+  rarest: SteamProfileAchievement[]
+  /** succès débloqués des jeux récents : les plus récents d'abord */
+  latest: SteamProfileAchievement[]
+}
+
+export interface SteamProfileState {
+  profile: SteamProfile | null
+  error: SteamProfileError | null
+  fetchedAt: number
+}
+
+export interface SteamFriend {
+  steamid: string
+  name: string
+  /** avatar moyen (64 px) */
+  avatar: string | null
+  status: SteamPresence
+  /** jeu en cours (statut 'ingame') */
+  game: string | null
+  /** dernière déconnexion (ms) ou null (pas publique) */
+  lastOnline: number | null
+  /** ami depuis (ms) ou null */
+  friendSince: number | null
+}
+
+export interface SteamFriendsState {
+  friends: SteamFriend[]
+  error: SteamProfileError | null
+  fetchedAt: number
+}
+
+// ---------- Communauté Steam (vue Steam, onglet COMMUNAUTÉ) ----------
+
+/** 'no-key' : pas de clé Web API (Workshop) ; 'invalid-key' : clé refusée ; 'offline' : Steam injoignable ;
+ *  'unavailable' : réponse inattendue ; 'notFound' : article ou objet introuvable. */
+export type CommunityError = 'no-key' | 'invalid-key' | 'offline' | 'unavailable' | 'notFound'
+
+/** Texte riche d'un article ou d'une description (BBCode / HTML de Steam nettoyé dans le processus principal). */
+export interface RichSpan {
+  text: string
+  b?: boolean
+  i?: boolean
+  u?: boolean
+  s?: boolean
+  /** lien https (ouvert par openExternalLink) */
+  href?: string
+}
+
+export type RichBlock =
+  | { t: 'p'; spans: RichSpan[] }
+  | { t: 'h'; level: 1 | 2 | 3; text: string }
+  | { t: 'list'; ordered: boolean; items: RichSpan[][] }
+  /** image d'un hôte de IMAGE_HOSTS ; href : lien autour de l'image */
+  | { t: 'img'; src: string; href?: string }
+  | { t: 'quote'; spans: RichSpan[] }
+  | { t: 'video'; href: string }
+  | { t: 'hr' }
+
+export interface CommunityGame {
+  appid: number
+  name: string
+  /** en-tête 460×215 du magasin (hôte de IMAGE_HOSTS) ; null : inconnu */
+  header: string | null
+}
+
+export interface CommunityNewsItem {
+  /** gid de l'actualité Steam */
+  id: string
+  appid: number
+  game: string
+  title: string
+  /** page de l'actualité (Steam pour les annonces officielles) */
+  url: string
+  /** date de publication (ms) */
+  date: number
+  /** 'patch' : notes de mise à jour ; 'announcement' : annonce officielle ; 'press' : article relayé (feed : nom du site) */
+  kind: 'patch' | 'announcement' | 'press'
+  feed: string
+  author: string | null
+  excerpt: string
+  /** première image de l'article (hôte de IMAGE_HOSTS) ou null : l'interface montre l'en-tête du jeu */
+  image: string | null
+}
+
+export interface CommunityNews {
+  /** jeux du fil (les plus joués et les plus récents), ordre : partie la plus récente d'abord */
+  games: CommunityGame[]
+  /** actualités, la plus récente d'abord */
+  items: CommunityNewsItem[]
+  error: CommunityError | null
+  fetchedAt: number
+}
+
+export interface CommunityArticle {
+  item: CommunityNewsItem
+  body: RichBlock[]
+}
+
+export type WorkshopSort = 'trend' | 'popular' | 'recent'
+
+export interface WorkshopGames {
+  /** jeux Steam installés qui ont un Workshop */
+  games: CommunityGame[]
+  error: CommunityError | null
+}
+
+export interface WorkshopItem {
+  id: string
+  appid: number
+  title: string
+  /** image d'aperçu (hôte de IMAGE_HOSTS) */
+  preview: string | null
+  /** petite image de la grille (même image, redimensionnée par Steam) */
+  thumb: string | null
+  author: string | null
+  /** abonnés actuels ; null : inconnu */
+  subscriptions: number | null
+  favorites: number | null
+  /** note des joueurs, 0 à 1 ; null : pas assez de votes */
+  score: number | null
+  votes: number
+  /** résumé sans balises */
+  short: string
+  tags: string[]
+  createdAt: number | null
+  updatedAt: number | null
+  /** taille du fichier (octets) ; null : inconnue */
+  size: number | null
+}
+
+export interface WorkshopPage {
+  appid: number
+  sort: WorkshopSort
+  items: WorkshopItem[]
+  /** curseur de la page suivante ; null : fin de la liste */
+  next: string | null
+  error: CommunityError | null
+  fetchedAt: number
+}
+
+export interface WorkshopDetail {
+  item: WorkshopItem | null
+  /** autres images (hôtes de IMAGE_HOSTS) */
+  previews: string[]
+  body: RichBlock[]
+  error: CommunityError | null
+}
+
 /** Hôtes d'images autorisés dans la fenêtre (CSP img-src) : les autres images ne sont pas renvoyées. */
 export const IMAGE_HOSTS = [
   'https://*.steamstatic.com',
   'https://*.akamaihd.net',
   'https://*.steampowered.com',
   'https://*.steamusercontent.com',
-  'https://upload.wikimedia.org'
+  'https://upload.wikimedia.org',
+  // avatar du compte itch.io
+  'https://img.itch.zone',
+  // Twitch : aperçus des streams, jaquettes des catégories, avatars
+  'https://static-cdn.jtvnw.net'
 ] as const
+
+// ---------- Twitch (streams d'un jeu sur sa page) ----------
+
+export interface TwitchUser {
+  id: string
+  login: string
+  displayName: string
+  /** avatar (static-cdn.jtvnw.net) ou null */
+  avatar: string | null
+}
+
+/** Connexion par code d'appareil en cours : code à saisir sur twitch.tv/activate. */
+export interface TwitchSignIn {
+  userCode: string
+  /** adresse à ouvrir (twitch.tv/activate) */
+  verificationUri: string
+  /** expiration du code (ms) */
+  expiresAt: number
+  /** 'starting' : demande du code ; 'waiting' : en attente de l'accord sur twitch.tv */
+  status: 'starting' | 'waiting' | 'expired' | 'denied' | 'error'
+  error: string | null
+}
+
+export interface TwitchState {
+  /** faux : pas d'identifiant d'application Twitch dans cette version (TWITCH_CLIENT_ID vide) */
+  configured: boolean
+  /** faux : Windows ne peut pas chiffrer les jetons (connexion impossible) */
+  canStore: boolean
+  user: TwitchUser | null
+  signIn: TwitchSignIn | null
+  /** dernier problème (session expirée…) ou null */
+  error: string | null
+}
+
+export interface TwitchCategory {
+  id: string
+  name: string
+  /** jaquette 52×72 ou null */
+  boxArt: string | null
+}
+
+export interface TwitchStream {
+  id: string
+  userId: string
+  userLogin: string
+  userName: string
+  title: string
+  viewers: number
+  /** code de langue ISO 639-1 (« en », « fr »…) ou « other » */
+  language: string
+  /** début du stream (ms) */
+  startedAt: number
+  /** aperçu 440×248 (static-cdn.jtvnw.net) */
+  thumbnail: string
+  tags: string[]
+  mature: boolean
+}
+
+export type TwitchStreamsStatus = 'ok' | 'not-configured' | 'signed-out' | 'no-category' | 'error'
+
+export interface TwitchStreamsQuery {
+  /** code de langue, ou null pour toutes */
+  language?: string | null
+  /** page suivante (curseur de la réponse précédente) */
+  cursor?: string | null
+  /** seulement les chaînes suivies par le compte connecté */
+  followed?: boolean
+  /** relit maintenant (sinon cache de 60 s) */
+  refresh?: boolean
+}
+
+export interface TwitchStreams {
+  status: TwitchStreamsStatus
+  /** catégorie Twitch du jeu (trouvée par son nom, ou choisie par l'utilisateur) */
+  category: TwitchCategory | null
+  /** vrai : catégorie choisie à la main (« Pas ce jeu ? ») */
+  manual: boolean
+  /** triés par spectateurs (ordre de Twitch) */
+  streams: TwitchStream[]
+  /** page suivante, null : plus rien */
+  cursor: string | null
+  error: string | null
+  fetchedAt: number
+}
 
 /** Téléchargement en cours d'un jeu Steam (lu dans son appmanifest, relevé toutes les 1,5 s). */
 export interface DownloadProgress {
@@ -257,6 +684,73 @@ export interface DownloadProgress {
   eta: number | null
   /** vitesses des 60 derniers relevés (octets/s), la plus ancienne d'abord (courbe façon Steam) */
   history: number[]
+}
+
+/**
+ * Collections Steam du compte de ce PC, lues dans le stockage cloud local du client Steam
+ * (userdata/<compte>/config/cloudstorage/cloud-storage-namespace-1.json), en lecture seule.
+ */
+export interface SteamCollections {
+  /** appids de la collection « Favoris » */
+  favorites: number[]
+  /** appids cachés par l'utilisateur dans Steam */
+  hidden: number[]
+  /** collections de l'utilisateur (statiques), triées par nom */
+  collections: { id: string; name: string; appids: number[] }[]
+  /** collections dynamiques (règles de filtre de Steam) non montrées */
+  dynamicCount: number
+}
+
+// ---------- Page Launchers (installer / désinstaller les lanceurs) ----------
+
+/** Ce que CyberDeck sait faire pour un lanceur (l'état installé / absent vient de PlatformsState). */
+export interface LauncherInfo {
+  id: LauncherPlatform
+  /**
+   * Installation : 'winget' (CyberDeck télécharge et installe le paquet officiel, avec progression),
+   * 'store' (ouvre la page du Microsoft Store), 'website' (ouvre la page de téléchargement officielle).
+   */
+  installKind: 'winget' | 'store' | 'website'
+  /** identifiant du paquet winget (ex. « Valve.Steam ») ; null si aucun */
+  wingetId: string | null
+  /** page de téléchargement officielle (secours, ou installation pour 'website') */
+  website: string
+  /**
+   * Désinstallation : 'uninstaller' (programme de désinstallation du lanceur, avec sa propre fenêtre),
+   * 'windows' (« Applications installées » de Windows), null si impossible (lanceur absent, désinstalleur introuvable).
+   */
+  uninstallKind: 'uninstaller' | 'windows' | null
+  /**
+   * Compte connecté, lu sur le PC sans mot de passe ni jeton : BattleTag (cache de Battle.net),
+   * nom et avatar itch.io (profil de l'app itch). null : rien de lisible (les autres lanceurs
+   * chiffrent leurs données de compte ; Steam a sa propre carte).
+   */
+  account: { name: string; avatar: string | null } | null
+}
+
+/** Installation ou désinstallation de lanceur en cours (ou juste terminée). */
+export interface LauncherOp {
+  id: LauncherPlatform
+  kind: 'install' | 'uninstall'
+  /** 'waiting' : désinstalleur ouvert, CyberDeck attend que le lanceur disparaisse */
+  phase: 'starting' | 'downloading' | 'installing' | 'waiting' | 'done' | 'error'
+  /** 0..1 si connu */
+  progress: number | null
+  /** octets reçus / total pendant le téléchargement, si connus */
+  received: number | null
+  total: number | null
+  /** message déjà traduit (erreur, ou précision comme « Windows demande l'autorisation ») */
+  message: string | null
+  startedAt: number
+}
+
+export interface LaunchersState {
+  /** winget disponible sur ce PC (null : pas encore vérifié) */
+  winget: boolean | null
+  /** les 11 lanceurs, dans l'ordre de PLATFORM_ORDER */
+  launchers: LauncherInfo[]
+  /** opérations en cours ou terminées depuis moins d'une minute, par lanceur */
+  ops: Partial<Record<LauncherPlatform, LauncherOp>>
 }
 
 /** Dernière vérification des mises à jour (Release la plus récente du dépôt GitHub). */
@@ -545,6 +1039,8 @@ export type FromEngine =
 
 // API exposée à l'interface par le preload (window.essaim).
 export interface EssaimApi {
+  /** système (process.platform) : 'win32', 'linux'… ; absent dans un preload d'avant la version Linux */
+  readonly os?: string
   onSnapshot(cb: (s: Snapshot) => void): () => void
   onNotice(cb: (n: Notice) => void): () => void
   getSettings(): Promise<Settings>
@@ -626,4 +1122,63 @@ export interface EssaimApi {
   onDownloads(cb: (d: Record<string, DownloadProgress>) => void): () => void
   /** ouvre un lien d'une page de jeu (adresses http(s) et protocoles des lanceurs seulement) */
   openExternalLink(url: string): void
+  /** collections Steam du compte de ce PC (lecture seule) ; null : pas de compte ou fichier illisible */
+  getSteamCollections(): Promise<SteamCollections | null>
+
+  // ---- Magasin Steam (adresses publiques de la boutique, sans compte ; cache 15 à 60 min) ----
+  /** vitrine : grand carrousel et étagères (refresh : relit maintenant) */
+  getStoreHome(refresh?: boolean): Promise<StoreHome>
+  /** liste du magasin (offres, meilleures ventes, nouveautés, prochainement) */
+  getStoreList(kind: StoreListKind, refresh?: boolean): Promise<StoreList>
+  /** recherche dans le magasin */
+  searchStore(term: string): Promise<StoreSearch>
+  /** page d'un jeu du magasin */
+  getStoreApp(appid: number, refresh?: boolean): Promise<StoreApp>
+
+  // ---- Profil Steam et amis (Web API avec la clé et le SteamID de l'utilisateur ; cache 10 min / 45 s) ----
+  /** profil du compte de ce PC : en-tête, niveau, badges, activité récente, succès */
+  getSteamProfile(refresh?: boolean): Promise<SteamProfileState>
+  /** liste d'amis avec leur présence (error 'private' : liste d'amis privée) */
+  getSteamFriends(refresh?: boolean): Promise<SteamFriendsState>
+
+  // ---- Communauté Steam (actualités sans compte ; Workshop avec la clé de l'utilisateur ; cache 30 min) ----
+  /** fil des actualités des jeux les plus joués et les plus récents */
+  getCommunityNews(refresh?: boolean): Promise<CommunityNews>
+  /** article complet d'une actualité du fil ; null : introuvable */
+  getCommunityArticle(appid: number, id: string): Promise<CommunityArticle | null>
+  /** jeux Steam installés qui ont un Workshop (error 'no-key' : pas de clé) */
+  getWorkshopGames(refresh?: boolean): Promise<WorkshopGames>
+  /** une page d'objets du Workshop d'un jeu (cursor : null pour la première) */
+  getWorkshopPage(appid: number, sort: WorkshopSort, cursor?: string | null, refresh?: boolean): Promise<WorkshopPage>
+  /** fiche d'un objet du Workshop */
+  getWorkshopItem(id: string): Promise<WorkshopDetail>
+
+  // ---- Page Launchers : installer / désinstaller les lanceurs ----
+  getLaunchers(): Promise<LaunchersState>
+  onLaunchers(cb: (s: LaunchersState) => void): () => void
+  /** winget (paquet officiel), sinon page du Microsoft Store (Xbox) ou site officiel (Riot, winget absent) */
+  installLauncher(id: LauncherPlatform): Promise<ActionResult>
+  /** lance le désinstalleur officiel du lanceur (ou « Applications installées » de Windows pour Xbox) */
+  uninstallLauncher(id: LauncherPlatform): Promise<ActionResult>
+  /** annule une installation winget en cours */
+  cancelLauncherOp(id: LauncherPlatform): void
+
+  // ---- Twitch (connexion par code d'appareil : l'app ne voit jamais le mot de passe) ----
+  getTwitchState(): Promise<TwitchState>
+  onTwitch(cb: (s: TwitchState) => void): () => void
+  /** demande un code d'appareil puis attend l'accord sur twitch.tv/activate */
+  twitchSignIn(): Promise<TwitchState>
+  twitchCancelSignIn(): void
+  /** révoque les jetons chez Twitch et les efface de ce PC */
+  twitchSignOut(): Promise<TwitchState>
+  /** ouvre twitch.tv/activate (adresse de la connexion en cours) dans le navigateur */
+  twitchOpenActivate(): void
+  /** streams en direct du jeu (catégorie trouvée par son nom ; cache 60 s) */
+  getTwitchStreams(gameId: string, query?: TwitchStreamsQuery): Promise<TwitchStreams>
+  /** recherche de catégories (« Pas ce jeu ? ») */
+  searchTwitchCategories(query: string): Promise<TwitchCategory[]>
+  /** catégorie choisie pour le jeu ; null : revient à la recherche automatique */
+  setTwitchCategory(gameId: string, category: TwitchCategory | null): Promise<void>
+  /** Échap pressé dans le lecteur ou le chat Twitch (le clavier y reste sinon) */
+  onTwitchEscape(cb: () => void): () => void
 }

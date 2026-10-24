@@ -4,7 +4,7 @@
 import { app, net, safeStorage } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
-import { PLATFORM_INFO, PLATFORM_ORDER } from '../shared/platforms'
+import { PLATFORM_INFO, platformsFor } from '../shared/platforms'
 import { t, tn } from '../shared/i18n'
 import type {
   LauncherPlatform,
@@ -134,7 +134,14 @@ export function onWindowFocus(): void {
 }
 
 /** Protocole enregistré (inconnu avant la première lecture : on laisse Windows répondre). */
-export const protocolAvailable = (scheme: string): boolean => (reg?.ok ? protocolRegistered(reg, scheme) : true)
+export const protocolAvailable = (scheme: string): boolean => {
+  // Linux : seul steam:// sert (ouvert par xdg-open), disponible quand le client Steam est là
+  if (process.platform !== 'win32') return scheme.toLowerCase() === 'steam' && (steamInstalled || !reg)
+  return reg?.ok ? protocolRegistered(reg, scheme) : true
+}
+
+/** Dernière photo du registre (programmes installés, clés des lanceurs) ; null avant la première lecture. */
+export const lastRegistry = (): RegistrySnapshot | null => reg
 
 export const steamAvatarFile = (): string | null => account?.avatarFile ?? null
 
@@ -212,7 +219,8 @@ function steamState(): SteamAccountState {
 
 export function platformsState(): PlatformsState {
   return {
-    platforms: PLATFORM_ORDER.map((id) => ({
+    // Linux : Steam seul (voir platformsFor)
+    platforms: platformsFor(process.platform).map((id) => ({
       id,
       name: PLATFORM_INFO[id].name,
       state: 'absent' as const,
@@ -402,8 +410,10 @@ function schedule(platform: LauncherPlatform): void {
 function updateWatchers(): void {
   const wanted = new Map<string, LauncherPlatform>()
   for (const d of steamWatchDirs()) wanted.set(d, 'steam')
-  for (const d of epicWatchDirs(reg)) wanted.set(d, 'epic')
-  for (const d of battlenetWatchDirs()) wanted.set(d, 'battlenet')
+  if (process.platform === 'win32') {
+    for (const d of epicWatchDirs(reg)) wanted.set(d, 'epic')
+    for (const d of battlenetWatchDirs()) wanted.set(d, 'battlenet')
+  }
   const before = [...watchers.keys()].sort().join('|')
   for (const [dir, w] of watchers) {
     if (!wanted.has(dir)) {

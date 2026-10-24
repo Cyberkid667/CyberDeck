@@ -4,7 +4,6 @@ import type { FileInfo, PeerInfo, TorrentDetails, TorrentSummary, TrackerInfo } 
 import {
   formatBytes,
   formatDate,
-  formatIndex,
   formatRatio,
   formatSpeed,
   formatTime,
@@ -15,12 +14,12 @@ import {
 } from '../format'
 import { locale } from '../../../shared/i18n'
 import { useT } from '../i18n'
-import { PeerGlobe } from './PeerGlobe'
+import { countryName, PeerGlobe } from './PeerGlobe'
 import { MiniProgress } from './ProgressBar'
 
 // Panneau de détails (SPEC 5.7) : onglets Fichiers · Infos · Pairs · Trackers avec leurs
 // compteurs, nom du torrent et « #03 » à droite ; arbre ASCII des fichiers, fiche à
-// pointillés, globe + tableau des pairs (repères A, B, C, port en gris), trackers.
+// pointillés, globe + tableau des pairs (code pays, port en gris), trackers.
 // Le globe reste monté (et figé) quand on change d'onglet : il n'est jamais recréé.
 
 type Tab = 'files' | 'infos' | 'peers' | 'trackers'
@@ -118,7 +117,6 @@ export function DetailsPanel({ torrent, details, height, number, onCopy, onOpenF
             onClick={() => setTab(x.id)}
           >
             {t(`shell.details.tab.${x.id}`)}
-            {counts[x.id] !== undefined && <span className="n">{counts[x.id]}</span>}
           </button>
         ))}
         {torrent && (
@@ -126,7 +124,6 @@ export function DetailsPanel({ torrent, details, height, number, onCopy, onOpenF
             <span className={`nm${isHashName(torrent) ? ' hash' : ''}`} title={name}>
               {name}
             </span>
-            {number ? <span className="cap">#{formatIndex(number)}</span> : null}
           </div>
         )}
       </div>
@@ -438,7 +435,7 @@ function InfosTab({ torrent: tor, details: d, onCopy, onOpenFolder }: InfosProps
 const connection = (c: string): string => c.replace(/^(uTP|TCP) /, '$1 · ')
 
 function PeersTable({ peers, paused }: { peers: PeerInfo[]; paused: boolean }): React.JSX.Element {
-  const { t } = useT()
+  const { t, locale: loc } = useT()
   if (!peers.length)
     return <div className="details-empty">{paused ? t('shell.details.peersEmptyPaused') : t('shell.details.peersEmpty')}</div>
   const seen = new Map<string, number>()
@@ -453,14 +450,14 @@ function PeersTable({ peers, paused }: { peers: PeerInfo[]; paused: boolean }): 
         <div className="r">{t('shell.details.col.download')}</div>
         <div className="r">{t('shell.details.col.upload')}</div>
       </div>
-      {peers.map((p, i) => {
+      {peers.map((p) => {
         const n = seen.get(p.address) ?? 0
         seen.set(p.address, n + 1)
         const a = splitAddress(p.address)
-        const mark = i < 3 ? 'ABC'[i] : null
         return (
-          <div className={`drow${mark ? ' mark' : ''}`} key={n ? `${p.address}#${n}` : p.address}>
-            <div>{mark && <span className="mk">{mark}</span>}</div>
+          <div className="drow" key={n ? `${p.address}#${n}` : p.address}>
+            {/* pays du pair (table DB-IP hors ligne du moteur) ; nom complet au survol */}
+            <div>{p.country && <span className="cc" title={countryName(p.country, loc)}>{p.country}</span>}</div>
             {/* source web : pas d'adresse IP (« — ») */}
             <div className="hi" title={p.address === '—' ? p.client : p.address}>
               {p.address === '—' ? nil : a.host}

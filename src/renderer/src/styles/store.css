@@ -1,0 +1,268 @@
+/* ==========================================================================
+   CyberDeck — onglet MAGASIN de la vue Steam (StoreView.tsx) : structure du magasin du
+   client Steam (barre du magasin, vitrine en carrousel, étagères, listes façon page de
+   recherche, page d'un jeu avec images, prix et achat sur Steam), aux couleurs de l'app :
+   noir et blanc, légendes en mono capitales, filets, accent blanc (réductions comprises),
+   bleu réservé à la progression, vert réservé à « En jeu ».
+   Les mises en page étroites suivent la largeur du magasin (requêtes de conteneur), pas
+   celle de la fenêtre : la barre latérale de l'app prend déjà de la place.
+   ========================================================================== */
+
+.stv-store:not([hidden]) { display: flex; min-width: 0; min-height: 0; }
+.sto { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-rows: 46px minmax(0, 1fr); container: sto / inline-size; }
+
+/* ---------- Barre du magasin ---------- */
+.sto-bar { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 0 16px 0 12px; border-bottom: 1px solid var(--hair); background: var(--bg-2); }
+.sto-back { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px 0 8px; margin-right: 4px; border: 1px solid var(--line-2); border-radius: var(--r-2);
+  font: 500 10.5px/1 var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--tx-1); transition: border-color .12s, background-color .12s; }
+.sto-back:hover { border-color: var(--line-3); background: rgba(255, 255, 255, 0.05); }
+.sto-back:focus-visible { box-shadow: var(--focus-ring); }
+.sto-back svg.i { width: 14px; height: 14px; }
+.sto-tabs { display: flex; align-items: stretch; align-self: stretch; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.sto-tabs::-webkit-scrollbar { display: none; }
+.sto-tab { position: relative; flex: none; padding: 0 12px; font: 500 11px/1 var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--tx-3); white-space: nowrap; transition: color .12s; }
+.sto-tab:hover { color: var(--tx-1); }
+.sto-tab:focus-visible { box-shadow: inset var(--focus-ring); color: var(--tx-1); }
+.sto-tab.on { color: var(--lum); }
+.sto-tab.on::after { content: ''; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 2px; background: #fff; box-shadow: var(--glow-sm); }
+.sto-bar .spacer { flex: 1; min-width: 8px; }
+.sto-search { flex: none; width: 280px; }
+.sto-search .search { width: 100%; height: 30px; }
+
+/* ---------- Corps ---------- */
+.sto-body { min-height: 0; overflow: auto; overflow-x: hidden; scrollbar-gutter: stable; background-color: var(--bg-1);
+  background-image: linear-gradient(var(--guide) 1px, transparent 1px), linear-gradient(90deg, var(--guide) 1px, transparent 1px);
+  background-size: 32px 32px; background-position: -1px -1px; background-attachment: local; }
+.sto-page { position: relative; max-width: 1240px; margin: 0 auto; padding: 22px 24px 44px; display: flex; flex-direction: column; gap: 30px; animation: gd-in .2s cubic-bezier(.2,.8,.2,1); }
+.sto-page > * { position: relative; }
+.sto-ph { display: flex; flex-direction: column; gap: 6px; }
+.sto-ph h2 { margin: 0; font: 300 26px/1.15 var(--font-mono); letter-spacing: -0.02em; color: var(--tx-1); }
+.sto-ph p { margin: 0; font: 400 13.5px/1.5 var(--font-sans); color: var(--tx-2); }
+.sto-list, .sto-results { gap: 20px; }
+
+/* images du magasin */
+.sto-img { display: block; width: 100%; height: 100%; object-fit: cover; background: var(--bg-3); }
+.sto-img.none { display: grid; place-items: center; color: var(--tx-4); }
+.sto-img.none svg.i { width: 22px; height: 22px; }
+
+/* ---------- Prix ---------- */
+.sto-price { flex: none; display: inline-flex; align-items: stretch; font: 500 12px/1 var(--font-mono); color: var(--tx-1); white-space: nowrap; }
+.sto-price .pct { display: grid; place-items: center; padding: 0 6px; min-height: 26px; background: var(--lum-fill); color: #000; font-weight: 600; letter-spacing: 0.02em; border-radius: 2px 0 0 2px; }
+.sto-price .amt { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 2px; }
+.sto-price.disc .amt { padding: 3px 7px; background: rgba(255, 255, 255, 0.07); border-radius: 0 2px 2px 0; }
+.sto-price .was { font-size: 10px; color: var(--tx-3); text-decoration: line-through; }
+.sto-price .now { color: var(--tx-1); }
+.sto-price.disc .now { color: #fff; }
+.sto-price.free { color: var(--tx-1); }
+.sto-price.soon { color: var(--tx-3); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+.sto-price.big { font-size: 15px; }
+.sto-price.big .pct { padding: 0 11px; min-height: 40px; font-size: 18px; }
+.sto-price.big .was { font-size: 11.5px; }
+.sto-price.big.disc .amt { padding: 4px 11px; }
+
+/* évaluations, plateformes, puces */
+.rv { font: 500 11.5px/1.2 var(--font-sans); color: var(--tx-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.rv.pos { color: var(--tx-1); }
+.rv.mixed { color: var(--tx-3); }
+.rv.neg { color: var(--err); }
+.sto-pf { display: inline-flex; gap: 4px; flex: none; }
+.sto-pf .cap { padding: 2px 5px; border: 1px solid var(--line); border-radius: 2px; font-size: 9px; line-height: 11px; color: var(--tx-2); }
+.sto-owned { position: absolute; left: 8px; top: 8px; z-index: 2; display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border-radius: 3px;
+  background: rgba(0, 0, 0, 0.84); border: 1px solid var(--line-3); color: var(--tx-1); font-size: 9.5px; line-height: 1; max-width: calc(100% - 16px); overflow: hidden; white-space: nowrap; }
+.sto-owned svg.i { width: 11px; height: 11px; flex: none; }
+.sto-kind { position: absolute; right: 8px; top: 8px; z-index: 2; padding: 3px 6px; border-radius: 2px; background: rgba(0, 0, 0, 0.84); border: 1px solid var(--line-2); color: var(--tx-2); font-size: 9px; line-height: 1; }
+.sto-kind.inline { position: static; display: inline-block; margin-left: 8px; vertical-align: 2px; }
+.sto-tag { display: inline-block; padding: 3px 8px; border: 1px solid var(--line); border-radius: 2px; font: 400 11px/1.25 var(--font-sans); color: var(--tx-2); background: rgba(255, 255, 255, 0.03); white-space: nowrap; }
+
+/* ---------- Vitrine (grand carrousel) ---------- */
+.sto-hero { flex: none; }
+.sto-hero-stage { display: grid; grid-template-columns: 30px minmax(0, 1fr) 30px; gap: 10px; align-items: center; }
+.sto-hero-arrow { height: 120px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: var(--r-2); color: var(--tx-2); background: rgba(10, 10, 10, 0.6); transition: border-color .12s, color .12s, background-color .12s; }
+.sto-hero-arrow:hover { border-color: var(--line-3); color: var(--tx-1); background: rgba(255, 255, 255, 0.05); }
+.sto-hero-arrow:focus-visible { box-shadow: var(--focus-ring); }
+.sto-hero-arrow:disabled { opacity: .3; pointer-events: none; }
+.sto-hero-arrow svg.i { width: 18px; height: 18px; }
+.sto-hero-card { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(240px, 1fr); min-width: 0; border: 1px solid var(--line-2); border-radius: var(--r-3); overflow: hidden;
+  background: var(--bg-2); text-align: left; transition: border-color .16s, box-shadow .16s; animation: sto-fade .35s ease; }
+.sto-hero-card:hover { border-color: #fff; box-shadow: var(--halo-sm); }
+.sto-hero-card:focus-visible { box-shadow: var(--focus-ring); }
+.sto-hero-card .main { display: block; position: relative; aspect-ratio: 616 / 353; min-width: 0; }
+.sto-hero-card .side { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 16px 16px 14px; border-left: 1px solid var(--hair);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 60%); }
+.sto-hero-card .nm { font: 600 19px/1.2 var(--font-sans); color: var(--tx-1); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sto-hero-card .shots { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.sto-hero-card .shots .sto-img { aspect-ratio: 16 / 9; height: auto; border-radius: 2px; opacity: .85; transition: opacity .16s; }
+.sto-hero-card:hover .shots .sto-img { opacity: 1; }
+.sto-hero-card .state { color: var(--tx-1); }
+.sto-hero-card .rel { font: 400 11.5px/1 var(--font-mono); color: var(--tx-3); margin-top: -4px; }
+.sto-hero-card .tags { display: flex; flex-wrap: wrap; gap: 5px; max-height: 50px; overflow: hidden; }
+.sto-hero-card .buy { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sto-dots { display: flex; justify-content: center; gap: 6px; margin-top: 12px; }
+.sto-dots button { width: 16px; height: 4px; padding: 0; border-radius: 2px; background: var(--line-2); transition: width .2s, background-color .2s; }
+.sto-dots button:hover { background: var(--line-3); }
+.sto-dots button.on { width: 28px; background: #fff; box-shadow: var(--glow-sm); }
+.sto-dots button:focus-visible { box-shadow: var(--focus-ring); }
+@keyframes sto-fade { from { opacity: .35; } to { opacity: 1; } }
+
+/* ---------- Étagères ---------- */
+.sto-shelf { flex: none; min-width: 0; }
+.sto-shelf .stv-sh h3 { max-width: 50%; }
+.sto-more { flex: none; }
+.sto-strip { gap: 16px; }
+.sto-tile { flex: none; width: 248px; display: flex; flex-direction: column; gap: 7px; text-align: left; scroll-snap-align: start; outline: none; }
+.sto-tile-img { position: relative; display: block; aspect-ratio: 460 / 215; border-radius: var(--r-3); overflow: hidden; border: 1px solid var(--hair); background: var(--bg-3);
+  transition: transform .16s cubic-bezier(.2,.8,.2,1), box-shadow .16s; }
+.sto-tile:hover .sto-tile-img { transform: translateY(-3px); box-shadow: var(--halo-sm); }
+.sto-tile:focus-visible .sto-tile-img { box-shadow: var(--focus-ring); }
+.sto-tile .nm { font: 500 13px/1.25 var(--font-sans); color: var(--tx-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sto-tile .foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 26px; }
+
+/* ---------- Listes et résultats ---------- */
+.sto-rows { display: flex; flex-direction: column; gap: 5px; }
+.sto-row { display: grid; grid-template-columns: 184px minmax(0, 1fr) 112px 150px 150px; align-items: center; gap: 14px; min-width: 0; padding: 5px 12px 5px 5px;
+  border: 1px solid var(--hair); border-radius: var(--r-2); background: var(--bg-2); text-align: left; transition: border-color .12s, background-color .12s; }
+.sto-row:hover { border-color: var(--line-3); background: #0e0e0e; }
+.sto-row:focus-visible { box-shadow: var(--focus-ring); }
+.sto-row-img.sto-img { width: 184px; height: auto; aspect-ratio: 231 / 87; border-radius: 2px; }
+.sto-row .mid { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.sto-row .nm { font: 500 14px/1.25 var(--font-sans); color: var(--tx-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sto-row .sub { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.sto-row .tg { font: 400 11.5px/1.2 var(--font-sans); color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.sto-row .rel { font: 400 11.5px/1.2 var(--font-mono); color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sto-row .rvw { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; }
+.sto-row .rvw .sto-owned { position: static; }
+.sto-row > .sto-price { justify-self: end; }
+
+/* ---------- Chargement, erreurs ---------- */
+.sto-skel { display: flex; flex-direction: column; gap: 26px; }
+.sto-skel .sk { border-radius: var(--r-3); background: linear-gradient(90deg, var(--bg-3) 0%, #1b1b1b 50%, var(--bg-3) 100%); background-size: 200% 100%; animation: sto-shimmer 1.3s linear infinite; }
+.sto-skel .sk.hero { height: 360px; margin: 26px 40px 0; }
+.sto-skel .sk-shelf { display: flex; flex-direction: column; gap: 12px; }
+.sto-skel .sk.line { height: 12px; width: 60%; border-radius: 2px; }
+.sto-skel .sk.line.short { width: 35%; }
+.sto-skel .sk-strip { display: flex; gap: 16px; overflow: hidden; }
+.sto-skel .sk.tile { flex: none; width: 248px; aspect-ratio: 460 / 215; }
+.sto-skel.k-list { gap: 5px; }
+.sto-skel .sk.row { height: 81px; border-radius: var(--r-2); }
+.sto-skel .sk-app { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(280px, 1fr); gap: 18px; }
+.sto-skel .sk.viewer { aspect-ratio: 16 / 9; }
+.sto-skel .sk-side { display: flex; flex-direction: column; gap: 14px; }
+.sto-skel .sk.head { aspect-ratio: 460 / 215; }
+@keyframes sto-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+.sto-error { display: grid; place-items: center; padding: 56px 0; }
+.sto-error .box { position: relative; width: min(540px, 100%); padding: 36px 32px 30px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center;
+  border: 1px solid var(--line); border-radius: var(--r-4); background: var(--bg-2); }
+.sto-error svg.big { width: 28px; height: 28px; color: var(--tx-2); stroke-width: 1.25; }
+.sto-error h2 { margin: 4px 0 0; font: 300 22px/1.2 var(--font-mono); letter-spacing: -0.02em; color: var(--tx-1); }
+.sto-error p { margin: 0 0 10px; max-width: 420px; font: 400 13.5px/1.55 var(--font-sans); color: var(--tx-2); }
+.sto-error .acts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.sto-stale { display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 12px; border: 1px solid var(--line-2); border-radius: var(--r-2); background: var(--bg-2);
+  font: 400 12.5px/1.3 var(--font-sans); color: var(--tx-2); }
+.sto-stale > svg.i { width: 14px; height: 14px; color: var(--tx-3); }
+.sto-stale span { flex: 1; }
+
+/* ---------- Page d'un jeu ---------- */
+.sto-app { gap: 20px; }
+.sto-app-bg { position: absolute !important; left: -24px; right: -24px; top: 0; height: 640px; z-index: 0; pointer-events: none; background-size: cover; background-position: center top;
+  opacity: .2; -webkit-mask-image: linear-gradient(#000 30%, transparent 100%); mask-image: linear-gradient(#000 30%, transparent 100%); }
+.sto-app-h { display: flex; flex-direction: column; gap: 6px; }
+.sto-app-h h1 { margin: 0; font: 300 30px/1.15 var(--font-mono); letter-spacing: -0.02em; color: var(--tx-1); overflow-wrap: anywhere; }
+.sto-app-top, .sto-app-main { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(280px, 1fr); gap: 18px; align-items: start; }
+
+.sto-gal { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.sto-viewer { position: relative; display: block; aspect-ratio: 16 / 9; border: 1px solid var(--line-2); border-radius: var(--r-3); overflow: hidden; background: #000; }
+.sto-viewer > .sto-img { animation: sto-fade .25s ease; }
+.sto-gal-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 34px; height: 56px; display: grid; place-items: center; border: 1px solid var(--line-2); border-radius: var(--r-2);
+  background: rgba(0, 0, 0, 0.66); color: var(--tx-1); opacity: 0; transition: opacity .14s, border-color .12s; }
+.sto-gal-arrow.l { left: 10px; }
+.sto-gal-arrow.r { right: 10px; }
+.sto-viewer:hover .sto-gal-arrow, .sto-gal-arrow:focus-visible { opacity: 1; }
+.sto-gal-arrow:hover { border-color: #fff; }
+.sto-gal-arrow:focus-visible { box-shadow: var(--focus-ring); }
+.sto-watch { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 9px; height: 40px; padding: 0 18px;
+  border-radius: var(--r-2); background: var(--lum-fill); color: #000; font: 500 11px/1 var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; box-shadow: var(--halo); }
+.sto-watch:hover { background: #fff; box-shadow: var(--halo-hover); }
+.sto-watch svg.i { width: 14px; height: 14px; color: #000; }
+.sto-thumbs { display: flex; gap: 6px; overflow-x: auto; padding: 1px 1px 7px; }
+.sto-thumbs::-webkit-scrollbar { height: 3px; }
+.sto-thumbs::-webkit-scrollbar-track { background: var(--hair); border-radius: 2px; }
+.sto-thumbs::-webkit-scrollbar-thumb { background: var(--line-3); border-radius: 2px; border: 0; }
+.sto-thumbs button { position: relative; flex: none; width: 116px; aspect-ratio: 16 / 9; border: 1px solid var(--hair); border-radius: 2px; overflow: hidden; opacity: .55; transition: opacity .12s, box-shadow .12s; }
+.sto-thumbs button:hover { opacity: .9; }
+.sto-thumbs button.on { opacity: 1; box-shadow: 0 0 0 1px #fff; border-color: #fff; }
+.sto-thumbs button:focus-visible { box-shadow: var(--focus-ring); opacity: 1; }
+.sto-thumbs button > svg.i { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 18px; height: 18px; color: #fff; filter: drop-shadow(0 0 4px #000); }
+
+.sto-app-info { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--r-3); background: rgba(10, 10, 10, 0.82); }
+.sto-app-info .hd.sto-img { height: auto; aspect-ratio: 460 / 215; border-radius: 2px; }
+.sto-app-info .desc { margin: 0; font: 400 13px/1.55 var(--font-sans); color: var(--tx-2); }
+.sto-facts { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.sto-facts > div { display: grid; grid-template-columns: 118px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.sto-facts dt { margin: 0; }
+.sto-facts dd { margin: 0; font: 400 12.5px/1.35 var(--font-sans); color: var(--tx-1); min-width: 0; overflow-wrap: anywhere; }
+.sto-facts dd .rv { white-space: normal; font-size: 12.5px; }
+.sto-facts dd .pct { margin-left: 8px; font: 400 11px/1 var(--font-mono); color: var(--tx-3); }
+.sto-facts dd .muted { color: var(--tx-3); }
+.sto-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.sto-ownedbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 16px; border: 1px solid var(--line-3); border-radius: var(--r-3);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02)); box-shadow: inset 2px 0 0 #fff; }
+.sto-ownedbar > svg.lead { width: 20px; height: 20px; color: var(--tx-1); }
+.sto-ownedbar .txt { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 4px; }
+.sto-ownedbar .txt .cap { color: var(--tx-1); }
+.sto-ownedbar .txt span:last-child { font: 400 13.5px/1.35 var(--font-sans); color: var(--tx-2); }
+
+.sto-app-main .col { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.sto-buy { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 16px 18px; border: 1px solid var(--line-2); border-radius: var(--r-3); background: var(--bg-2); }
+.sto-buy .txt { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; flex: 1 1 220px; }
+.sto-buy h3 { margin: 0; font: 500 16px/1.3 var(--font-sans); color: var(--tx-1); overflow-wrap: anywhere; }
+.sto-buy .note { font: 400 11.5px/1.3 var(--font-sans); color: var(--tx-3); }
+.sto-buy .acts { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.sto-dlc-list { display: flex; flex-direction: column; gap: 5px; }
+.sto-dlc-row { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 4px 10px 4px 4px; border: 1px solid var(--hair); border-radius: var(--r-2);
+  background: var(--bg-2); text-align: left; transition: border-color .12s; }
+.sto-dlc-row:hover { border-color: var(--line-3); }
+.sto-dlc-row:focus-visible { box-shadow: var(--focus-ring); }
+.sto-dlc-row > .sto-img { width: 120px; height: auto; aspect-ratio: 231 / 87; border-radius: 2px; }
+.sto-dlc-row .nm { font: 400 13px/1.25 var(--font-sans); color: var(--tx-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.sto-app-main .side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.sto-side-b, .sto-meta { padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-3); background: rgba(10, 10, 10, 0.82); }
+.sto-side-b { display: flex; flex-direction: column; gap: 7px; }
+.sto-side-b .v { font: 400 12.5px/1.4 var(--font-sans); color: var(--tx-1); }
+.sto-side-b .feats { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; font: 400 12.5px/1.35 var(--font-sans); color: var(--tx-2); }
+.sto-side-b .feats li { position: relative; padding-left: 12px; }
+.sto-side-b .feats li::before { content: ''; position: absolute; left: 0; top: .55em; width: 4px; height: 4px; background: var(--tx-3); }
+.sto-meta { display: flex; align-items: center; gap: 12px; }
+.sto-meta .score { width: 44px; height: 44px; display: grid; place-items: center; font: 600 18px/1 var(--font-mono); color: var(--tx-1); border: 1px solid var(--line-3); border-radius: 3px; }
+.sto-meta .score.hi { background: var(--lum-fill); color: #000; border-color: #fff; }
+.sto-meta .score.lo { color: var(--err); border-color: var(--err-line); }
+.sto-meta .lnk { margin-left: auto; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 3px; color: var(--tx-3); }
+.sto-meta .lnk:hover { color: var(--tx-1); background: rgba(255, 255, 255, 0.06); }
+.sto-meta .lnk svg.i { width: 14px; height: 14px; }
+.sto-open { justify-content: center; }
+
+/* ---------- Magasin étroit ---------- */
+@container sto (max-width: 1060px) {
+  .sto-search { width: 210px; }
+  .sto-tab { padding: 0 9px; letter-spacing: 0.1em; }
+  .sto-tab.on::after { left: 9px; right: 9px; }
+  .sto-row { grid-template-columns: 160px minmax(0, 1fr) 140px 140px; }
+  .sto-row .rel { display: none; }
+  .sto-row-img.sto-img { width: 160px; }
+}
+@container sto (max-width: 900px) {
+  .sto-page { padding: 18px 16px 36px; }
+  .sto-app-top, .sto-app-main { grid-template-columns: minmax(0, 1fr); }
+  .sto-skel .sk-app { grid-template-columns: minmax(0, 1fr); }
+  .sto-hero-card { grid-template-columns: minmax(0, 1.4fr) minmax(200px, 1fr); }
+  .sto-hero-card .shots { display: none; }
+  .sto-back span { display: none; }
+  .sto-back { padding: 0 8px; }
+  .sto-search { width: 170px; }
+  .sto-row { grid-template-columns: 132px minmax(0, 1fr) 130px; }
+  .sto-row .rvw { display: none; }
+  .sto-row-img.sto-img { width: 132px; }
+  .sto-tile { width: 220px; }
+}

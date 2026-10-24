@@ -1,0 +1,173 @@
+/* ==========================================================================
+   CyberDeck — onglet PROFIL de la vue Steam (ProfileView.tsx) : la structure d'une page de
+   profil Steam — en-tête avec grand avatar, niveau et présence ; vitrines (chiffres, activité
+   récente, succès, badges) ; liste d'amis à droite. Noir et blanc, légendes en mono capitales,
+   filets ; vert : en jeu ; blanc : en ligne ; gris : hors ligne.
+   ========================================================================== */
+.stv-profile { display: flex; min-height: 0; min-width: 0; }
+.prf { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.prf-scroll { flex: 1; min-height: 0; overflow: auto; overflow-x: hidden; scrollbar-gutter: stable; animation: gd-in .2s cubic-bezier(.2,.8,.2,1); }
+
+/* ---------- En-tête ---------- */
+.prf-head { position: relative; overflow: hidden; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 28px;
+  padding: 30px 32px 28px; border-bottom: 1px solid var(--hair); background: var(--bg-0); isolation: isolate; }
+.prf-head::after { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background-image: linear-gradient(var(--guide) 1px, transparent 1px), linear-gradient(90deg, var(--guide) 1px, transparent 1px); background-size: 32px 32px; background-position: -1px -1px; }
+/* fond : l'avatar flouté, en gris (pas de couleur de décor) */
+.prf-head-bg { position: absolute; inset: -60px; z-index: -2; background-size: cover; background-position: center; filter: blur(48px) grayscale(1) brightness(.4); opacity: .55; pointer-events: none; }
+.prf-avatar { position: relative; width: 164px; height: 164px; padding: 3px; border-radius: var(--r-2); border: 1px solid var(--tx-4); background: var(--bg-2); flex: none; }
+.prf-head.st-online .prf-avatar { border-color: #fff; box-shadow: var(--halo-sm); }
+.prf-head.st-ingame .prf-avatar { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok), 0 0 26px rgba(61, 220, 140, 0.3); }
+.prf-avatar .img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 2px; }
+.prf-avatar .img.none { display: grid; place-items: center; color: var(--tx-3); background: var(--bg-3); }
+.prf-avatar .img.none svg.i { width: 48px; height: 48px; stroke-width: 1; }
+.prf-id { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.prf-id .nm { margin: 0; font: 300 34px/1.12 var(--font-mono); letter-spacing: -0.02em; color: var(--lum); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 0 22px rgba(255, 255, 255, 0.18); }
+.prf-id p { margin: 0; }
+.prf-id .real { font: 400 14px/1.4 var(--font-sans); color: var(--tx-2); }
+.prf-id .status { display: inline-flex; align-items: center; gap: 8px; font: 500 11px/1.3 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--tx-3); }
+.prf-id .status .sdot { width: 7px; height: 7px; background: var(--tx-4); }
+.prf-id .status.st-online { color: var(--tx-1); }
+.prf-id .status.st-online .sdot { background: #fff; box-shadow: var(--glow-sm); }
+.prf-id .status.st-ingame { color: var(--ok); }
+.prf-id .status.st-ingame .sdot { background: var(--ok); box-shadow: 0 0 8px rgba(61, 220, 140, 0.7); }
+.prf-id .since { font: 400 12.5px/1.4 var(--font-sans); color: var(--tx-3); }
+.prf-side { display: flex; flex-direction: column; align-items: flex-end; gap: 16px; }
+.prf-level { display: flex; align-items: center; gap: 12px; }
+.prf-level .ring { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; border: 2px solid #fff; box-shadow: var(--glow-sm), inset 0 0 12px rgba(255, 255, 255, 0.12);
+  font: 400 20px/1 var(--font-mono); color: var(--lum); background: rgba(0, 0, 0, 0.55); }
+.prf-side .acts { display: flex; gap: 8px; align-items: center; }
+.prf-side .acts .btn-sm { width: 32px; height: 32px; padding: 0; justify-content: center; }
+.prf-side .acts .btn-sm svg.i { width: 14px; height: 14px; }
+.prf-stale { margin: 0; padding: 8px 32px; border-bottom: 1px solid var(--hair); color: var(--tx-3); background: var(--bg-2); }
+
+/* ---------- Corps : vitrines + amis ---------- */
+.prf-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 30px; padding: 24px 24px 32px 32px; align-items: start; }
+.prf-main { display: flex; flex-direction: column; gap: 28px; min-width: 0; }
+.prf-sh { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.prf-sh h3 { margin: 0; color: var(--tx-1); white-space: nowrap; }
+.prf-sh .rule { flex: 1; height: 1px; background: var(--line); position: relative; }
+.prf-sh .rule::after { content: ''; position: absolute; right: 0; top: -2px; width: 1px; height: 5px; background: var(--line-3); }
+.prf-quiet { margin: 0; display: flex; align-items: center; gap: 8px; font: 400 12.5px/1.45 var(--font-sans); color: var(--tx-3); }
+.prf-quiet svg.i { width: 14px; height: 14px; }
+.prf-quiet.sm { margin-top: 12px; font-size: 11.5px; }
+.prf-loading { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 18px 0; }
+
+/* chiffres */
+.prf-stats { display: flex; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--bg-2); }
+.prf-stats .stat { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding: 14px 18px; }
+.prf-stats .stat + .stat { border-left: 1px solid var(--hair); }
+.prf-stats .v { font: 300 26px/1 var(--font-mono); color: var(--lum); letter-spacing: -0.01em; white-space: nowrap; }
+
+/* activité récente */
+.prf-recent-list { display: flex; flex-direction: column; gap: 8px; }
+.prf-game { display: grid; grid-template-columns: 184px minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 8px 16px 8px 8px; text-align: left;
+  border: 1px solid var(--line); border-radius: var(--r-2); background: var(--bg-2); transition: border-color .12s, background-color .12s; }
+.prf-game:hover { border-color: var(--line-3); background: #0d0d0d; }
+.prf-game:focus-visible { box-shadow: var(--focus-ring); }
+.prf-game .art { position: relative; width: 184px; height: 69px; border-radius: 3px; overflow: hidden; background: var(--bg-3); display: grid; place-items: center; }
+.prf-game .art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+.prf-game .art svg.ph { width: 20px; height: 20px; color: var(--tx-4); }
+/* pas d'image du magasin : la petite icône du jeu, à sa taille, au centre */
+.prf-game .art img.small { inset: auto; position: relative; width: 32px; height: 32px; border-radius: 3px; }
+.prf-game .art:has(img.small) svg.ph { display: none; }
+.prf-game .txt { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.prf-game .nm { font: 500 14px/1.25 var(--font-sans); color: var(--tx-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prf-game .sub { font: 400 12px/1.3 var(--font-sans); color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prf-game .wk { font: 500 11px/1 var(--font-mono); letter-spacing: 0.04em; color: var(--tx-2); white-space: nowrap; }
+
+/* vitrine des succès */
+.prf-ach-rows { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--bg-2); }
+.prf-ach-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); align-items: start; gap: 12px; }
+.prf-ach-row .k { padding-top: 20px; }
+.prf-ach-row .icons { display: flex; flex-wrap: wrap; gap: 10px; }
+.prf-ach { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 58px; }
+.prf-ach .ico { position: relative; width: 56px; height: 56px; border-radius: 3px; border: 1px solid var(--line-2); background: var(--bg-3); overflow: hidden; display: grid; place-items: center; transition: border-color .12s, box-shadow .12s; }
+.prf-ach:hover .ico { border-color: #fff; box-shadow: var(--halo-sm); }
+.prf-ach .ico img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+.prf-ach .ico svg.ph { width: 20px; height: 20px; color: var(--tx-4); }
+.prf-ach .pct { font: 500 10px/1 var(--font-mono); color: var(--tx-3); white-space: nowrap; }
+
+/* badges */
+.prf-badge-sum { margin: 0 0 12px; font: 400 12.5px/1.45 var(--font-sans); color: var(--tx-3); }
+.prf-badge-sum .hi { font: 500 12px/1 var(--font-mono); letter-spacing: 0.04em; color: var(--tx-1); }
+.prf-badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.prf-badge { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 8px 12px 8px 8px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--bg-2); }
+.prf-badge .ico { position: relative; width: 40px; height: 40px; flex: none; border-radius: 3px; background: var(--bg-3); overflow: hidden; display: grid; place-items: center; border: 1px solid var(--hair); }
+.prf-badge.foil .ico { border-color: var(--line-3); box-shadow: 0 0 10px rgba(255, 255, 255, 0.18); }
+.prf-badge .ico img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+.prf-badge .ico svg.ph { width: 18px; height: 18px; color: var(--tx-3); }
+.prf-badge .txt { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.prf-badge .nm { font: 500 12.5px/1.25 var(--font-sans); color: var(--tx-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prf-badge .sub { font: 400 10.5px/1.2 var(--font-mono); letter-spacing: 0.04em; color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- Amis ---------- */
+/* collée en haut au défilement ; une longue liste défile dans sa colonne */
+.prf-friends { position: sticky; top: 16px; min-width: 0; display: flex; flex-direction: column; max-height: calc(100vh - 170px); }
+.prf-flist { min-height: 0; overflow: auto; overflow-x: hidden; display: flex; flex-direction: column; padding: 8px 6px 12px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--bg-2); }
+.prf-fgroup { display: flex; flex-direction: column; }
+.prf-fgroup + .prf-fgroup { margin-top: 8px; }
+.prf-fgroup .gh { padding: 6px 8px; }
+.prf-fgroup.g-ingame .gh { color: var(--ok); }
+.prf-fgroup.g-online .gh { color: var(--tx-1); }
+.prf-friend { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 5px 8px; border-radius: 3px; text-align: left; transition: background-color .1s; }
+.prf-friend:hover { background: rgba(255, 255, 255, 0.05); }
+.prf-friend:focus-visible { box-shadow: inset var(--focus-ring); }
+.prf-friend .av { width: 34px; height: 34px; flex: none; border-radius: 2px; object-fit: cover; background: var(--bg-3); border: 1px solid var(--tx-4); padding: 1px; }
+.prf-friend .av.none { display: grid; place-items: center; color: var(--tx-3); }
+.prf-friend .av.none svg.i { width: 16px; height: 16px; }
+.prf-friend.st-online .av { border-color: #fff; }
+.prf-friend.st-ingame .av { border-color: var(--ok); box-shadow: 0 0 10px rgba(61, 220, 140, 0.3); }
+.prf-friend.st-offline .av { opacity: .55; filter: grayscale(1); }
+.prf-friend .txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.prf-friend .nm { font: 500 13px/1.2 var(--font-sans); color: var(--tx-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prf-friend .sub { font: 400 11.5px/1.2 var(--font-sans); color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prf-friend.st-ingame .nm, .prf-friend.st-ingame .sub { color: var(--ok); }
+.prf-friend.st-offline .nm { color: var(--tx-3); }
+.prf-flist > .prf-quiet { padding: 8px; }
+.prf-flist > .prf-quiet.sm { margin: 10px 0 0; padding: 10px 8px 0; border-top: 1px solid var(--hair); }
+.prf-flist > .prf-stale { padding: 4px 8px 8px; border: 0; background: none; }
+
+/* liste d'amis privée : marche à suivre */
+.prf-private { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 10px 10px 6px; }
+.prf-private svg.big { width: 22px; height: 22px; color: var(--tx-2); stroke-width: 1.25; }
+.prf-private h4 { margin: 0; font: 400 16px/1.3 var(--font-mono); letter-spacing: -0.01em; color: var(--tx-1); }
+.prf-private p { margin: 0; font: 400 12.5px/1.5 var(--font-sans); color: var(--tx-2); }
+.prf-private ol { margin: 2px 0 8px; padding: 0; list-style: none; counter-reset: st; display: flex; flex-direction: column; gap: 6px; }
+.prf-private li { counter-increment: st; display: flex; gap: 10px; align-items: baseline; font: 500 11.5px/1.35 var(--font-mono); color: var(--tx-1); }
+.prf-private li::before { content: counter(st); flex: none; display: grid; place-items: center; width: 18px; height: 18px; border: 1px solid var(--line-3); border-radius: 50%; font-size: 10px; color: var(--tx-2); }
+
+/* ---------- Panneaux calmes : pas de clé, pas de compte, erreur ---------- */
+.prf-calm { flex: 1; display: grid; place-items: center; min-height: 0; overflow: auto; padding: 24px; position: relative;
+  background-image: linear-gradient(var(--guide) 1px, transparent 1px), linear-gradient(90deg, var(--guide) 1px, transparent 1px); background-size: 32px 32px; background-position: -1px -1px; }
+.prf-calm .box { position: relative; width: min(560px, 100%); padding: 38px 34px 34px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center;
+  border: 1px solid var(--line); border-radius: var(--r-4); background: var(--bg-2); animation: gd-in .2s cubic-bezier(.2,.8,.2,1); }
+.prf-calm svg.big { width: 30px; height: 30px; color: var(--tx-2); stroke-width: 1.25; margin-bottom: 4px; }
+.prf-calm h2 { margin: 4px 0 0; font: 300 24px/1.2 var(--font-mono); letter-spacing: -0.02em; color: var(--tx-1); }
+.prf-calm p { margin: 0 0 12px; max-width: 440px; font: 400 13.5px/1.55 var(--font-sans); color: var(--tx-2); }
+.prf-calm .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
+/* ---------- Fenêtre moyenne et petite ---------- */
+@media (max-width: 1199px) {
+  .prf-body { grid-template-columns: minmax(0, 1fr) 260px; gap: 22px; padding: 20px 18px 28px 22px; }
+  .prf-head { gap: 20px; padding: 24px 22px 22px; }
+  .prf-avatar { width: 128px; height: 128px; }
+  .prf-id .nm { font-size: 28px; }
+  .prf-game { grid-template-columns: 138px minmax(0, 1fr); }
+  .prf-game .art { width: 138px; height: 52px; }
+  .prf-game .wk { grid-column: 2; justify-self: start; margin-top: -4px; }
+  .prf-ach-row { grid-template-columns: 1fr; gap: 8px; }
+  .prf-ach-row .k { padding-top: 0; }
+  .prf-stale { padding: 8px 22px; }
+}
+@media (max-width: 1023px) {
+  .prf-stats .stat { padding: 12px; }
+  .prf-stats .v { font-size: 22px; }
+  .prf-head { gap: 18px; padding: 20px 18px 18px; }
+  .prf-avatar { width: 112px; height: 112px; }
+  .prf-id .nm { font-size: 24px; }
+  .prf-side { gap: 12px; }
+  .prf-level .cap { display: none; }
+  .prf-level .ring { width: 44px; height: 44px; font-size: 17px; }
+  .prf-side .acts .btn-line:not(.btn-sm) { height: 32px; }
+}

@@ -7,13 +7,13 @@ import { useT } from '../i18n'
 // visibles), recherche. ViewTitle et SearchBox servent aussi à la bibliothèque.
 
 /** Titre de vue : légende « TORRENTS » + titre mono 300 26 px + compteur en exposant (masqué sous 1360 px). */
-export function ViewTitle({ cap, title, count }: { cap: string; title: string; count: number }): React.JSX.Element {
+/** Titre de vue sans compteur (l'utilisateur ne veut aucune numérotation) ; count reste accepté pour les appels existants. */
+export function ViewTitle({ cap, title }: { cap: string; title: string; count?: number }): React.JSX.Element {
   return (
     <div className="vtitle">
       <span className="cap">{cap}</span>
       <h1>
         {title}
-        <sup>{count}</sup>
       </h1>
     </div>
   )

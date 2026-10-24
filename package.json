@@ -1,8 +1,8 @@
 {
   "name": "cyberdeck",
   "productName": "CyberDeck",
-  "version": "0.7.1",
-  "description": "CyberDeck — bibliothèque de jeux unifiée pour Windows (Steam, Epic, GOG, EA, Ubisoft, Xbox…), avec un client torrent en option",
+  "version": "0.13.1",
+  "description": "CyberDeck: one game library for every launcher on Windows (Steam, Epic, GOG, EA, Ubisoft, Xbox...) with Steam on Linux, plus an optional torrent client",
   "author": "Cyberkid667",
   "license": "MIT",
   "private": true,
@@ -12,7 +12,8 @@
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "icon": "node scripts/make-icon.mjs",
-    "dist": "electron-vite build && electron-builder --win"
+    "dist": "electron-vite build && electron-builder --win",
+    "dist:linux": "electron-vite build && electron-builder --linux"
   },
   "dependencies": {
     "parse-torrent": "^11.0.24",

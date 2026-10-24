@@ -27,7 +27,12 @@ import type {
 import type { DetectedGame, PlatformScan } from './platforms'
 import { takeSnapshot, type UninstallEntry as RegUninstallEntry } from './platforms/registry'
 import { steamLocalCover } from './platforms/steam'
+import { linuxSteamRunningAppId } from './platforms/steamLinux'
 import { cleanPsError, PS_RESTRICTED, PS_RESTRICTED_CHECK, runPs, startPs } from './powershell'
+import { startProcWatcher } from './procWatch'
+
+/** Windows. Linux : ni PowerShell ni registre ; lancement direct et surveillance par /proc (procWatch.ts). */
+const IS_WIN = process.platform === 'win32'
 
 interface Deps {
   log: (message: string) => void
@@ -406,6 +411,8 @@ interface UninstallEntry {
 }
 
 async function uninstallEntries(): Promise<UninstallEntry[]> {
+  // Linux : pas de « Programmes installés »
+  if (!IS_WIN) return []
   // PowerShell bloqué (antivirus…) : l'installation ou l'import n'attend pas indéfiniment
   const res = await runPs(UNINSTALL_SCRIPT, {}, 60_000)
   try {
@@ -432,6 +439,8 @@ function shortcutDirs(): string[] {
 
 async function listShortcuts(): Promise<Map<string, number>> {
   const found = new Map<string, number>()
+  // raccourcis .lnk : Windows seulement (shell.readShortcutLink n'existe pas ailleurs)
+  if (!IS_WIN) return found
   async function walk(dir: string, depth: number): Promise<void> {
     let entries: fs.Dirent[]
     try {
@@ -459,6 +468,26 @@ function isGameExe(p: string | null | undefined): p is string {
   return !!p && /\.exe$/i.test(p) && !NOT_GAME_EXE.test(path.basename(p))
 }
 
+/** Extensions des programmes d'un jeu Linux (AppImage, binaire Unity/Godot, script). */
+const LINUX_PROGRAM_EXT = new Set(['.appimage', '.x86_64', '.x86', '.sh'])
+
+/**
+ * Linux : programme d'un jeu (pour le plus gros programme d'un dossier et l'import d'un dossier
+ * de jeux) : AppImage, .x86_64, script .sh, ou fichier exécutable sans extension.
+ */
+function isLinuxProgram(file: string, mode: number): boolean {
+  const name = path.basename(file)
+  if (NOT_GAME_EXE.test(name)) return false
+  const ext = path.extname(name).toLowerCase()
+  return LINUX_PROGRAM_EXT.has(ext) || (ext === '' && (mode & 0o111) !== 0)
+}
+
+/** Linux : programme d'un jeu trouvé en parcourant un dossier, avec sa taille. */
+async function linuxProgramFile(p: string): Promise<{ ok: boolean; size: number }> {
+  const st = await fsp.stat(p).catch(() => null)
+  return st && st.isFile() && isLinuxProgram(p, st.mode) ? { ok: true, size: st.size } : { ok: false, size: 0 }
+}
+
 function exeFromIcon(icon: string | null | undefined): string | null {
   if (!icon) return null
   return icon.trim().replace(/^"|"$/g, '').replace(/,\s*-?\d+$/, '').replace(/^"|"$/g, '')
@@ -478,6 +507,9 @@ async function largestExe(root: string): Promise<string | null> {
       const p = path.join(dir, e.name)
       if (e.isDirectory()) {
         if (depth < 3 && !/(redist|directx|support|_commonredist|tools)/i.test(e.name)) await walk(p, depth + 1)
+      } else if (!IS_WIN) {
+        const r = await linuxProgramFile(p)
+        if (r.ok && (!best || r.size > best.size)) best = { p, size: r.size }
       } else if (isGameExe(p)) {
         const size = (await fsp.stat(p).catch(() => null))?.size ?? 0
         if (!best || size > best.size) best = { p, size }
@@ -532,6 +564,8 @@ export async function installFromTorrent(t: TorrentSummary): Promise<void> {
   const fail = (error: string): void =>
     deps.installDone({ torrentId: t.id, ok: false, error, guess: { name: fallbackName, exePath: null, installDir: null } })
   if (!t.installer || installing.has(t.id)) return
+  // Linux : un installateur Windows (setup.exe) ne peut pas tourner ici
+  if (!IS_WIN) return fail(tr('main.linux.installerUnsupported'))
   if (!fs.existsSync(t.installer)) return fail(tr('main.install.installerMissing', { path: t.installer }))
 
   installing.add(t.id)
@@ -883,6 +917,9 @@ async function loadIcon(id: string): Promise<void> {
   const g = findGame(id)
   if (!g) return
   try {
+    // Linux : app.getFileIcon ne donne que l'icône générique du type de fichier (pas celle du
+    // jeu) : jeu local sans icône (la manette s'affiche), jeu Steam avec l'icône de la boutique
+    if (!IS_WIN && g.platform === 'local') return
     if (g.platform === 'local') {
       // Jeu lancé par un autre programme (explorer.exe pour un jeu du Microsoft Store) :
       // l'icône vient plutôt du programme principal de son dossier.
@@ -896,7 +933,7 @@ async function loadIcon(id: string): Promise<void> {
       changed()
       return
     }
-    if (await exists(g.exePath)) {
+    if (IS_WIN && (await exists(g.exePath))) {
       const icon = await fileIcon(g.exePath)
       if (icon && !icon.isEmpty()) {
         await fsp.writeFile(iconFile(id), icon.toPNG())
@@ -942,6 +979,9 @@ async function listExes(root: string): Promise<{ rel: string; size: number }[]> 
       const p = path.join(dir, e.name)
       if (e.isDirectory()) {
         if (depth < 6 && !SKIP_DIRS.test(e.name)) await walk(p, depth + 1)
+      } else if (!IS_WIN) {
+        const r = await linuxProgramFile(p)
+        if (r.ok) found.push({ rel: path.relative(root, p), size: r.size })
       } else if (isGameExe(p) && !/(anticheat|eosbootstrapper|ffmpeg|ffprobe|quicksfv|uplayinstaller)/i.test(e.name)) {
         const size = (await fsp.stat(p).catch(() => null))?.size ?? 0
         found.push({ rel: path.relative(root, p), size })
@@ -1021,6 +1061,11 @@ export async function scanGamesFolder(dir: string): Promise<ScanCandidate[]> {
 }
 
 export function defaultGamesFolder(): string {
+  if (!IS_WIN) {
+    // Linux : ~/Games (Lutris, Heroic, habitudes courantes), sinon le dossier personnel
+    const games = path.join(os.homedir(), 'Games')
+    return fs.existsSync(games) ? games : os.homedir()
+  }
   const systemDrive = process.env.SystemDrive || 'C:'
   const gamesDir = path.join(systemDrive + path.sep, 'Games')
   if (fs.existsSync(gamesDir)) return gamesDir
@@ -1037,6 +1082,17 @@ export function defaultGamesFolder(): string {
 // ---------- Ajouter, modifier, retirer ----------
 
 function checkExe(exePath: string): void {
+  if (!IS_WIN) {
+    // Linux : binaire, AppImage ou script (le droit d'exécution est vérifié au lancement)
+    let file = false
+    try {
+      file = fs.statSync(exePath).isFile()
+    } catch {
+      file = false
+    }
+    if (!file) throw new Error(tr('main.game.exeNotFound', { path: exePath }))
+    return
+  }
   if (!/\.exe$/i.test(exePath)) throw new Error(tr('main.game.chooseExe'))
   if (!fs.existsSync(exePath)) throw new Error(tr('main.game.exeNotFound', { path: exePath }))
 }
@@ -1157,7 +1213,9 @@ function tooBroad(dir: string): boolean {
     os.homedir(),
     knownDir('desktop'),
     knownDir('downloads'),
-    knownDir('documents')
+    knownDir('documents'),
+    // Linux : dossiers système partagés par de nombreux programmes
+    ...(IS_WIN ? [] : ['/usr', '/usr/bin', '/usr/local', '/usr/local/bin', '/usr/games', '/usr/lib', '/opt', '/bin', '/tmp'])
   ]
   return broad.some((b) => sameDir(r, b))
 }
@@ -1370,6 +1428,7 @@ export async function playGame(id: string): Promise<void> {
     !!t && !!torrentRoot && (inside(g.exePath, torrentRoot) || path.resolve(g.exePath).toLowerCase() === path.resolve(torrentRoot).toLowerCase())
   const resumeTorrentId = fromTorrent && (await deps.releaseTorrent(t.id)) ? t.id : null
   const direct: DirectLaunch = { kind: 'exe', target: g.exePath, args: g.args ?? '', cwd: path.dirname(g.exePath) }
+  if (!IS_WIN) return playLocalLinux(g, direct, resumeTorrentId)
   if (psRestricted) return launchUntracked(id, direct, resumeTorrentId)
   const startedAt = Date.now()
   let watcher: ChildProcess
@@ -1424,6 +1483,7 @@ function playPlatformGame(g: Game): void {
   const cwd = [launch.cwd, g.installDir, os.homedir()].find((d) => !!d && fs.existsSync(d)) ?? os.homedir()
   const id = g.id
   const direct: DirectLaunch = { kind: launch.kind === 'uri' ? 'uri' : 'exe', target: launch.target, args: launch.kind === 'exe' ? (launch.args ?? '') : '', cwd }
+  if (!IS_WIN) return playPlatformLinux(g, direct, dirs)
   if (psRestricted) return void launchUntracked(id, direct, null)
   const launchedAt = Date.now()
   let watcher: ChildProcess
@@ -1448,6 +1508,91 @@ function playPlatformGame(g: Game): void {
   followWatcher(id, watcher, direct)
   running.set(id, { startedAt: null, launchedAt, watcher, resumeTorrentId: null, expired: false, lastAliveAt: null })
   deps.log(`Lancement de ${g.name} par ${platformName} : ${launch.target}${launch.kind === 'exe' && launch.args ? ' ' + launch.args : ''}`)
+  changed()
+}
+
+// ---------- Linux : lancement direct, surveillance par /proc ----------
+
+/** Options de lancement découpées comme par un shell simple (guillemets "…" ou '…'). */
+export function splitArgs(args: string): string[] {
+  const out: string[] = []
+  for (const m of args.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)) out.push(m[1] ?? m[2] ?? m[3])
+  return out
+}
+
+const isExecutable = (p: string): boolean => {
+  try {
+    fs.accessSync(p, fs.constants.X_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Jeu local sous Linux : programme (binaire, AppImage) lancé détaché, dossier de travail = le
+ * sien ; script .sh sans droit d'exécution lancé par /bin/sh. Le temps de jeu court tant que le
+ * programme ou un processus de son dossier tourne (procWatch.ts).
+ */
+function playLocalLinux(g: Game, direct: DirectLaunch, resumeTorrentId: string | null): void {
+  const id = g.id
+  const fail = (error: string): void => {
+    if (resumeTorrentId) deps.resumeTorrent(resumeTorrentId)
+    deps.notice({ level: 'error', message: tr('main.play.failed', { error }) })
+  }
+  let cmd = direct.target
+  let argv = splitArgs(direct.args)
+  if (!isExecutable(direct.target)) {
+    if (!/\.sh$/i.test(direct.target)) return fail(tr('main.linux.notExecutable', { path: direct.target }))
+    argv = [direct.target, ...argv]
+    cmd = '/bin/sh'
+  }
+  const startedAt = Date.now()
+  let child: ChildProcess
+  try {
+    // détaché : le jeu continue si CyberDeck se ferme
+    child = spawn(cmd, argv, { cwd: direct.cwd, detached: true, stdio: 'ignore' })
+  } catch (err: any) {
+    return fail(err.message)
+  }
+  child.unref()
+  // même format que le script PowerShell : suivi par followWatcher
+  const watcher = startProcWatcher({ mode: 'local', child, dirs: watchDirFor(g) }) as unknown as ChildProcess
+  followWatcher(id, watcher, direct)
+  running.set(id, { startedAt, launchedAt: startedAt, watcher, resumeTorrentId, expired: false, lastAliveAt: null })
+  g.lastPlayedAt = startedAt
+  deps.log(`Lancement de ${g.name} : ${direct.target}${direct.args ? ' ' + direct.args : ''}`)
+  changed()
+}
+
+/**
+ * Jeu Steam sous Linux (natif ou Proton) : steam://rungameid/<id> ouvert par xdg-open, puis suivi
+ * de son dossier, du lanceur de Steam (SteamLaunch AppId=<id>) et des processus qui portent
+ * SteamAppId=<id> (procWatch.ts). registry.vdf (RunningAppID) prolonge seulement l'attente.
+ */
+function playPlatformLinux(g: Game, direct: DirectLaunch, dirs: string[]): void {
+  const id = g.id
+  if (direct.kind !== 'uri') return deps.notice({ level: 'error', message: tr('main.play.launcherMissing', { platform: PLATFORM_INFO[g.platform].name }) })
+  const appId = g.platform === 'steam' && /^\d+$/.test(g.platformId ?? '') ? Number(g.platformId) : 0
+  const launchedAt = Date.now()
+  const pw = startProcWatcher({
+    mode: 'platform',
+    dirs: withRealPaths(dirs),
+    names: g.watch?.names ?? [],
+    ignore: g.watch?.ignore ?? [],
+    steamAppId: appId,
+    graceSeconds: GRACE_SECONDS,
+    maxWaitSeconds: MAX_WAIT_SECONDS,
+    steamBusy: () => appId > 0 && linuxSteamRunningAppId() === appId
+  })
+  const watcher = pw as unknown as ChildProcess
+  followWatcher(id, watcher, direct)
+  running.set(id, { startedAt: null, launchedAt, watcher, resumeTorrentId: null, expired: false, lastAliveAt: null })
+  shell.openExternal(direct.target).then(
+    () => pw.markLaunched(),
+    (err: Error) => pw.fail(err?.message || tr('main.common.unknownError'))
+  )
+  deps.log(`Lancement de ${g.name} par ${PLATFORM_INFO[g.platform].name} : ${direct.target}`)
   changed()
 }
 
@@ -1521,7 +1666,7 @@ const openToUninstall = (): Partial<Record<Game['platform'], { name: string; uri
 })
 
 /** « "C:\…\unins000.exe" /SILENT » ou « MsiExec.exe /X{…} » → programme et arguments. */
-function splitCommand(cmd: string): { exe: string; args: string } | null {
+export function splitCommand(cmd: string): { exe: string; args: string } | null {
   const c = cmd.trim()
   if (c.startsWith('"')) {
     const end = c.indexOf('"', 1)
@@ -1573,7 +1718,8 @@ function matchUninstall(g: Game, entries: RegUninstallEntry[]): RegUninstallEntr
 
 /** Désinstalleur posé à la racine du dossier du jeu (unins000.exe d'Inno Setup, uninstall.exe…). */
 function uninstallerInFolder(dir: string | null): string | null {
-  if (!dir || tooBroad(dir)) return null
+  // Linux : un unins000.exe ne peut pas tourner ; on ouvre plutôt le dossier
+  if (!dir || tooBroad(dir) || !IS_WIN) return null
   try {
     const f = fs.readdirSync(dir).find((n) => /^(unins\d{3}|uninstall|uninst|uninstaller)\.exe$/i.test(n))
     return f ? path.join(dir, f) : null
@@ -1611,6 +1757,29 @@ export async function uninstallPlan(id: string): Promise<UninstallPlan> {
   if (!g) return { kind: 'none', launcher: null, target: null, error: tr('main.common.gameNotFound') }
   const plan = await planUninstall(g)
   return { kind: plan.kind, launcher: plan.launcher, target: plan.target, error: plan.error }
+}
+
+/**
+ * Lance un désinstalleur comme un double-clic (fenêtre UAC si besoin), avec ses propres
+ * fenêtres, sans attendre sa fin. Sert aussi à la page Lanceurs (désinstalleur d'un lanceur).
+ * timeoutMs : temps laissé pour répondre à la fenêtre UAC.
+ */
+export async function startUninstaller(exe: string, args: string, timeoutMs = 30_000): Promise<ActionResult> {
+  const cwd = path.isAbsolute(exe) && fs.existsSync(path.dirname(exe)) ? path.dirname(exe) : os.homedir()
+  if (!IS_WIN) {
+    // Linux : pas de PowerShell (cas rare : désinstalleur trouvé dans le dossier d'un jeu)
+    const error = await launchDirect({ kind: 'exe', target: exe, args, cwd })
+    return error ? { ok: false, error: tr('main.uninstall.cantStart', { error }) } : { ok: true }
+  }
+  const res = await runPs(LAUNCH, { ESSAIM_TARGET: exe, ESSAIM_CWD: cwd, ESSAIM_ARGS: args }, timeoutMs)
+  if (res.code === 4) return { ok: false, error: tr('main.uninstall.adminDenied') }
+  if (res.code === PS_RESTRICTED) {
+    const error = await launchDirect({ kind: 'exe', target: exe, args, cwd })
+    if (error) return { ok: false, error: tr('main.uninstall.cantStart', { error }) }
+  } else if (!/launched/.test(res.stdout)) {
+    return { ok: false, error: tr('main.uninstall.cantStart', { error: cleanPsError(res.stderr) || `code ${res.code}` }) }
+  }
+  return { ok: true }
 }
 
 /**
@@ -1658,15 +1827,8 @@ export async function uninstallGame(id: string, removeFromList: boolean): Promis
       }
       case 'uninstaller': {
         const { exe, args } = plan.command!
-        const cwd = path.isAbsolute(exe) && fs.existsSync(path.dirname(exe)) ? path.dirname(exe) : os.homedir()
-        const res = await runPs(LAUNCH, { ESSAIM_TARGET: exe, ESSAIM_CWD: cwd, ESSAIM_ARGS: args }, 30_000)
-        if (res.code === 4) return { ok: false, error: tr('main.uninstall.adminDenied') }
-        if (res.code === PS_RESTRICTED) {
-          const error = await launchDirect({ kind: 'exe', target: exe, args, cwd })
-          if (error) return { ok: false, error: tr('main.uninstall.cantStart', { error }) }
-        } else if (!/launched/.test(res.stdout)) {
-          return { ok: false, error: tr('main.uninstall.cantStart', { error: cleanPsError(res.stderr) || `code ${res.code}` }) }
-        }
+        const started = await startUninstaller(exe, args)
+        if (!started.ok) return started
         deps.log(`Désinstalleur lancé pour ${g.name} : ${exe}${args ? ' ' + args : ''}`)
         if (g.platform === 'local') followLocalUninstall(id)
         return { ok: true }

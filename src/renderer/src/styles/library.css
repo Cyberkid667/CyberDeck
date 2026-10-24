@@ -104,7 +104,6 @@
 .sect:first-child { margin-top: 2px; }   /* bandeau masqué (recherche) */
 .sect .cap { white-space: nowrap; }
 .sect .rule { flex: 1; height: 1px; background: var(--hair); position: relative; }
-.sect .rule::after { content: ''; position: absolute; right: 0; top: -4px; width: 1px; height: 9px; background: var(--line-3); }
 .sect .cap b { color: var(--tx-1); font-weight: 500; }
 /* bascule « Installés | Tous » au bout du filet : marges négatives, la ligne garde sa hauteur (la grille ne bouge pas) */
 .sect .seg.sm { margin: -8px 0; }

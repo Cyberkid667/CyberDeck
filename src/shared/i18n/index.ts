@@ -1,11 +1,14 @@
 // Traductions de l'interface (anglais par défaut, français au choix dans Réglages).
 // Chaque zone de l'app a son dictionnaire (main.ts : processus principal, library.ts :
-// bibliothèque et fenêtres des jeux, shell.ts : coquille, réglages, torrents, formats), avec
+// bibliothèque et fenêtres des jeux, shell.ts : coquille, réglages, torrents, formats, twitch.ts :
+// streams Twitch des pages de jeux), avec
 // les mêmes clés en anglais et en français. Clé absente dans une langue : l'anglais, sinon la clé.
 // Paramètres : « {name} » dans le texte est remplacé par params.name.
 import library from './library'
 import main from './main'
 import shell from './shell'
+import steam from './steam'
+import twitch from './twitch'
 
 export type Lang = 'en' | 'fr'
 
@@ -22,7 +25,7 @@ export interface Messages {
   fr: Dict
 }
 
-const AREAS: Messages[] = [main, library, shell]
+const AREAS: Messages[] = [main, library, shell, steam, twitch]
 const TABLE: Record<Lang, Dict> = {
   en: Object.assign({}, ...AREAS.map((a) => a.en)),
   fr: Object.assign({}, ...AREAS.map((a) => a.fr))

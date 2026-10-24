@@ -7,7 +7,7 @@ import { formatLastPlayed, formatPercent, formatPlayTimeShort, formatSpeed, perc
 import { useT } from '../i18n'
 import { platformName, type GameState } from '../platformUi'
 import { Cover } from './Cover'
-import { downloadFraction, downloadPhaseLabel, downloadTitle } from './DownloadPanel'
+import { downloadFraction, downloadMode, downloadPhaseLabel, downloadTitle } from './DownloadPanel'
 import { PlatformLogo } from './PlatformLogo'
 
 // Carte-billet d'un jeu (SPEC 5.10) : jaquette 2:3 + talon perforé (nom Inter
@@ -260,7 +260,7 @@ function GameCardBase({ game: g, state, session, menuOpen, download, onPlay, onI
           <PlatformLogo platform={g.platform} />
         </span>
         {dl && (
-          <span className={`cov-dl ph-${dl.phase}`} data-testid="card-download-progress" title={downloadTitle(dl)} aria-hidden="true">
+          <span className={`cov-dl ph-${dl.phase} m-${downloadMode(dl)}`} data-testid="card-download-progress" title={downloadTitle(dl)} aria-hidden="true">
             <i style={{ '--p': percentVar(dlP) } as CSSProperties} />
           </span>
         )}

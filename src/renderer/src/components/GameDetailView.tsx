@@ -27,6 +27,7 @@ import { coverSrc } from './Cover'
 import { DownloadPanel, downloadFraction } from './DownloadPanel'
 import { PlatformLogo } from './PlatformLogo'
 import { PlatformTag } from './PlatformTag'
+import { TwitchSection } from './TwitchSection'
 
 // Page détaillée d'un jeu (passe 3), façon page de jeu de Steam mais aux couleurs de l'app,
 // ouverte dans la zone de la bibliothèque (la barre latérale reste) :
@@ -38,8 +39,8 @@ import { PlatformTag } from './PlatformTag'
 //     boutons Ouvrir le dossier, Modifier…, Désinstaller…, Actualiser, « … » (menu du jeu) ;
 //   - téléchargement Steam en cours (DownloadPanel) ;
 //   - rangée de liens (page du magasin, DLC, communauté…) ouverts par openExternalLink ;
-//   - corps sur deux colonnes (une seule sous 1100 px) : À propos et Actualités à gauche ; Succès,
-//     Amis qui y jouent et DLC à droite.
+//   - corps sur deux colonnes (une seule sous 1100 px) : À propos, En direct sur Twitch
+//     (TwitchSection) et Actualités à gauche ; Succès, Amis qui y jouent et DLC à droite.
 // Les infos viennent de getGameDetails (cache disque côté processus principal, et cache mémoire
 // ici : une page déjà vue s'affiche tout de suite, puis se met à jour). Les images ont toutes des
 // cases de taille fixe et disparaissent si elles ne se chargent pas : la mise en page ne bouge pas.
@@ -59,7 +60,10 @@ interface Props {
   onEdit: (game: Game) => void
   onUninstall: (game: Game) => void
   onMenu: (game: Game, x: number, y: number) => void
-  onOpenPlatforms: () => void
+  /** ouvre la page « Lanceurs » ; 'steam-key' : jusqu'au champ de la clé Steam */
+  onOpenLaunchers: (focus?: 'steam-key') => void
+  /** libellé du bouton de retour (vue Steam : « Accueil ») ; par défaut « Bibliothèque » */
+  backLabel?: string
 }
 
 /** Pages déjà lues pendant cette session (affichées tout de suite à la réouverture). */
@@ -184,7 +188,6 @@ function News({ details }: { details: GameDetails }): React.JSX.Element {
   return (
     <Panel
       title={t('library.details.news')}
-      count={details.news.length || undefined}
       className="gd-newsp"
       action={all ? <MoreLink url={all.url} label={t('library.details.allNews')} /> : undefined}
     >
@@ -285,7 +288,7 @@ function Friends({ data }: { data: NonNullable<GameDetails['friends']> }): React
   const played = data.played.slice(0, FRIENDS_MAX)
   const rest = data.played.length - played.length
   return (
-    <Panel title={t('library.details.friends')} count={data.total || undefined} className="gd-friends" testId="detail-friends">
+    <Panel title={t('library.details.friends')} className="gd-friends" testId="detail-friends">
       {data.total === 0 && !data.playingNow.length && !data.played.length ? (
         <p className="gd-quiet">{t('library.details.friendsNone')}</p>
       ) : (
@@ -330,7 +333,6 @@ function Dlc({ details }: { details: GameDetails }): React.JSX.Element {
   return (
     <Panel
       title={t('library.details.dlc')}
-      count={details.dlc.length}
       className="gd-dlc"
       action={link ? <MoreLink url={link.url} label={t('library.details.achAll')} /> : undefined}
     >
@@ -426,7 +428,8 @@ export function GameDetailView({
   onEdit,
   onUninstall,
   onMenu,
-  onOpenPlatforms
+  onOpenLaunchers,
+  backLabel
 }: Props): React.JSX.Element {
   const { t } = useT()
   const [details, setDetails] = useState<GameDetails | null>(() => CACHE.get(g.id) ?? null)
@@ -612,7 +615,7 @@ export function GameDetailView({
       <div className="toolbar gd-toolbar" role="toolbar" aria-label={t('library.details.aria', { name: g.name })}>
         <button type="button" className="btn btn-line" data-testid="detail-back" title={t('library.details.backTitle')} onClick={onBack}>
           <ArrowLeft />
-          {t('library.details.back')}
+          {backLabel ?? t('library.details.back')}
         </button>
         <div className="tsep" />
         <div className="gd-crumb">
@@ -801,6 +804,8 @@ export function GameDetailView({
           <div className={`gd-body${side ? '' : ' one'}`}>
             <div className="gd-col">
               <About details={details} />
+              {/* streams en direct sur Twitch (connexion du compte, catégorie trouvée par le nom du jeu) */}
+              <TwitchSection key={g.id} game={g} />
               <News details={details} />
             </div>
             {side && (
@@ -809,7 +814,7 @@ export function GameDetailView({
                   <div className="gd-hint">
                     <KeyRound />
                     <p>{t('library.details.keyHint')}</p>
-                    <button type="button" className="btn btn-line btn-sm" onClick={onOpenPlatforms}>
+                    <button type="button" className="btn btn-line btn-sm" data-testid="detail-steam-key" onClick={() => onOpenLaunchers('steam-key')}>
                       {t('library.details.keyHintBtn')}
                     </button>
                   </div>
@@ -828,7 +833,13 @@ export function GameDetailView({
           </div>
         ) : !failed ? (
           <Skeleton />
-        ) : null}
+        ) : (
+          <div className="gd-body one">
+            <div className="gd-col">
+              <TwitchSection key={g.id} game={g} />
+            </div>
+          </div>
+        )}
       </div>
     </>
   )

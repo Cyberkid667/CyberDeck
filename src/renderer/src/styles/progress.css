@@ -1,0 +1,50 @@
+/* ==========================================================================
+   CyberDeck — barres de progression « vivantes » (LiveProgress.tsx) : installations de
+   lanceurs, téléchargements Steam (page du jeu, bandeau de la bibliothèque, carte).
+   Seule couleur ajoutée au noir et blanc : un bleu électrique réservé à la progression
+   (#2f8cff → #5fb0ff, léger halo). En cours : rayures qui défilent + reflet ; part
+   inconnue : balayage bleu ; pause : bleu éteint, immobile ; erreur : rouge.
+   Mouvement réduit : barre bleue fixe, rien ne bouge.
+   ========================================================================== */
+:root {
+  --prog-1: #2f8cff;
+  --prog-2: #5fb0ff;
+  --prog-track: rgba(95, 176, 255, 0.11);
+  --prog-glow: 0 0 12px rgba(47, 140, 255, 0.55), 0 0 2px rgba(95, 176, 255, 0.9);
+  --prog-fill: linear-gradient(90deg, var(--prog-1), var(--prog-2));
+}
+
+.lbar { position: relative; height: 8px; border-radius: 4px; overflow: hidden; background: var(--prog-track);
+  box-shadow: inset 0 0 0 1px rgba(95, 176, 255, 0.10); }
+.lbar > .fill { position: absolute; left: 0; top: 0; bottom: 0; width: var(--p, 0%); min-width: 0; border-radius: inherit; overflow: hidden;
+  background: var(--prog-fill); box-shadow: var(--prog-glow); transition: width .6s cubic-bezier(.2,.8,.2,1), background-color .2s; }
+/* rayures diagonales qui défilent */
+.lbar.m-active > .fill::before { content: ''; position: absolute; inset: 0;
+  background-image: linear-gradient(45deg, rgba(255,255,255,.20) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.20) 50%, rgba(255,255,255,.20) 75%, transparent 75%, transparent);
+  background-size: 16px 16px; animation: lbar-stripes .7s linear infinite; }
+/* reflet qui traverse le remplissage */
+.lbar.m-active > .fill::after { content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent); animation: lbar-sheen 2.2s cubic-bezier(.5,0,.5,1) infinite; }
+@keyframes lbar-stripes { from { background-position: 0 0; } to { background-position: 16px 0; } }
+@keyframes lbar-sheen { from { transform: translateX(-110%); } to { transform: translateX(260%); } }
+
+/* part inconnue : balayage bleu (jamais une barre figée) */
+.lbar.m-ind > .fill { width: 38%; background: linear-gradient(90deg, transparent, var(--prog-1) 30%, var(--prog-2) 60%, transparent);
+  box-shadow: none; animation: lbar-sweep 1.5s cubic-bezier(.45,0,.55,1) infinite; transition: none; }
+.lbar.m-ind { animation: lbar-breathe 1.5s ease-in-out infinite; }
+@keyframes lbar-sweep { from { transform: translateX(-105%); } to { transform: translateX(265%); } }
+@keyframes lbar-breathe { 0%, 100% { background-color: var(--prog-track); } 50% { background-color: rgba(95, 176, 255, 0.2); } }
+
+/* fini : bleu plein, calme */
+.lbar.m-done > .fill { box-shadow: 0 0 8px rgba(47, 140, 255, 0.35); }
+/* pause : bleu éteint, immobile */
+.lbar.m-paused { background: rgba(255, 255, 255, 0.07); box-shadow: none; }
+.lbar.m-paused > .fill { background: linear-gradient(90deg, rgba(47,140,255,.42), rgba(95,176,255,.42)); box-shadow: none; filter: saturate(.45); }
+/* erreur : rouge */
+.lbar.m-error { background: var(--err-soft); box-shadow: none; }
+.lbar.m-error > .fill { background: var(--err); box-shadow: 0 0 8px rgba(255, 93, 93, 0.35); }
+
+@media (prefers-reduced-motion: reduce) {
+  .lbar.m-active > .fill::after { display: none; }
+  .lbar.m-ind > .fill { width: 100%; transform: none; background: linear-gradient(90deg, rgba(47,140,255,.55), rgba(95,176,255,.55)); }
+}

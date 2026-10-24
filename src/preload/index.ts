@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { DownloadProgress, EssaimApi, InstallResult, LibraryState, Notice, PlatformsState, Settings, Snapshot, UpdateState } from '../shared/types'
+import type { DownloadProgress, EssaimApi, InstallResult, LaunchersState, LibraryState, Notice, PlatformsState, Settings, Snapshot, TwitchState, UpdateState } from '../shared/types'
 
 function subscribe<T>(channel: string, cb: (value: T) => void): () => void {
   const listener = (_e: unknown, value: T): void => cb(value)
@@ -8,6 +8,8 @@ function subscribe<T>(channel: string, cb: (value: T) => void): () => void {
 }
 
 const api: EssaimApi = {
+  // Linux : l'interface adapte quelques textes (programmes sans .exe, lanceurs Windows seulement)
+  os: process.platform,
   onSnapshot: (cb) => subscribe<Snapshot>('snapshot', cb),
   onNotice: (cb) => subscribe<Notice>('notice', cb),
   getSettings: () => ipcRenderer.invoke('settings:get'),
@@ -65,7 +67,36 @@ const api: EssaimApi = {
   getGameDetails: (id, refresh) => ipcRenderer.invoke('details:get', id, refresh === true),
   getDownloads: () => ipcRenderer.invoke('downloads:get'),
   onDownloads: (cb) => subscribe<Record<string, DownloadProgress>>('downloads', cb),
-  openExternalLink: (url) => ipcRenderer.send('link:open', url)
+  openExternalLink: (url) => ipcRenderer.send('link:open', url),
+  getSteamCollections: () => ipcRenderer.invoke('steam:collections'),
+  getStoreHome: (refresh) => ipcRenderer.invoke('store:home', refresh === true),
+  getStoreList: (kind, refresh) => ipcRenderer.invoke('store:list', kind, refresh === true),
+  searchStore: (term) => ipcRenderer.invoke('store:search', term),
+  getStoreApp: (appid, refresh) => ipcRenderer.invoke('store:app', appid, refresh === true),
+  getSteamProfile: (refresh) => ipcRenderer.invoke('steam:profile', refresh === true),
+  getSteamFriends: (refresh) => ipcRenderer.invoke('steam:friends', refresh === true),
+  getCommunityNews: (refresh) => ipcRenderer.invoke('community:news', refresh === true),
+  getCommunityArticle: (appid, id) => ipcRenderer.invoke('community:article', appid, id),
+  getWorkshopGames: (refresh) => ipcRenderer.invoke('community:workshop-games', refresh === true),
+  getWorkshopPage: (appid, sort, cursor, refresh) => ipcRenderer.invoke('community:workshop-page', appid, sort, cursor ?? null, refresh === true),
+  getWorkshopItem: (id) => ipcRenderer.invoke('community:workshop-item', id),
+
+  getLaunchers: () => ipcRenderer.invoke('launchers:get'),
+  onLaunchers: (cb) => subscribe<LaunchersState>('launchers', cb),
+  installLauncher: (id) => ipcRenderer.invoke('launchers:install', id),
+  uninstallLauncher: (id) => ipcRenderer.invoke('launchers:uninstall', id),
+  cancelLauncherOp: (id) => ipcRenderer.send('launchers:cancel', id),
+
+  getTwitchState: () => ipcRenderer.invoke('twitch:state'),
+  onTwitch: (cb) => subscribe<TwitchState>('twitch', cb),
+  twitchSignIn: () => ipcRenderer.invoke('twitch:sign-in'),
+  twitchCancelSignIn: () => ipcRenderer.send('twitch:cancel-sign-in'),
+  twitchSignOut: () => ipcRenderer.invoke('twitch:sign-out'),
+  twitchOpenActivate: () => ipcRenderer.send('twitch:open-activate'),
+  getTwitchStreams: (gameId, query) => ipcRenderer.invoke('twitch:streams', gameId, query ?? {}),
+  searchTwitchCategories: (query) => ipcRenderer.invoke('twitch:search-categories', query),
+  setTwitchCategory: (gameId, category) => ipcRenderer.invoke('twitch:set-category', gameId, category),
+  onTwitchEscape: (cb) => subscribe<void>('twitch:escape', () => cb())
 }
 
 contextBridge.exposeInMainWorld('essaim', api)

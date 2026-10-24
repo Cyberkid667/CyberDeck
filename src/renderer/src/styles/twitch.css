@@ -1,0 +1,159 @@
+/* ==========================================================================
+   CyberDeck — Twitch : encart « En direct sur Twitch » de la page d'un jeu (barre de
+   catégorie, tri et langue, grille de cartes), choix de la catégorie, connexion par code
+   d'appareil (fenêtre et bloc de Réglages), salle de projection (lecteur + chat).
+   Mêmes règles que le reste : noir et blanc, traits de 1 px, légendes mono en capitales.
+   Le violet de Twitch ne sert qu'au logo et au point « Direct ».
+   ========================================================================== */
+
+:root { --tw: #9146ff; --tw-glow: rgba(145, 70, 255, .85); }
+
+.tw-glyph { width: 13px; height: 13px; flex: none; fill: var(--tw); }
+.tw-glyph.lg { width: 28px; height: 28px; }
+.tw-glyph.mute { fill: var(--tx-4); }
+.tw-glyph.ph { width: 26px; height: 26px; fill: rgba(255,255,255,.12); }
+.gd-ph .tw-glyph { margin-right: -4px; }
+.btn .tw-glyph { width: 14px; height: 14px; }
+
+.tw-av { flex: none; width: 30px; height: 30px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; border: 1px solid var(--line-2); background: #0c0c0c; color: var(--tx-4); }
+.tw-av.sm { width: 22px; height: 22px; }
+.tw-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tw-av svg.i { width: 13px; height: 13px; }
+.tw-me { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 200px; }
+.tw-me .nm { font: 400 11.5px/1 var(--font-mono); color: var(--tx-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.btn.tw-ibtn { width: 30px; height: 30px; padding: 0; justify-content: center; }
+.btn.tw-ibtn svg.i { width: 15px; height: 15px; }
+.btn.tw-ibtn.on { border-color: rgba(255,255,255,.5); background: rgba(255,255,255,.07); }
+.btn.tw-ibtn.on svg.i { color: var(--tx-1); }
+
+/* ---------- Barre : catégorie, tri, langue ---------- */
+.tw-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 12px; margin: -2px 0 16px; padding-bottom: 14px; border-bottom: 1px dashed rgba(255,255,255,.08); }
+.tw-bar .spacer { min-width: 0; }
+.tw-bar .gd-more svg.i { width: 12px; height: 12px; }
+.tw-cat { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.tw-box { flex: none; width: 30px; height: 40px; border-radius: 2px; overflow: hidden; border: 1px solid var(--line); background: #0c0c0c; }
+.tw-box.sm { width: 26px; height: 35px; }
+.tw-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tw-cat-txt { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.tw-cat-txt .nm { font: 450 13px/1.2 var(--font-sans); color: var(--tx-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* menu déroulant : cadre dessiné, <select> natif invisible posé dessus (clavier et menu de Windows) */
+.tw-sel { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 9px 0 10px; border: 1px solid var(--line-2); border-radius: var(--r-2); background: var(--bg-1); cursor: pointer; transition: border-color .12s; }
+.tw-sel:hover { border-color: var(--line-3); }
+.tw-sel:focus-within { box-shadow: var(--focus-ring); border-color: rgba(255,255,255,.6); }
+.tw-sel .v { font: 400 12px/1 var(--font-mono); color: var(--tx-1); white-space: nowrap; }
+.tw-sel svg.i { width: 13px; height: 13px; color: var(--tx-3); }
+.tw-sel select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font: 400 12px var(--font-mono); }
+.tw-sel select option { background: #111; color: var(--tx-1); }
+
+/* ---------- Choix de la catégorie ---------- */
+.tw-picker { margin: 0 0 16px; padding: 12px; border: 1px solid var(--line-2); border-radius: var(--r-3); background: var(--bg-1); }
+.tw-picker > .gd-quiet { margin-top: 10px; }
+.tw-picker-row { display: flex; align-items: center; gap: 10px; }
+.tw-search { position: relative; flex: 1; min-width: 0; }
+.tw-search > svg.i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--tx-3); pointer-events: none; }
+.tw-search .inp { width: 100%; padding-left: 32px; }
+.tw-cats { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 2px 8px; }
+.tw-cats button { width: 100%; display: flex; align-items: center; gap: 10px; padding: 5px 6px; border-radius: 3px; text-align: left; }
+.tw-cats button:hover { background: rgba(255,255,255,.05); }
+.tw-cats button:focus-visible { box-shadow: var(--focus-ring); }
+.tw-cats .nm { min-width: 0; font: 400 12.5px/1.3 var(--font-sans); color: var(--tx-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tw-cats button:hover .nm { color: var(--tx-1); }
+
+/* ---------- Grille de cartes ---------- */
+.tw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(214px, 1fr)); gap: 18px 14px; }
+.tw-card { display: flex; flex-direction: column; gap: 7px; min-width: 0; padding: 0; text-align: left; border-radius: var(--r-2); }
+.tw-card:focus-visible { box-shadow: 0 0 0 4px rgba(255,255,255,.12); }
+.tw-card:focus-visible .tw-thumb { border-color: #fff; }
+.tw-thumb { position: relative; aspect-ratio: 16 / 9; border-radius: var(--r-2); overflow: hidden; display: grid; place-items: center; border: 1px solid var(--line);
+  background-color: #0c0c0c; background-image: linear-gradient(var(--guide) 1px, transparent 1px), linear-gradient(90deg, var(--guide) 1px, transparent 1px); background-size: 12px 12px;
+  transition: border-color .14s, box-shadow .14s, transform .14s; }
+.tw-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s cubic-bezier(.2,.8,.2,1); }
+.tw-card:hover .tw-thumb { border-color: rgba(255,255,255,.55); box-shadow: 0 12px 30px -16px rgba(255,255,255,.4); transform: translateY(-2px); }
+.tw-card:hover .tw-thumb img { transform: scale(1.03); }
+.tw-live { position: absolute; left: 7px; top: 7px; z-index: 1; display: inline-flex; align-items: center; gap: 6px; height: 18px; padding: 0 7px 0 6px; border-radius: 2px;
+  background: rgba(0,0,0,.8); border: 1px solid rgba(255,255,255,.14); font: 500 9.5px/1 var(--font-mono); letter-spacing: .16em; text-transform: uppercase; color: #fff; }
+.tw-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--tw); box-shadow: 0 0 7px var(--tw-glow); flex: none; }
+.tw-18 { position: absolute; right: 7px; top: 7px; z-index: 1; height: 18px; display: inline-flex; align-items: center; padding: 0 6px; border-radius: 2px; background: rgba(0,0,0,.8); border: 1px solid rgba(255,93,93,.5); color: var(--tx-1); letter-spacing: .08em; }
+.tw-over { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; padding: 22px 8px 6px;
+  background: linear-gradient(0deg, rgba(0,0,0,.85), rgba(0,0,0,0)); font: 400 11px/1 var(--font-mono); color: #fff; white-space: nowrap; }
+.tw-up { color: var(--tx-2); }
+.tw-meta { display: flex; align-items: baseline; gap: 8px; min-width: 0; margin-top: 2px; }
+.tw-name { min-width: 0; font: 500 13px/1.2 var(--font-sans); color: var(--tx-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tw-lang { margin-left: auto; flex: none; }
+.tw-title { font: 400 12.5px/1.4 var(--font-sans); color: var(--tx-3); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.tw-card:hover .tw-title { color: var(--tx-2); }
+.tw-tags { display: flex; flex-wrap: wrap; gap: 4px; max-height: 18px; overflow: hidden; }
+.tw-tags .tag { height: 18px; padding: 0 6px; font-size: 10px; color: var(--tx-3); }
+.btn.tw-more { display: flex; margin: 18px auto 0; }
+.tw-sk { display: block; aspect-ratio: 16 / 9; border-radius: var(--r-2); }
+.tw-card.sk-card { pointer-events: none; }
+.tw-card.sk-card .sk.line { margin-top: 4px; }
+
+/* ---------- États calmes (non configuré, pas connecté) ---------- */
+.tw-calm { display: flex; align-items: center; gap: 16px; padding: 4px 2px; }
+.tw-calm > div { flex: 1; min-width: 0; }
+.tw-calm-title { margin: 0 0 5px; font: 450 14px/1.35 var(--font-sans); color: var(--tx-1); }
+@media (max-width: 1279px) { .tw-calm { flex-wrap: wrap; } .tw-calm > .btn { margin-left: 44px; } }
+
+/* ---------- Connexion : code d'appareil ---------- */
+.tw-dialog-body { margin-top: 20px; }
+.tw-code-box { display: flex; flex-direction: column; gap: 14px; }
+.tw-steps { margin: 0; font: 400 13px/1.55 var(--font-sans); color: var(--tx-2); }
+.tw-code-row { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px 16px 16px; border: 1px dashed var(--line-3); border-radius: var(--r-3); background: rgba(255,255,255,.02); }
+.tw-code { font: 300 34px/1 var(--font-mono); letter-spacing: .2em; color: #fff; text-shadow: 0 0 20px rgba(255,255,255,.28); user-select: all; }
+.tw-code-btns .btn-primary svg.i { color: #000; }
+.tw-wait { display: flex; align-items: center; gap: 10px; margin: 0; font: 400 12.5px/1.4 var(--font-sans); color: var(--tx-2); }
+.tw-wait > svg.i { width: 14px; height: 14px; color: var(--tx-2); flex: none; }
+.tw-wait.err { color: var(--tx-1); }
+.tw-wait.err > svg.i { color: var(--err); }
+.tw-pulse { position: relative; width: 7px; height: 7px; border-radius: 50%; background: var(--tw); box-shadow: 0 0 8px var(--tw-glow); flex: none; }
+.tw-pulse::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 1px solid var(--tw-glow); animation: ping 2.4s ease-out infinite; }
+.tw-expire { margin-left: auto; white-space: nowrap; }
+.tw-privacy { margin: 0; padding-top: 12px; border-top: 1px dashed rgba(255,255,255,.08); font: 400 11.5px/1.5 var(--font-sans); color: var(--tx-3); }
+
+/* bloc « Twitch » de Réglages */
+.tw-set .tw-account { display: flex; align-items: center; gap: 12px; min-height: 34px; }
+.tw-account-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.tw-account-txt .nm { font: 450 13.5px/1.2 var(--font-sans); color: var(--tx-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tw-account-txt .hint { margin-top: 0; }
+.tw-set .tw-account > .tw-glyph.lg { width: 22px; height: 22px; margin: 0 4px; }
+.tw-set .tw-code { font-size: 28px; }
+.tw-set .row-btns { margin-top: 10px; }
+
+/* ---------- Salle de projection ---------- */
+.tw-theater { position: fixed; inset: 44px 0 0 0; z-index: var(--z-dialog); display: flex; flex-direction: column; outline: none;
+  background: rgba(0,0,0,.96); animation: tw-in .18s cubic-bezier(.2,.8,.2,1); }
+.tw-theater.full { inset: 0; }
+@keyframes tw-in { from { opacity: 0; } to { opacity: 1; } }
+.tw-th-bar { flex: none; display: flex; align-items: center; gap: 16px; height: 52px; padding: 0 12px 0 18px; border-bottom: 1px solid var(--line); background: var(--bg-0); }
+.tw-th-who { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; }
+.tw-th-who .tw-live { position: static; }
+.tw-th-name { flex: none; font: 400 15px/1 var(--font-mono); color: var(--tx-1); white-space: nowrap; letter-spacing: -0.01em; }
+.tw-th-title { min-width: 0; font: 400 12.5px/1.2 var(--font-sans); color: var(--tx-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tw-th-tools { flex: none; display: flex; align-items: center; gap: 6px; }
+.tw-th-tools .tsep { margin: 0 6px; }
+.tw-th-viewers { display: inline-flex; align-items: center; gap: 6px; color: var(--tx-2); white-space: nowrap; }
+.tw-th-viewers svg.i { width: 13px; height: 13px; }
+.tw-open { margin-left: 4px; }
+.tw-close { margin-left: 2px; }
+/* curseur de volume : piste blanche jusqu'au niveau, pastille lumineuse */
+.tw-vol { -webkit-appearance: none; appearance: none; width: 108px; height: 18px; margin: 0 4px; background: transparent; cursor: pointer; outline: none; }
+.tw-vol::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: linear-gradient(90deg, #fff var(--v, 50%), rgba(255,255,255,.16) var(--v, 50%)); }
+.tw-vol::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; margin-top: -4.5px; border-radius: 50%; background: #fff; border: 0; box-shadow: var(--glow-sm); transition: transform .12s; }
+.tw-vol:hover::-webkit-slider-thumb { transform: scale(1.15); }
+.tw-vol:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(255,255,255,.2), var(--glow-sm); }
+.tw-th-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
+.tw-theater.chat .tw-th-body { grid-template-columns: minmax(0, 1fr) 340px; }
+.tw-th-player, .tw-th-chat { position: relative; min-width: 0; min-height: 0; background: #000; }
+.tw-th-chat { border-left: 1px solid var(--line); background: #0e0e10; }
+.tw-theater webview { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+@media (max-width: 1279px) { .tw-theater.chat .tw-th-body { grid-template-columns: minmax(0, 1fr) 300px; } }
+@media (max-width: 1099px) {
+  .tw-th-title, .tw-th-viewers, .tw-th-tools .tsep:first-of-type { display: none; }
+  .tw-vol { width: 80px; }
+}
+@media (max-width: 899px) { .tw-open { display: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .tw-theater { animation: none; }
+  .tw-thumb, .tw-thumb img { transition: none; }
+}

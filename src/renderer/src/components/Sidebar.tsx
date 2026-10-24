@@ -15,7 +15,7 @@ import { Scope } from './Scope'
 // sous « Torrents », En cours / Terminés / En partage quand ils contiennent quelque
 // chose (ou que le filtre est choisi). La rubrique Torrents n'existe que si les torrents
 // sont activés (Réglages), et l'oscilloscope n'apparaît que dans la vue Torrents. Puis
-// « Plateformes » (fenêtre des lanceurs) et « Réglages » : toujours visibles, hors de la
+// « Lanceurs » (page des lanceurs : installer, désinstaller, compte Steam) et « Réglages » : toujours visibles, hors de la
 // liste qui défile. Sous 1100 px : rail de 60 px (icône au-dessus du compteur,
 // logo seul pour les plateformes, libellés en title), sans oscilloscope ni pied. Si la
 // liste ne tient pas en hauteur, elle défile (sans barre visible, fondu en bas).
@@ -27,7 +27,7 @@ const TORRENT_SUBS: { id: Exclude<Filter, 'all'>; icon: LucideIcon }[] = [
   { id: 'seeding', icon: ArrowUp }
 ]
 
-export type View = 'torrents' | 'library'
+export type View = 'torrents' | 'library' | 'launchers'
 
 export interface Traffic {
   /** réception globale (octets/s) */
@@ -57,7 +57,7 @@ interface Props {
   /** plateformes qui ont des jeux, dans l'ordre fixe ; vide s'il n'y a qu'une sorte de jeux */
   libNav: LibNavItem[]
   onLibrary: (f: LibraryFilter) => void
-  /** ouvre la fenêtre « Plateformes » */
+  /** ouvre la page « Lanceurs » */
   onPlatforms: () => void
   /** ouvre la fenêtre « Réglages » */
   onSettings: () => void
@@ -97,7 +97,7 @@ export function Sidebar({
 
   return (
     <nav
-      className={`sidebar${view === 'library' ? ' lib-view' : ''}`}
+      className={`sidebar${view !== 'torrents' ? ' lib-view' : ''}`}
       aria-label={t('shell.sidebar.navigation')}
     >
       <div className="side-nav" ref={navRef}>
@@ -184,14 +184,15 @@ export function Sidebar({
       {/* hors de la liste qui défile : toujours visible, même avec 11 plateformes dans une fenêtre basse */}
       <button
         type="button"
-        className="nav plat-nav"
-        title={syncing ? t('shell.sidebar.platformsSyncing') : t('shell.sidebar.platformsTitle')}
-        aria-label={t('shell.sidebar.platforms')}
+        className={`nav plat-nav${view === 'launchers' ? ' on' : ''}`}
+        title={syncing ? t('shell.sidebar.launchersSyncing') : t('shell.sidebar.launchersTitle')}
+        aria-label={t('shell.sidebar.launchers')}
+        aria-current={view === 'launchers' ? 'page' : undefined}
         data-testid="nav-platforms"
         onClick={onPlatforms}
       >
         {syncing ? <LoaderCircle className="spin" /> : <Blocks />}
-        <span className="label">{t('shell.sidebar.platforms')}</span>
+        <span className="label">{t('shell.sidebar.launchers')}</span>
       </button>
       <button
         type="button"

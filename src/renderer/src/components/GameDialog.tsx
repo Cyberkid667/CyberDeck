@@ -137,7 +137,9 @@ function CoverTicket({ game, searching }: { game?: Game; searching: boolean }): 
 
 export function GameDialog({ mode, game, preset, banner, onClose, onToast }: Props): React.JSX.Element {
   const { t } = useT()
-  const EXE_MISSING = t('library.game.exeMissing')
+  // Linux : binaire, AppImage ou script (pas de .exe)
+  const linux = window.essaim?.os === 'linux'
+  const EXE_MISSING = t(linux ? 'library.game.exeMissingLinux' : 'library.game.exeMissing')
   const adding = mode === 'add'
   // jeu de plateforme : nom et jaquette seulement (le programme vient de la plateforme)
   const platformGame = !adding && !!game && game.platform !== 'local'
@@ -283,7 +285,7 @@ export function GameDialog({ mode, game, preset, banner, onClose, onToast }: Pro
             <>
               <div className="field">
                 <div className="lab">
-                  <span className="cap">{t('library.game.exeLabel')}</span>
+                  <span className="cap">{t(linux ? 'library.game.exeLabelLinux' : 'library.game.exeLabel')}</span>
                 </div>
                 <div className="path-row">
                   <input

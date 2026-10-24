@@ -9,7 +9,8 @@ import { protocolCommand, regNumber, regString } from './registry'
 import type { RegistrySnapshot } from './registry'
 import type { OwnedGamesResult } from './steamOwned'
 import type { DetectedGame, PlatformScan, ScanContext } from './types'
-import { cleanTitle, exeFromCommand, fixSlashes, isDir, isFile, largestExeSync, normDir, readText, skip } from './util'
+import { findLinuxSteamClient } from './steamLinux'
+import { cleanTitle, exeFromCommand, fixSlashes, isDir, isFile, isWindows, largestExeSync, normDir, readText, skip } from './util'
 import { kvGet, parseVdf, readAppInfo, vdfGet, vdfObj, vdfStr, type KvMap } from './vdf'
 
 const STEAM_ID_BASE = 76561197960265728n
@@ -36,6 +37,8 @@ let lastClient: SteamClient | null = null
 export const cachedSteamClient = (): SteamClient | null => lastClient
 
 export function findSteamClient(reg: RegistrySnapshot): SteamClient | null {
+  // Linux : pas de registre ; dossiers connus (~/.steam/steam, ~/.local/share/Steam, Flatpak, Snap)
+  if (!isWindows()) return findLinuxSteamClient()
   const candidates = [
     regString(reg, 'steam.machine', 'InstallPath'),
     regString(reg, 'steam.machine64', 'InstallPath'),
@@ -77,7 +80,7 @@ export function steamLibrariesInfo(steamDir: string): { dirs: string[]; suspect:
     suspect = false
     for (const v of Object.values(root)) {
       if (typeof v === 'string') {
-        if (/^[a-z]:\\/i.test(v)) dirs.push(v) // ancien format : "1" "D:\\SteamLibrary"
+        if (/^[a-z]:\\/i.test(v) || (!isWindows() && v.startsWith('/'))) dirs.push(v) // ancien format : "1" "D:\\SteamLibrary"
       } else {
         const p = vdfStr(v, 'path')
         if (p) dirs.push(p)
@@ -288,6 +291,14 @@ export function steamSkipReason(appid: number, name: string, info: SteamAppInfo 
   return 'other'
 }
 
+/** Système d'une entrée de lancement : Windows seul sous Windows ; Linux ou Windows (Proton) sous Linux. */
+const oslistOk = (oslist: string): boolean => {
+  const l = oslist.split(',')
+  return l.includes('windows') || (!isWindows() && l.includes('linux'))
+}
+/** Sous Linux : entrée Linux (jeu natif) avant l'entrée Windows (jeu Proton). */
+const linuxFirst = (e: SteamLaunchEntry): number => (e.oslist.split(',').includes('linux') ? 0 : 10)
+
 /** Programme du jeu (icône, surveillance) d'après les entrées de lancement d'appinfo. */
 export function steamExe(installDir: string, info: SteamAppInfo | null | undefined): string | null {
   const rank = (e: SteamLaunchEntry): number => {
@@ -300,12 +311,12 @@ export function steamExe(installDir: string, info: SteamAppInfo | null | undefin
       (e) =>
         e.executable &&
         !/^steam:/i.test(e.executable) &&
-        /\.exe$/i.test(e.executable) &&
+        (isWindows() ? /\.exe$/i.test(e.executable) : true) &&
         !e.betaKey &&
         !e.ownsDlc &&
-        (!e.oslist || e.oslist.split(',').includes('windows'))
+        (!e.oslist || oslistOk(e.oslist))
     )
-    .sort((a, b) => rank(a) - rank(b))
+    .sort((a, b) => rank(a) - rank(b) + (isWindows() ? 0 : linuxFirst(a) - linuxFirst(b)))
   for (const e of entries) {
     const p = path.join(installDir, fixSlashes(e.executable))
     if (isFile(p)) return p
@@ -326,12 +337,13 @@ export function steamProcessNames(installDir: string, info: SteamAppInfo | null 
   const add = (p: string | null): void => {
     if (!p || !isFile(p)) return
     const base = path.basename(p)
-    if (/\.exe$/i.test(base) && !NOT_GAME_PROCESS.test(base)) names.add(base)
+    // Linux : programmes natifs (sans .exe) aussi
+    if ((/\.exe$/i.test(base) || !isWindows()) && !NOT_GAME_PROCESS.test(/\.exe$/i.test(base) ? base : base + '.exe')) names.add(base)
   }
   add(exe)
   for (const e of info?.launch ?? []) {
-    if (!e.executable || /^steam:/i.test(e.executable) || !/\.exe$/i.test(e.executable)) continue
-    if (e.oslist && !e.oslist.split(',').includes('windows')) continue
+    if (!e.executable || /^steam:/i.test(e.executable) || (isWindows() && !/\.exe$/i.test(e.executable))) continue
+    if (e.oslist && !oslistOk(e.oslist)) continue
     const p = path.join(installDir, fixSlashes(e.executable))
     add(p)
     const target = /(?:^|\s)-exe\s+("([^"]+)"|(\S+))/i.exec(e.arguments)

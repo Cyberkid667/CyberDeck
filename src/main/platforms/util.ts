@@ -13,8 +13,16 @@ export function skip(scan: PlatformScan, name: string, reason: PlatformSkipReaso
   if (reason !== 'local' && reason !== 'platform') scan.excluded++
 }
 
-/** Chemin comparable : absolu, minuscules, sans séparateur final. */
+/** Windows. Hors Windows (Linux) : chemins POSIX, casse respectée. */
+export const isWindows = (): boolean => process.platform === 'win32'
+
+/** Chemin comparable : absolu, minuscules, sans séparateur final (Linux : casse gardée, barres « / »). */
 export function normDir(p: string): string {
+  if (!isWindows()) {
+    let u = path.resolve(p)
+    while (u.length > 1 && u.endsWith('/')) u = u.slice(0, -1)
+    return u
+  }
   let r = path.resolve(p.replace(/\//g, '\\')).toLowerCase()
   while (r.length > 3 && r.endsWith('\\')) r = r.slice(0, -1)
   return r
@@ -25,12 +33,15 @@ export const sameDir = (a: string | null | undefined, b: string | null | undefin
 
 /** file est dans dir (ou un de ses sous-dossiers). */
 export const isInside = (file: string | null | undefined, dir: string | null | undefined): boolean =>
-  !!file && !!dir && normDir(file).startsWith(normDir(dir) + '\\')
+  !!file && !!dir && normDir(file).startsWith(normDir(dir) + (isWindows() ? '\\' : '/'))
 
-export const fixSlashes = (p: string): string => path.normalize(p.replace(/\//g, '\\'))
+/** Barres du système (Linux : les « \ » des chemins Windows d'appinfo.vdf deviennent « / »). */
+export const fixSlashes = (p: string): string =>
+  isWindows() ? path.normalize(p.replace(/\//g, '\\')) : path.normalize(p.replace(/\\/g, '/'))
 
 /** Dossier propre : barres Windows, absolu, sans séparateur final (sûr entre guillemets). */
-export const cleanDir = (p: string): string => path.resolve(p.trim().replace(/^"|"$/g, '').replace(/\//g, '\\'))
+export const cleanDir = (p: string): string =>
+  isWindows() ? path.resolve(p.trim().replace(/^"|"$/g, '').replace(/\//g, '\\')) : path.resolve(p.trim().replace(/^"|"$/g, ''))
 
 export function isDir(p: string | null | undefined): p is string {
   if (!p) return false

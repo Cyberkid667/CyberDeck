@@ -103,27 +103,29 @@
 .dlp-head .st { color: var(--tx-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dlp-head .st .upd { color: var(--tx-3); }
 .dlp-head .pct { margin-left: auto; font: 300 22px/1 var(--font-mono); letter-spacing: -0.02em; color: #fff; white-space: nowrap; }
-.dlp-bar { position: relative; height: 6px; overflow: hidden; background: rgba(255,255,255,.1);
-  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 var(--seg), transparent var(--seg) calc(var(--seg) + var(--gap)));
-          mask-image: repeating-linear-gradient(90deg, #000 0 var(--seg), transparent var(--seg) calc(var(--seg) + var(--gap))); }
-.dlp-bar > i { position: absolute; left: 0; top: 0; bottom: 0; width: var(--p); background: #fff; transition: width .6s linear; }
-.dlp.ph-paused .dlp-bar > i, .dlp.ph-queued .dlp-bar > i { background: #7a7a7a; }
+/* barre bleue vivante (progress.css) */
+.dlp-bar.lbar { height: 8px; }
+.dlp-head .st .clock { color: var(--tx-3); letter-spacing: .04em; }
+.dlp.ph-downloading, .dlp.ph-installing { border-color: rgba(95,176,255,.28); box-shadow: 0 12px 34px -20px rgba(47,140,255,.55); }
+.dlp.ph-downloading .dlp-head svg.i, .dlp.ph-installing .dlp-head svg.i, .dlp.ph-queued .dlp-head svg.i { color: var(--prog-2); }
 .dlp.ph-paused .dlp-head .st, .dlp.ph-queued .dlp-head .st { color: var(--tx-2); }
+.dlp.ph-paused .dlp-head .pct { color: var(--tx-2); }
 .dlp-stats { display: flex; gap: 0; min-width: 0; }
 .dlp-stats > div { display: flex; flex-direction: column; gap: 6px; padding: 0 18px; border-left: 1px solid var(--line); min-width: 0; }
 .dlp-stats > div:first-child { padding-left: 0; border-left: 0; }
 .dlp-stats .cap { white-space: nowrap; }
 .dlp-stats .v { font: 400 12.5px/1 var(--font-mono); color: var(--tx-1); white-space: nowrap; }
 .dlp-stats .v.nil { color: var(--tx-4); }
-/* graphique des vitesses : barres blanches, la plus récente à droite */
+/* graphique des vitesses : barres bleues, la plus récente à droite */
 .dlp-graph { display: flex; flex-direction: column; justify-content: center; gap: 8px; min-width: 0; padding-left: 20px; border-left: 1px solid var(--line); }
 .dlp-graph-top { display: flex; align-items: center; gap: 10px; }
 .dlp-graph-top .peak { margin-left: auto; color: var(--tx-2); white-space: nowrap; }
 .dlp-bars { flex: none; height: 52px; display: grid; grid-template-columns: repeat(var(--n, 60), minmax(0, 1fr)); align-items: end; gap: 2px; border-bottom: 1px solid var(--line-2);
   background-image: linear-gradient(var(--guide-2) 1px, transparent 1px); background-size: 100% 25%; }
-.dlp-bars > i { display: block; min-width: 0; height: 0; background: rgba(255,255,255,.62); transition: height .4s ease-out; }
-.dlp-bars > i.last { background: #fff; box-shadow: var(--glow-sm); }
-.dlp-bars > i.empty { background: transparent; }
+.dlp-bars > i { display: block; min-width: 0; height: 0; background: rgba(95,176,255,.55); transition: height .4s ease-out; }
+.dlp-bars > i.last { background: var(--prog-2); box-shadow: 0 0 8px rgba(47,140,255,.7); }
+.dlp.ph-paused .dlp-bars > i, .dlp.ph-queued .dlp-bars > i { background: rgba(255,255,255,.28); box-shadow: none; }
+.dlp-bars > i.pad { background: transparent !important; }
 @media (max-width: 1099px) {
   .dlp { grid-template-columns: 1fr; gap: 14px; }
   .dlp-graph { padding-left: 0; border-left: 0; }
@@ -134,7 +136,8 @@
   grid-template-columns: minmax(0, 1fr) 150px; }
 .dlp.compact .dlp-main { gap: 8px; }
 .dlp.compact .dlp-head .pct { font-size: 18px; }
-.dlp.compact .dlp-bar { height: 4px; }
+.dlp.compact .dlp-bar.lbar { height: 6px; border-radius: 3px; }
+.dlp.compact.ph-downloading, .dlp.compact.ph-installing { box-shadow: none; }
 .dlp.compact .dlp-stats > div { padding: 0 12px; gap: 5px; }
 .dlp.compact .dlp-stats > div:first-child { padding-left: 0; }
 .dlp.compact .dlp-stats .v { font-size: 12px; }
@@ -190,7 +193,6 @@
 .gd-ph .cap { white-space: nowrap; }
 .gd-ph .cap.n { color: var(--tx-1); }
 .gd-ph .rule { flex: 1; height: 1px; background: var(--hair); position: relative; min-width: 12px; }
-.gd-ph .rule::after { content: ''; position: absolute; right: 0; top: -4px; width: 1px; height: 9px; background: var(--line-3); }
 .gd-more { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 6px; border-radius: 3px; font: 400 11px/1 var(--font-mono); color: var(--tx-2); white-space: nowrap; }
 .gd-more svg.i { width: 12px; height: 12px; color: var(--tx-3); }
 .gd-more:hover { color: var(--tx-1); background: rgba(255,255,255,.06); }
@@ -289,9 +291,15 @@ button.ach.more:focus-visible { box-shadow: var(--focus-ring); }
 .sk-txt { flex: 1; display: flex; flex-direction: column; }
 
 /* ---------- Carte : téléchargement Steam en cours ---------- */
-.cov-dl { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; height: 3px; background: rgba(0,0,0,.65); pointer-events: none; }
-.cov-dl > i { position: absolute; left: 0; top: 0; bottom: 0; width: var(--p); background: #fff; box-shadow: 0 0 8px rgba(255,255,255,.7); transition: width .6s linear; }
-.cov-dl.ph-paused > i, .cov-dl.ph-queued > i { background: #8d8d8d; box-shadow: none; }
+/* fine barre bleue en bas de la jaquette : reflet qui passe pendant le travail, balayage si la part est inconnue */
+.cov-dl { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; height: 4px; overflow: hidden; background: rgba(0,0,0,.7); pointer-events: none; }
+.cov-dl > i { position: absolute; left: 0; top: 0; bottom: 0; width: var(--p); overflow: hidden; background: var(--prog-fill); box-shadow: 0 0 10px rgba(47,140,255,.8); transition: width .6s cubic-bezier(.2,.8,.2,1); }
+.cov-dl.m-active > i::after { content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 45%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.7), transparent); animation: lbar-sheen 1.8s cubic-bezier(.5,0,.5,1) infinite; }
+.cov-dl.m-ind > i { width: 38%; background: linear-gradient(90deg, transparent, var(--prog-1) 30%, var(--prog-2) 60%, transparent); box-shadow: none;
+  animation: lbar-sweep 1.5s cubic-bezier(.45,0,.55,1) infinite; transition: none; }
+.cov-dl.m-paused > i { background: rgba(95,176,255,.4); box-shadow: none; }
+@media (prefers-reduced-motion: reduce) { .cov-dl.m-ind > i { width: 100%; transform: none; background: rgba(95,176,255,.55); } }
 .gcard.absent .cov-dl { opacity: 1; }
 .gmeta.dl { color: var(--tx-2); }
 

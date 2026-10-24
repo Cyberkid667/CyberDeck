@@ -27,7 +27,7 @@ import { t, useT } from '../i18n'
 // et le collage ne remontent pas jusqu'aux raccourcis de la fenêtre (Ctrl+N, Suppr…).
 // ==========================================================================
 
-export type DialogKind = 'add-torrent' | 'remove' | 'game' | 'import' | 'platforms' | 'remove-game' | 'uninstall' | 'settings'
+export type DialogKind = 'add-torrent' | 'remove' | 'game' | 'import' | 'remove-game' | 'uninstall' | 'launcher-uninstall' | 'settings' | 'twitch-signin'
 
 /** Dialogues ouverts, du plus ancien au plus récent : seul le dernier écoute le clavier de la fenêtre. */
 const OPEN: HTMLElement[] = []

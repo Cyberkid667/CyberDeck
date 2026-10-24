@@ -34,6 +34,7 @@ import { PlatformTag } from './PlatformTag'
 import { RemoveGameDialog } from './RemoveGameDialog'
 import { UninstallDialog } from './UninstallDialog'
 import type { ToastOptions } from './Toasts'
+import { SteamView } from './SteamView'
 import { SearchBox, ViewTitle } from './Toolbar'
 
 // Bibliothèque (SPEC 5.10) : barre d'outils (Ajouter un jeu, Importer un dossier,
@@ -65,7 +66,8 @@ interface Props {
   onFilter: (filter: LibraryFilter) => void
   onAdd: () => void
   onEdit: (game: Game) => void
-  onOpenPlatforms: () => void
+  /** ouvre la page « Lanceurs » ; 'steam-key' : jusqu'au champ de la clé Steam */
+  onOpenLaunchers: (focus?: 'steam-key') => void
   onToast: (level: 'info' | 'success' | 'error', message: string, opts?: ToastOptions) => void
   /** change à chaque clic sur une entrée « Bibliothèque » de la barre latérale : la page d'un jeu se ferme */
   navKey?: number
@@ -362,7 +364,7 @@ export function LibraryView({
   onFilter,
   onAdd,
   onEdit,
-  onOpenPlatforms,
+  onOpenLaunchers,
   onToast,
   navKey = 0
 }: Props): React.JSX.Element {
@@ -447,6 +449,13 @@ export function LibraryView({
   useCanvasHold(importing || !!removing)
 
   const syncing = !!platforms?.syncing
+  // Filtre Steam : vue dédiée façon client Steam (liste, accueil, page du jeu à droite) ; tous les
+  // jeux Steam y sont, installés ou seulement possédés, quelle que soit la vue Installés / Tous
+  const steamMode = filter === 'steam'
+  const steamGames = useMemo(
+    () => (steamMode ? library.games.filter((g) => g.platform === 'steam' && (onThisPc(g) || g.owned !== false)) : []),
+    [library.games, steamMode]
+  )
   const query = search.trim()
   const launchingMap = library.launching ?? {}
 
@@ -595,7 +604,7 @@ export function LibraryView({
 
   return (
     <>
-      <div className="toolbar" role="toolbar" aria-label={t('library.view.toolbarAria')} ref={toolbarRef} hidden={!!detailGame}>
+      <div className="toolbar" role="toolbar" aria-label={t('library.view.toolbarAria')} ref={toolbarRef} hidden={!!detailGame || steamMode}>
         <ViewTitle cap={t('library.view.cap')} title={title} count={total} />
         <button
           type="button"
@@ -640,7 +649,7 @@ export function LibraryView({
         <SearchBox value={search} onChange={setSearch} placeholder={t('library.view.search')} testId="library-search" disabled={noGames} />
       </div>
 
-      <div className="lib" ref={libRef} hidden={!!detailGame}>
+      <div className="lib" ref={libRef} hidden={!!detailGame || steamMode}>
         {noGames ? (
           <div className="empty">
             <Dust className="dust" count={40} bias={0} />
@@ -680,9 +689,9 @@ export function LibraryView({
               ) : (
                 <>
                   <span>{t('library.view.emptyAuto')}</span>
-                  <button type="button" className="btn btn-sm" onClick={onOpenPlatforms}>
+                  <button type="button" className="btn btn-sm" data-testid="empty-open-launchers" onClick={() => onOpenLaunchers()}>
                     <Blocks />
-                    {t('library.common.platforms')}
+                    {t('library.launchers.cap')}
                   </button>
                 </>
               )}
@@ -813,22 +822,60 @@ export function LibraryView({
         )}
       </div>
 
-      {detailGame && (
-        <GameDetailView
-          game={detailGame}
-          state={gameState(detailGame, library)}
-          startedAt={detailStart}
-          now={now}
-          download={downloads[detailGame.id] ?? null}
+      {steamMode ? (
+        <SteamView
+          games={steamGames}
+          library={library}
           platforms={platforms}
-          onBack={closeDetail}
+          downloads={downloads}
+          selectedId={detailGame?.id ?? null}
+          navKey={navKey}
+          onOpen={openDetail}
+          onHome={closeDetail}
           onPlay={play}
           onInstall={install}
-          onEdit={edit}
-          onUninstall={setUninstalling}
           onMenu={openMenu}
-          onOpenPlatforms={onOpenPlatforms}
+          onOpenLaunchers={onOpenLaunchers}
+          detail={
+            detailGame ? (
+              <GameDetailView
+                key={detailGame.id}
+                game={detailGame}
+                state={gameState(detailGame, library)}
+                startedAt={detailStart}
+                now={now}
+                download={downloads[detailGame.id] ?? null}
+                platforms={platforms}
+                onBack={closeDetail}
+                onPlay={play}
+                onInstall={install}
+                onEdit={edit}
+                onUninstall={setUninstalling}
+                onMenu={openMenu}
+                onOpenLaunchers={onOpenLaunchers}
+                backLabel={t('steam.list.home')}
+              />
+            ) : null
+          }
         />
+      ) : (
+        detailGame && (
+          <GameDetailView
+            game={detailGame}
+            state={gameState(detailGame, library)}
+            startedAt={detailStart}
+            now={now}
+            download={downloads[detailGame.id] ?? null}
+            platforms={platforms}
+            onBack={closeDetail}
+            onPlay={play}
+            onInstall={install}
+            onEdit={edit}
+            onUninstall={setUninstalling}
+            onMenu={openMenu}
+            onOpenLaunchers={onOpenLaunchers}
+          />
+        )
       )}
 
       {menu && menuGame && <ContextMenu key={`${menu.id},${menu.x},${menu.y}`} x={menu.x} y={menu.y} items={menuItems(menuGame)} onClose={closeMenu} />}

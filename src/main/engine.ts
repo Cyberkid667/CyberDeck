@@ -21,6 +21,8 @@ import type {
   TrackerInfo
 } from '../shared/types'
 import { isLang, setLang, t as tr } from '../shared/i18n'
+import ipCountryFile from '../../build/geo/ip-country.bin?asset'
+import { peerGeo, setGeoFile } from './geoip'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Torrent = any
@@ -35,6 +37,8 @@ const parentPort = (process as unknown as { parentPort: ParentPort }).parentPort
 // quand elle change dans Réglages (le moteur est un processus à part).
 const langArg = process.argv.find((a) => a.startsWith('--lang='))?.slice('--lang='.length)
 if (isLang(langArg)) setLang(langArg)
+// Table IP → pays (lue au premier pair) : la position des pairs sur le globe, sans réseau.
+setGeoFile(ipCountryFile)
 
 // Ce qu'on garde sur disque pour chaque torrent (state.json).
 interface TorrentRecord {
@@ -399,6 +403,8 @@ const NOT_INSTALLER = /(redist|directx|vcredist|dotnet|physx|unins|prereq)/i
 const installerCache = new Map<string, { count: number; installer: string | null }>()
 
 function installerOf(rec: TorrentRecord): string | null {
+  // Linux : un installateur Windows ne peut pas tourner, l'interface ne propose pas « Installer »
+  if (process.platform !== 'win32') return null
   const cached = installerCache.get(rec.id)
   if (cached && cached.count === rec.files.length) return cached.installer
   const depth = (p: string): number => p.split(/[\\/]/).length
@@ -507,15 +513,21 @@ function detailsOf(rec: TorrentRecord): TorrentDetails {
     : rec.files
   const pieceCount = hasMeta ? t.pieces.length : rec.pieceCount
   const peers: PeerInfo[] = t
-    ? t.wires.map((w: any) => ({
-        address: w.remoteAddress ? `${w.remoteAddress}:${w.remotePort}` : '—',
-        client: clientName(w),
-        connection: connectionLabel(w.type) ?? w.type ?? '—',
-        progress: w.isSeeder ? 1 : popcount(w.peerPieces?.buffer, pieceCount) / (pieceCount || 1),
-        downloadSpeed: Math.round(w.downloadSpeed()),
-        uploadSpeed: Math.round(w.uploadSpeed()),
-        isSeeder: !!w.isSeeder
-      }))
+    ? t.wires.map((w: any) => {
+        const peer: PeerInfo = {
+          address: w.remoteAddress ? `${w.remoteAddress}:${w.remotePort}` : '—',
+          client: clientName(w),
+          connection: connectionLabel(w.type) ?? w.type ?? '—',
+          progress: w.isSeeder ? 1 : popcount(w.peerPieces?.buffer, pieceCount) / (pieceCount || 1),
+          downloadSpeed: Math.round(w.downloadSpeed()),
+          uploadSpeed: Math.round(w.uploadSpeed()),
+          isSeeder: !!w.isSeeder
+        }
+        // pays du pair : recherche locale (main/geoip.ts), l'adresse ne quitte jamais le PC
+        const geo = typeof w.remoteAddress === 'string' ? peerGeo(w.remoteAddress) : null
+        if (geo) Object.assign(peer, geo)
+        return peer
+      })
     : []
   const urls: string[] = (hasMeta ? t.announce : rec.announce) ?? []
   const trackers: TrackerInfo[] = urls.map((url) => {

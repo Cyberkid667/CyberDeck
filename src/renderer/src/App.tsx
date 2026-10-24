@@ -11,7 +11,7 @@ import { GameDialog, type GameDialogState } from './components/GameDialog'
 import { LibraryView } from './components/LibraryView'
 import { MarkAnim } from './components/MarkAnim'
 import { MarkSmall } from './components/MarkSmall'
-import { PlatformsDialog } from './components/PlatformsDialog'
+import { LaunchersView } from './components/LaunchersView'
 import { RemoveDialog } from './components/RemoveDialog'
 import { SettingsDialog } from './components/SettingsDialog'
 import { Sidebar, type LibNavItem, type View } from './components/Sidebar'
@@ -29,6 +29,7 @@ import {
   canShowOwned,
   FILTER_ORDER,
   ofName,
+  onThisPc,
   platformCounts,
   platformName,
   type LibraryFilter,
@@ -215,7 +216,9 @@ export function App(): React.JSX.Element {
   const [library, setLibrary] = useState<LibraryState>({ games: [], running: {}, launching: {}, installing: [] })
   const [gameDialog, setGameDialog] = useState<GameDialogState | null>(null)
   const [platforms, setPlatforms] = useState<PlatformsState | null>(null)
-  const [platformsOpen, setPlatformsOpen] = useState(false)
+  // page « Lanceurs » ouverte depuis « Ajouter une clé Steam » : change à chaque demande (0 : ouverture simple)
+  const [steamKeyFocus, setSteamKeyFocus] = useState(0)
+  const steamKeyAsks = useRef(0)
   // clic sur une entrée « Bibliothèque » de la barre latérale : la page d'un jeu ouverte se ferme
   const [libNavKey, setLibNavKey] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -291,7 +294,7 @@ export function App(): React.JSX.Element {
   const pendingAdd = useRef<AddPreset | null>(null)
 
   // Les canevas animés derrière un dialogue, le menu ou le dépôt restent figés (une image).
-  useCanvasHold(!!(addPreset || removeIds || gameDialog || platformsOpen || settingsOpen))
+  useCanvasHold(!!(addPreset || removeIds || gameDialog || settingsOpen))
   useCanvasHold(!!menu)
   useCanvasHold(dragOver)
 
@@ -502,7 +505,9 @@ export function App(): React.JSX.Element {
   }, [library.games, flushChanges])
   useEffect(() => () => clearTimeout(flushTimer.current), [])
 
-  // Lecture d'une plateforme devenue impossible : dit une fois (pas à chaque relecture)
+  // Lecture d'une plateforme devenue impossible : dit une fois (pas à chaque relecture), avec
+  // un bouton vers la page Lanceurs (déclarée plus bas : passée par une référence)
+  const openLaunchersRef = useRef<() => void>(() => {})
   const prevPlatforms = useRef<PlatformsState | null>(null)
   useEffect(() => {
     const prev = prevPlatforms.current
@@ -514,7 +519,8 @@ export function App(): React.JSX.Element {
         toast('error', t('shell.app.platformFailed', { name: p.name, of: ofName(p.name) }), {
           title: t('shell.sidebar.platforms'),
           detail: p.error ?? undefined,
-          detailKind: 'text'
+          detailKind: 'text',
+          action: { label: t('shell.app.openLaunchers'), testId: 'toast-open-launchers', onClick: () => openLaunchersRef.current() }
         })
     }
   }, [platforms, toast])
@@ -538,20 +544,31 @@ export function App(): React.JSX.Element {
   const libView: LibraryShow = canShowAll ? libShow : 'installed'
   const viewCounts = useMemo(() => platformCounts(library.games, libView), [library.games, libView])
   const libCount = useMemo(() => [...viewCounts.values()].reduce((a, b) => a + b, 0), [viewCounts])
-  // Un filtre par plateforme qui a des jeux (et le filtre actif, même vide) ; rien s'il n'y a qu'une sorte de jeux.
+  // Jeux de la vue Steam (installés, en téléchargement ou possédés, quelle que soit la vue Installés / Tous)
+  const steamTotal = useMemo(() => library.games.filter((g) => g.platform === 'steam' && (onThisPc(g) || g.owned !== false)).length, [library.games])
+  // Un filtre par plateforme qui a des jeux (et le filtre actif, même vide) ; rien s'il n'y a qu'une sorte
+  // de jeux, sauf Steam qui ouvre sa propre vue (toujours proposée quand il y a des jeux Steam).
   const libNav = useMemo<LibNavItem[]>(() => {
-    const items = FILTER_ORDER.filter((p) => (viewCounts.get(p) ?? 0) > 0 || p === libFilter).map((p) => ({ id: p, count: viewCounts.get(p) ?? 0 }))
-    return items.filter((i) => i.count > 0).length >= 2 || libFilter !== 'all' ? items : []
-  }, [viewCounts, libFilter])
+    const count = (p: GamePlatform): number => (p === 'steam' ? steamTotal : (viewCounts.get(p) ?? 0))
+    const items = FILTER_ORDER.filter((p) => count(p) > 0 || p === libFilter).map((p) => ({ id: p, count: count(p) }))
+    return items.filter((i) => i.count > 0).length >= 2 || libFilter !== 'all' || steamTotal > 0 ? items : []
+  }, [viewCounts, libFilter, steamTotal])
   const chooseShow = useCallback((s: LibraryShow) => {
     setLibShow(s)
     storeShow(s)
   }, [])
-  /** Fenêtre « Plateformes » : ouverte avec un état relu (jeux retirés, compte Steam). */
-  const openPlatforms = useCallback(() => {
-    setPlatformsOpen(true)
+  /**
+   * Page « Lanceurs » (remplace la fenêtre « Plateformes ») : ouverte avec un état relu (jeux
+   * retirés, compte Steam). focus 'steam-key' : la page défile jusqu'au champ de la clé Steam.
+   */
+  const openLaunchers = useCallback((focus?: 'steam-key') => {
+    setSteamKeyFocus(focus === 'steam-key' ? ++steamKeyAsks.current : 0)
+    setView('launchers')
     api.getPlatforms().then(setPlatforms, () => {})
   }, [])
+  useLayoutEffect(() => {
+    openLaunchersRef.current = () => openLaunchers()
+  }, [openLaunchers])
 
   // ---------- Écran de démarrage : jusqu'au premier instantané (3 s au plus), puis fondu de 200 ms ----------
   // Torrents désactivés : pas de moteur, l'écran part dès que la bibliothèque est lue.
@@ -803,7 +820,7 @@ export function App(): React.JSX.Element {
     // Raccourcis de la fenêtre : rien pendant un dialogue ou un menu (le menu resterait
     // affiché par-dessus le dialogue d'ajout).
     const onKey = (e: KeyboardEvent): void => {
-      if (addPreset || removeIds || gameDialog || platformsOpen || settingsOpen || menu || menuShown()) return
+      if (addPreset || removeIds || gameDialog || settingsOpen || menu || menuShown()) return
       if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b') {
         e.preventDefault()
         if (!e.repeat) toggleSide()
@@ -813,6 +830,13 @@ export function App(): React.JSX.Element {
         e.preventDefault()
         if (torrentsOn) openAdd()
         else if (settingsKnown && !e.repeat) torrentsOffToast({})
+        return
+      }
+      // page Lanceurs : Échap revient à la bibliothèque (dans un champ, Échap le quitte d'abord)
+      if (view === 'launchers' && e.key === 'Escape' && !e.repeat && !document.querySelector('.overlay')) {
+        e.preventDefault()
+        if (isTyping(e)) (e.target as HTMLElement).blur()
+        else setView('library')
         return
       }
       if (isTyping(e) || view !== 'torrents' || !torrentsOn) return
@@ -828,7 +852,7 @@ export function App(): React.JSX.Element {
       }
     }
     const onPaste = (e: ClipboardEvent): void => {
-      if (addPreset || removeIds || gameDialog || platformsOpen || settingsOpen || menu || menuShown() || isTyping(e)) return
+      if (addPreset || removeIds || gameDialog || settingsOpen || menu || menuShown() || isTyping(e)) return
       const text = e.clipboardData?.getData('text')?.trim() ?? ''
       if (!text.startsWith('magnet:?')) return
       // Le collage natif est annulé : le dialogue s'ouvre pendant l'événement et donne le focus
@@ -847,7 +871,6 @@ export function App(): React.JSX.Element {
     addPreset,
     removeIds,
     gameDialog,
-    platformsOpen,
     settingsOpen,
     menu,
     view,
@@ -1001,6 +1024,7 @@ export function App(): React.JSX.Element {
   // Vue Torrents seulement si les torrents sont activés ; la barre d'état et l'oscilloscope
   // du trafic n'existent que dans cette vue (la bibliothèque n'a ni l'un ni l'autre).
   const showTorrents = view === 'torrents' && torrentsOn
+  const showLaunchers = view === 'launchers'
 
   /** Réglages ouverts depuis la barre latérale : pas d'ajout de torrent en attente. */
   const openSettings = useCallback(() => {
@@ -1051,7 +1075,11 @@ export function App(): React.JSX.Element {
             </button>
           )}
           <span className="crumb">
-            {!showTorrents ? (
+            {showLaunchers ? (
+              <span className="cap">
+                {t('shell.sidebar.library')} / <b>{t('shell.sidebar.launchers')}</b>
+              </span>
+            ) : !showTorrents ? (
               <span className="cap">
                 {t('shell.sidebar.library')} / <b>{libFilter === 'all' ? t('shell.sidebar.myGames') : platformName(libFilter)}</b>
               </span>
@@ -1094,7 +1122,7 @@ export function App(): React.JSX.Element {
           />
         )}
         <Sidebar
-          view={showTorrents ? 'torrents' : 'library'}
+          view={showTorrents ? 'torrents' : showLaunchers ? 'launchers' : 'library'}
           filter={filter}
           counts={counts}
           gameCount={libCount}
@@ -1110,14 +1138,25 @@ export function App(): React.JSX.Element {
             setView('library')
             setLibNavKey((n) => n + 1)
           }}
-          onPlatforms={openPlatforms}
+          onPlatforms={() => openLaunchers()}
           onSettings={openSettings}
           syncing={!!platforms?.syncing}
           torrentsEnabled={torrentsOn}
           traffic={{ down: snap?.global.downloadSpeed ?? 0, up: snap?.global.uploadSpeed ?? 0, stamp: lastSnapAt }}
         />
 
-        {!showTorrents ? (
+        {showLaunchers ? (
+          <main className="main" ref={mainRef}>
+            <LaunchersView
+              platforms={platforms}
+              library={library}
+              onResync={resyncPlatforms}
+              onBack={() => setView('library')}
+              onToast={toast}
+              steamKeyFocus={steamKeyFocus}
+            />
+          </main>
+        ) : !showTorrents ? (
           <main className="main" ref={mainRef}>
             <LibraryView
               library={library}
@@ -1130,7 +1169,7 @@ export function App(): React.JSX.Element {
               onFilter={setLibFilter}
               onAdd={addManualGame}
               onEdit={(game) => setGameDialog({ mode: 'edit', game })}
-              onOpenPlatforms={openPlatforms}
+              onOpenLaunchers={openLaunchers}
               onToast={toast}
               navKey={libNavKey}
             />
@@ -1221,9 +1260,6 @@ export function App(): React.JSX.Element {
             onClose={() => setGameDialog(null)}
             onToast={toast}
           />
-        )}
-        {platformsOpen && (
-          <PlatformsDialog state={platforms} onClose={() => setPlatformsOpen(false)} onResync={resyncPlatforms} onToast={toast} />
         )}
         {settingsOpen && settings && (
           <SettingsDialog

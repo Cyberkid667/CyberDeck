@@ -155,7 +155,39 @@ const messages: Messages = {
     'main.protobuf.fixed64': 'truncated fixed64',
     'main.protobuf.fixed32': 'truncated fixed32',
     'main.protobuf.length': 'truncated length',
-    'main.protobuf.wireType': 'unsupported type {type}'
+    'main.protobuf.wireType': 'unsupported type {type}',
+
+    // ---------- Page Lanceurs (installer / désinstaller un lanceur) ----------
+    'main.launchers.unknown': 'Unknown launcher.',
+    'main.launchers.busy': '{name}: an operation is already running.',
+    'main.launchers.cantOpen': 'Can’t open the page: {error}',
+    'main.launchers.cantStart': 'winget won’t start: {error}',
+    'main.launchers.uacHint': 'Windows may ask for permission: accept to continue.',
+    'main.launchers.followUninstaller': 'Follow the {name} uninstaller window. CyberDeck checks when it’s gone.',
+    'main.launchers.noUninstaller': 'No uninstaller found for {name}.',
+    'main.launchers.stillInstalled': '{name} is still installed (uninstall cancelled?).',
+    'main.launchers.rebootToFinish': 'Installed. Restart your PC to finish.',
+    'main.launchers.err.alreadyInstalled': '{name} is already installed and up to date.',
+    'main.launchers.err.notFound': 'winget can’t find the {name} package.',
+    'main.launchers.err.notForThisPc': 'No {name} installer fits this PC.',
+    'main.launchers.err.download': 'The download failed. Check your connection and try again.',
+    'main.launchers.err.hash': 'The downloaded file doesn’t match the official package. Try again later.',
+    'main.launchers.err.noNetwork': 'No internet connection.',
+    'main.launchers.err.diskFull': 'Not enough disk space.',
+    'main.launchers.err.inUse': '{name} is running: close it and try again.',
+    'main.launchers.err.busy': 'Another installation is running. Try again when it’s finished.',
+    'main.launchers.err.rebootFirst': 'Restart your PC, then try again.',
+    'main.launchers.err.cancelled': 'Installation cancelled (permission refused or installer closed).',
+    'main.launchers.err.policy': 'Your organization’s policies block this installation.',
+    'main.launchers.err.installer': 'The {name} installer failed.',
+    'main.launchers.err.interrupted': 'Installation interrupted.',
+    'main.launchers.err.code': 'Installation failed (winget code {code}).',
+
+    // ---------- Linux (Steam et jeux ajoutés à la main seulement) ----------
+    'main.linux.notExecutable': 'This file can’t be run: {path}. Make it executable (chmod +x) or choose another program.',
+    'main.linux.installerUnsupported': 'Windows installers can’t run on Linux. Install the game yourself, then add it with Add a game.',
+    'main.linux.launcherUninstall': 'On Linux, uninstall {name} with your package manager (apt, dnf, pacman…), Flatpak or Snap.',
+    'main.linux.windowsOnly': 'This launcher is Windows-only.'
   },
   fr: {
     // ---------- Commun ----------
@@ -310,7 +342,39 @@ const messages: Messages = {
     'main.protobuf.fixed64': 'fixe 64 coupé',
     'main.protobuf.fixed32': 'fixe 32 coupé',
     'main.protobuf.length': 'longueur coupée',
-    'main.protobuf.wireType': 'type {type} non géré'
+    'main.protobuf.wireType': 'type {type} non géré',
+
+    // ---------- Page Lanceurs (installer / désinstaller un lanceur) ----------
+    'main.launchers.unknown': 'Lanceur inconnu.',
+    'main.launchers.busy': '{name} : une opération est déjà en cours.',
+    'main.launchers.cantOpen': 'Impossible d’ouvrir la page : {error}',
+    'main.launchers.cantStart': 'winget ne démarre pas : {error}',
+    'main.launchers.uacHint': 'Windows peut demander l’autorisation : accepte pour continuer.',
+    'main.launchers.followUninstaller': 'Suis la fenêtre de désinstallation de {name}. CyberDeck vérifie quand il a disparu.',
+    'main.launchers.noUninstaller': 'Aucun programme de désinstallation trouvé pour {name}.',
+    'main.launchers.stillInstalled': '{name} est toujours installé (désinstallation annulée ?).',
+    'main.launchers.rebootToFinish': 'Installé. Redémarre le PC pour terminer.',
+    'main.launchers.err.alreadyInstalled': '{name} est déjà installé et à jour.',
+    'main.launchers.err.notFound': 'winget ne trouve pas le paquet {name}.',
+    'main.launchers.err.notForThisPc': 'Aucun programme d’installation de {name} ne convient à ce PC.',
+    'main.launchers.err.download': 'Le téléchargement a échoué. Vérifie la connexion et réessaie.',
+    'main.launchers.err.hash': 'Le fichier téléchargé ne correspond pas au paquet officiel. Réessaie plus tard.',
+    'main.launchers.err.noNetwork': 'Pas de connexion Internet.',
+    'main.launchers.err.diskFull': 'Pas assez d’espace disque.',
+    'main.launchers.err.inUse': '{name} est ouvert : ferme-le et réessaie.',
+    'main.launchers.err.busy': 'Une autre installation est en cours. Réessaie quand elle est finie.',
+    'main.launchers.err.rebootFirst': 'Redémarre le PC, puis réessaie.',
+    'main.launchers.err.cancelled': 'Installation annulée (autorisation refusée ou installateur fermé).',
+    'main.launchers.err.policy': 'Les règles de ton organisation bloquent cette installation.',
+    'main.launchers.err.installer': 'Le programme d’installation de {name} a échoué.',
+    'main.launchers.err.interrupted': 'Installation interrompue.',
+    'main.launchers.err.code': 'L’installation a échoué (code winget {code}).',
+
+    // ---------- Linux (Steam et jeux ajoutés à la main seulement) ----------
+    'main.linux.notExecutable': 'Ce fichier ne peut pas être lancé : {path}. Rends-le exécutable (chmod +x) ou choisis un autre programme.',
+    'main.linux.installerUnsupported': 'Les installateurs Windows ne fonctionnent pas sous Linux. Installe le jeu toi-même, puis ajoute-le avec Ajouter un jeu.',
+    'main.linux.launcherUninstall': 'Sous Linux, désinstalle {name} avec ton gestionnaire de paquets (apt, dnf, pacman…), Flatpak ou Snap.',
+    'main.linux.windowsOnly': 'Ce lanceur ne fonctionne que sous Windows.'
   }
 }
 

@@ -1,0 +1,82 @@
+# Linux build of CyberDeck (Steam + local games): AppImage and tar.gz, smoke-tested under Xvfb.
+# Runs by hand (Actions > Linux build > Run workflow) and on version tags (v*): for a tag, the files
+# are attached to the GitHub Release of that tag (create the Release first).
+name: Linux build
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # npm ci on Linux fetches the Linux prebuilt native modules (node-datachannel, utp-native…)
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check native modules (Linux binaries)
+        run: |
+          file node_modules/node-datachannel/build/Release/node_datachannel.node
+          node -e "require('node-datachannel'); console.log('node-datachannel ok')"
+          node -e "require('utp-native'); console.log('utp-native ok')"
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Linux unit checks (Steam paths, /proc watcher)
+        run: node tests/tools/linux-checks.mjs
+
+      - name: Build
+        run: npx electron-vite build
+
+      - name: Package (AppImage, tar.gz)
+        run: npx electron-builder --linux AppImage tar.gz --publish never
+
+      - name: Install Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libnss3 libgbm1
+          sudo apt-get install -y libasound2t64 || sudo apt-get install -y libasound2
+
+      - name: Smoke test (packaged app under Xvfb)
+        run: |
+          export CYBERDECK_USER_DATA="$(mktemp -d)"
+          export CYBERDECK_TEST_QUIET=1
+          xvfb-run -a --server-args="-screen 0 1920x1080x24" \
+            node tests/tools/linux-smoke.mjs --exe dist/linux-unpacked/cyberdeck --user-data "$CYBERDECK_USER_DATA" --shots smoke
+
+      - name: Upload smoke screenshots and log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyberdeck-linux-smoke
+          path: smoke/
+          if-no-files-found: warn
+
+      - name: Upload Linux packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyberdeck-linux
+          path: |
+            dist/*.AppImage
+            dist/*.tar.gz
+          if-no-files-found: error
+
+      - name: Attach to the GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/*.AppImage dist/*.tar.gz --clobber --repo "$GITHUB_REPOSITORY"

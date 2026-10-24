@@ -7,6 +7,7 @@ import { useT } from '../i18n'
 import { errorText, formatBytes, isRunning } from '../format'
 import { CheckMark, DialogFrame, DialogHead } from './AddDialog'
 import type { ToastOptions } from './Toasts'
+import { TwitchSettingsBlock } from './TwitchSection'
 
 // Réglages (SPEC 5.12, 540 px, même socle que les autres dialogues) : client torrent
 // (facultatif, désactivé sur une nouvelle installation), dossier de téléchargement (torrents
@@ -277,6 +278,9 @@ export function SettingsDialog({ settings, torrents, freeSpace, onChange, onClos
           </button>
         </div>
       </div>
+
+      {/* compte Twitch (streams des pages de jeux) : connexion par code d'appareil */}
+      <TwitchSettingsBlock />
 
       <div className="dfoot">
         <span className="cap set-ver" data-testid="settings-version">
