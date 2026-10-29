@@ -51,8 +51,6 @@ export function LaunchersView({ platforms, library, onResync, onBack, onToast, s
   const keyRef = useRef<HTMLInputElement>(null)
   const syncing = !!platforms?.syncing || resyncing
   const statuses = platforms?.platforms ?? []
-  const detected = statuses.filter((p) => p.state === 'detected').length
-  const total = statuses.length || PLATFORM_ORDER.length
 
   // ---------- État des lanceurs (processus principal) ----------
   // Les appels peuvent manquer (preload d'une version d'avant) : la page reste utilisable,
@@ -279,9 +277,6 @@ export function LaunchersView({ platforms, library, onResync, onBack, onToast, s
           <span className="nm">{t('library.launchers.title')}</span>
         </div>
         <div className="spacer" />
-        <span className="lch-count" data-testid="launchers-count">
-          {tn('library.launchers.installedCount', detected, { total })}
-        </span>
         <button
           type="button"
           className="btn btn-line btn-sm lch-resync"
@@ -364,15 +359,13 @@ export function LaunchersView({ platforms, library, onResync, onBack, onToast, s
                 >
                   <ChevronDown />
                   <span className="cap">
-                    {t('library.launchers.hiddenGames', {
-                      n: platforms.hiddenCount
-                    })}
+                    {t('library.launchers.hiddenGames')}
                   </span>
                 </button>
                 {hiddenOpen && (
                   <div className="plat-hidden">
                     <span>
-                      <b>{platforms.hiddenCount}</b> {tn('library.platforms.hidden', platforms.hiddenCount)}
+                      {tn('library.platforms.hidden', platforms.hiddenCount)}
                     </span>
                     <button
                       type="button"

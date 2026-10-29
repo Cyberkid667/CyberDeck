@@ -227,16 +227,16 @@ export const LauncherCard = memo(function LauncherCard({
   // (sinon CyberDeck attendrait jusqu'à 15 min un désinstalleur fermé sans rien faire)
   const canCancel = !!op && running && (op.kind === 'install' || op.phase === 'waiting')
 
-  // une seule ligne d'état
+  // une seule ligne d'état, sans nombre de jeux (aucun compteur)
   const stateText =
     state === 'error'
       ? t('library.launchers.status.error')
       : state === 'absent'
         ? t('library.launchers.state.absent')
         : !hasLauncher
-          ? tn('library.launchers.status.gamesOnly', gameCount || status?.installedCount || 0)
+          ? t('library.launchers.state.gamesOnly')
           : gameCount
-            ? tn('library.launchers.status.games', gameCount)
+            ? t('library.launchers.status.games')
             : t('library.launchers.status.noGames')
 
   const installLabel =

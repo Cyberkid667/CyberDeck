@@ -184,12 +184,6 @@ export function SteamAccountPanel({ steam, syncing, inputRef, onToast, open, onT
       {steam?.hasKey && steam.ownedCount !== null && (
         <p className="sa-owned">
           {tn('library.steam.owned', steam.ownedCount)}
-          {steam.ownedNotInstalledCount !== null && (
-            <span className="sub">
-              {' · '}
-              {steam.ownedNotInstalledCount} {t('library.steam.notInstalled').toLowerCase()}
-            </span>
-          )}
         </p>
       )}
       <button

@@ -92,12 +92,6 @@ export function DetailsPanel({ torrent, details, height, number, onCopy, onOpenF
     tabsRef.current?.querySelector<HTMLElement>(`#dtab-${TABS[next].id}`)?.focus()
   }
 
-  const counts: Record<Tab, number | undefined> = {
-    files: d?.files.length,
-    infos: undefined,
-    peers: d?.peers.length,
-    trackers: d?.trackers.length
-  }
   const name = torrent ? (isHashName(torrent) ? torrent.id : torrent.name) : ''
 
   return (

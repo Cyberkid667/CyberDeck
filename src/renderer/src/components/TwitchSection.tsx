@@ -3,6 +3,7 @@ import {
   Copy,
   ExternalLink,
   Eye,
+  Heart,
   LoaderCircle,
   LogOut,
   Maximize,
@@ -22,7 +23,7 @@ import type { WebviewTag } from 'electron'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { siTwitch } from 'simple-icons'
-import type { Game, TwitchCategory, TwitchSignIn, TwitchState, TwitchStream, TwitchStreams } from '../../../shared/types'
+import type { Game, TwitchCategory, TwitchSignIn, TwitchState, TwitchStream, TwitchStreams, TwitchUser } from '../../../shared/types'
 import { errorText } from '../format'
 import { useT } from '../i18n'
 import { DialogFrame, DialogHead } from './AddDialog'
@@ -31,10 +32,12 @@ import { DialogFrame, DialogHead } from './AddDialog'
 //   - compte Twitch connecté par code d'appareil (l'app ne voit jamais le mot de passe :
 //     l'utilisateur valide sur twitch.tv/activate dans son navigateur) ;
 //   - catégorie Twitch trouvée par le nom du jeu, corrigeable (« Pas ce jeu ? ») ;
-//   - tri (spectateurs, plus récents, chaînes suivies), filtre de langue (langue de l'app par
-//     défaut s'il y a des streams dans cette langue), grille de cartes, « Afficher plus » ;
-//   - clic sur une carte : salle de projection dans l'app, lecteur officiel de Twitch et chat
-//     (à afficher ou masquer), volume réglé ici, plein écran, « Ouvrir sur Twitch », Échap ferme.
+//   - tri (spectateurs, plus récents), filtre « Chaînes suivies » à part, filtre de langue (toutes
+//     les langues de Twitch ; celle de l'app par défaut s'il y a des streams dans cette langue),
+//     grille de cartes, « Afficher plus » ;
+//   - clic sur une carte : salle de projection dans l'app, lecteur officiel de Twitch et chat en
+//     lecture seule (à afficher ou masquer), volume réglé ici et suivi depuis le lecteur, plein
+//     écran, « Ouvrir sur Twitch », Échap ferme.
 // Le lecteur et le chat sont des <webview> chargées comme pages principales (parent=twitch.tv,
 // comme le lecteur « popout » de Twitch) et verrouillées par le processus principal (twitch.ts).
 
@@ -48,8 +51,25 @@ const CHAT_KEY = 'essaim.twitch.chat'
 const CHAT_MIN_WIDTH = 1100
 /** Valeur attendue par le lecteur pour une page chargée hors d'un site intégrant (lecteur « popout »). */
 const PARENT = 'twitch.tv'
+/** « Plus récents » : Twitch ne trie que par spectateurs ; on lit jusqu'à ce nombre de pages pour trier. */
+const RECENT_PAGES = 5
+/** Spectateurs et titre du stream regardé : relus à ce rythme (cache de 60 s chez le processus principal). */
+const LIVE_REFRESH = 90_000
+/**
+ * Sans cet attribut, une <webview> bloque toute nouvelle fenêtre avant même le processus principal :
+ * les liens des spectateurs et « Se connecter pour discuter » ne feraient rien. Les fenêtres sont
+ * toutes refusées par le processus principal (twitch.ts), qui ouvre les liens permis dans le navigateur.
+ */
+const POPUPS = { allowpopups: 'true' } as Record<string, string>
+/** Préfixe des messages du lecteur (console) : volume changé dans le lecteur lui-même. */
+const VOL_TAG = '__cyberdeck_volume:'
+/**
+ * Langues des streams sur Twitch (filtre language= de l'API) : toutes proposées, même celles
+ * absentes des premiers streams chargés. « asl » : langue des signes américaine.
+ */
+const TWITCH_LANGUAGES = ['en', 'fr', 'de', 'es', 'it', 'pt', 'nl', 'pl', 'ru', 'uk', 'tr', 'ar', 'ja', 'ko', 'zh', 'zh-hk', 'th', 'vi', 'id', 'ms', 'tl', 'hi', 'sv', 'no', 'da', 'fi', 'cs', 'sk', 'hu', 'ro', 'bg', 'el', 'ca', 'asl', 'other']
 
-type Sort = 'viewers' | 'recent' | 'followed'
+type Sort = 'viewers' | 'recent'
 
 function readPref(key: string): string | null {
   try {
@@ -112,8 +132,9 @@ function compact(n: number, locale: string): string {
 }
 
 /** Nom d'une langue dans la langue de l'app (« Français », « English »…). */
-function languageName(code: string, locale: string, other: string): string {
+function languageName(code: string, locale: string, other: string, sign = ''): string {
   if (!code || code === 'other') return other
+  if (code === 'asl') return sign || 'ASL'
   try {
     const name = new Intl.DisplayNames([locale], { type: 'language' }).of(code)
     return name ? name.charAt(0).toLocaleUpperCase(locale) + name.slice(1) : code.toUpperCase()
@@ -128,6 +149,9 @@ function uptime(startedAt: number, now: number, t: ReturnType<typeof useT>['t'])
   const h = Math.floor(min / 60)
   return h ? t('twitch.uptime.hm', { h, m: String(min % 60).padStart(2, '0') }) : t('twitch.uptime.m', { m: min })
 }
+
+/** Nom affiché du compte (profil pas encore lu : son login, sinon le texte de repli). */
+const accountName = (u: TwitchUser, fallback: string): string => u.displayName || u.login || fallback
 
 /** Image distante qui disparaît si elle ne se charge pas. */
 function Img({ src, className, fallback = null }: { src: string | null; className?: string; fallback?: React.ReactNode }): React.JSX.Element {
@@ -167,7 +191,7 @@ export function TwitchCodeBox({ signIn, onRetry }: { signIn: TwitchSignIn; onRet
             ? t('twitch.signin.expired')
             : signIn.status === 'denied'
               ? t('twitch.signin.denied')
-              : t('twitch.signin.failed', { error: signIn.error ?? '' })}
+              : t('twitch.signin.failed', { error: signIn.error ? t(signIn.error) : '' })}
         </p>
         <div className="row-btns">
           <button type="button" className="btn btn-line btn-sm" data-testid="twitch-retry" onClick={onRetry}>
@@ -269,7 +293,7 @@ export function TwitchSettingsBlock(): React.JSX.Element {
             <Img src={state.user.avatar} fallback={<UserRound />} />
           </span>
           <span className="tw-account-txt">
-            <span className="nm">{state.user.displayName}</span>
+            <span className="nm">{accountName(state.user, 'Twitch')}</span>
             <span className="cap">{t('twitch.settings.signedIn')}</span>
           </span>
           <button
@@ -300,7 +324,7 @@ export function TwitchSettingsBlock(): React.JSX.Element {
           <div className="tw-account">
             <TwitchGlyph className="lg" />
             <span className="tw-account-txt">
-              <span className="hint mute">{state.error ?? t('twitch.settings.hint')}</span>
+              <span className="hint mute">{state.error ? t(state.error) : t('twitch.settings.hint')}</span>
             </span>
             <button type="button" className="btn btn-line btn-sm" data-testid="twitch-signin" disabled={!state.canStore} onClick={() => void window.essaim.twitchSignIn()}>
               {t('twitch.signin.button')}
@@ -331,6 +355,9 @@ function CategoryPicker({
   const { t } = useT()
   const [query, setQuery] = useState(gameName)
   const [results, setResults] = useState<TwitchCategory[] | null>(null)
+  // panne (hors ligne, limite d'appels…) : dite telle quelle, avec « Réessayer »
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
   const [busy, setBusy] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
@@ -341,6 +368,7 @@ function CategoryPicker({
     const q = query.trim()
     if (!q) {
       setResults(null)
+      setSearchError(null)
       return
     }
     let alive = true
@@ -349,10 +377,14 @@ function CategoryPicker({
       window.essaim
         .searchTwitchCategories(q)
         .then((r) => {
-          if (alive) setResults(r)
+          if (!alive) return
+          setSearchError(r.ok ? null : r.error)
+          setResults(r.ok ? r.categories : null)
         })
-        .catch(() => {
-          if (alive) setResults([])
+        .catch((err) => {
+          if (!alive) return
+          setSearchError(errorText(err))
+          setResults(null)
         })
         .finally(() => {
           if (alive) setBusy(false)
@@ -362,9 +394,20 @@ function CategoryPicker({
       alive = false
       clearTimeout(timer)
     }
-  }, [query])
+  }, [query, attempt])
   return (
-    <div className="tw-picker" data-testid="twitch-category-picker">
+    // Échap ferme le choix où que soit le focus (champ, X, un résultat), jamais toute la page du jeu
+    <div
+      className="tw-picker"
+      data-testid="twitch-category-picker"
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          e.stopPropagation()
+          onClose()
+        }
+      }}
+    >
       <div className="tw-picker-row">
         <span className="tw-search">
           <Search />
@@ -377,13 +420,6 @@ function CategoryPicker({
             aria-label={t('twitch.category.search')}
             spellCheck={false}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                e.preventDefault()
-                e.stopPropagation()
-                onClose()
-              }
-            }}
           />
         </span>
         {manual && (
@@ -397,6 +433,15 @@ function CategoryPicker({
       </div>
       {busy && !results ? (
         <p className="gd-quiet">{t('twitch.category.searching')}</p>
+      ) : searchError ? (
+        <div className="gd-banner" role="alert" data-testid="twitch-category-error">
+          <TriangleAlert />
+          <span className="msg">{searchError}</span>
+          <button type="button" className="btn btn-line btn-sm" onClick={() => setAttempt((n) => n + 1)}>
+            <RefreshCw />
+            {t('library.details.retry')}
+          </button>
+        </div>
       ) : results && results.length === 0 ? (
         <p className="gd-quiet">{t('twitch.category.none')}</p>
       ) : results ? (
@@ -419,27 +464,55 @@ function CategoryPicker({
 
 // ---------- Salle de projection : lecteur + chat ----------
 
-/** Script envoyé au lecteur : volume et sourdine du <video>, gardés quand Twitch change de flux (publicité, qualité). */
+/**
+ * Script envoyé au lecteur à chaque chargement de sa page et à chaque changement : volume et
+ * sourdine du <video>, gardés quand Twitch change de flux (publicité, qualité). Un changement fait
+ * dans le lecteur lui-même (geste de l'utilisateur juste avant) est renvoyé à l'app par la console
+ * (VOL_TAG) ; un changement sans geste (le lecteur reprend son propre réglage) est annulé.
+ */
 const volumeScript = (volume: number, muted: boolean): string => `(() => {
-  window.__cdVol = { v: ${volume.toFixed(3)}, m: ${muted ? 'true' : 'false'} };
-  const apply = () => document.querySelectorAll('video').forEach((el) => {
-    if (Math.abs(el.volume - window.__cdVol.v) > 0.001) el.volume = window.__cdVol.v;
-    if (el.muted !== window.__cdVol.m) el.muted = window.__cdVol.m;
-  });
-  if (!window.__cdHook) {
-    window.__cdHook = true;
-    document.addEventListener('playing', apply, true);
-    document.addEventListener('loadedmetadata', apply, true);
+  const w = window;
+  w.__cdVol = { v: ${volume.toFixed(3)}, m: ${muted ? 'true' : 'false'} };
+  if (!w.__cdHook) {
+    w.__cdHook = true;
+    w.__cdInput = 0;
+    w.__cdFix = [];
+    const mark = () => { w.__cdInput = Date.now(); };
+    for (const type of ['pointerdown', 'keydown', 'wheel', 'input']) document.addEventListener(type, mark, true);
+    w.__cdApply = () => document.querySelectorAll('video').forEach((el) => {
+      if (Math.abs(el.volume - w.__cdVol.v) > 0.001) el.volume = w.__cdVol.v;
+      if (el.muted !== w.__cdVol.m) el.muted = w.__cdVol.m;
+    });
+    document.addEventListener('playing', () => w.__cdApply(), true);
+    document.addEventListener('loadedmetadata', () => w.__cdApply(), true);
+    document.addEventListener('volumechange', (e) => {
+      const el = e.target;
+      if (!(el instanceof HTMLMediaElement)) return;
+      if (Math.abs(el.volume - w.__cdVol.v) <= 0.001 && el.muted === w.__cdVol.m) return;
+      if (Date.now() - w.__cdInput < 1500) {
+        w.__cdVol = { v: el.volume, m: el.muted };
+        console.log('${VOL_TAG}' + JSON.stringify(w.__cdVol));
+        return;
+      }
+      // pas de bras de fer si le lecteur insiste : quelques corrections par seconde au plus
+      const now = Date.now();
+      w.__cdFix = w.__cdFix.filter((x) => now - x < 1000);
+      if (w.__cdFix.length >= 4) return;
+      w.__cdFix.push(now);
+      w.__cdApply();
+    }, true);
   }
-  apply();
+  w.__cdApply();
   return document.querySelectorAll('video').length;
 })()`
 
-function TwitchTheater({ stream, onClose }: { stream: TwitchStream; onClose: () => void }): React.JSX.Element {
+function TwitchTheater({ stream, gameId, onClose }: { stream: TwitchStream; gameId: string; onClose: () => void }): React.JSX.Element {
   const { t, locale } = useT()
   const boxRef = useRef<HTMLDivElement>(null)
   const playerRef = useRef<WebviewTag | null>(null)
-  const [ready, setReady] = useState(false)
+  /** augmente à chaque chargement de la page du lecteur (le script doit être renvoyé) */
+  const [loads, setLoads] = useState(0)
+  const [live, setLive] = useState(stream)
   const [volume, setVolume] = useState(() => {
     const v = Number(readPref(VOLUME_KEY))
     return readPref(VOLUME_KEY) !== null && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.5
@@ -457,25 +530,58 @@ function TwitchTheater({ stream, onClose }: { stream: TwitchStream; onClose: () 
   const [playerSrc] = useState(() => `https://player.twitch.tv/?channel=${login}&parent=${PARENT}&autoplay=true&muted=${muted ? 'true' : 'false'}`)
   const chatSrc = `https://www.twitch.tv/embed/${login}/chat?parent=${PARENT}&darkpopout`
 
-  // volume : appliqué au <video> du lecteur une fois la page prête, puis à chaque changement
+  // volume : appliqué au <video> du lecteur à chaque chargement de sa page, puis à chaque changement
   useEffect(() => {
     const el = playerRef.current
-    if (!el || !ready) return
+    if (!el || !loads) return
     el.executeJavaScript(volumeScript(volume, muted)).catch(() => {})
-  }, [volume, muted, ready])
+  }, [volume, muted, loads])
 
   useEffect(() => {
     const el = playerRef.current
     if (!el) return
-    const onReady = (): void => setReady(true)
+    const onReady = (): void => setLoads((n) => n + 1)
+    // volume changé dans le lecteur lui-même : le curseur de l'app le suit
+    const onConsole = (e: Event): void => {
+      const msg = (e as Event & { message?: unknown }).message
+      if (typeof msg !== 'string' || !msg.startsWith(VOL_TAG)) return
+      try {
+        const v = JSON.parse(msg.slice(VOL_TAG.length)) as { v?: unknown; m?: unknown }
+        if (typeof v.v !== 'number' || !Number.isFinite(v.v)) return
+        setVolume(Math.min(1, Math.max(0, v.v)))
+        setMuted(v.m === true)
+      } catch {
+        // message abîmé : ignoré
+      }
+    }
     el.addEventListener('dom-ready', onReady)
+    el.addEventListener('console-message', onConsole)
     return () => {
       el.removeEventListener('dom-ready', onReady)
+      el.removeEventListener('console-message', onConsole)
     }
   }, [])
 
   useEffect(() => writePref(VOLUME_KEY, String(volume)), [volume])
   useEffect(() => writePref(MUTED_KEY, muted ? '1' : '0'), [muted])
+
+  // spectateurs et titre relus de temps en temps (le stream reste ouvert longtemps)
+  useEffect(() => {
+    let alive = true
+    const timer = window.setInterval(() => {
+      window.essaim
+        .getTwitchStreams(gameId, { language: stream.language })
+        .then((r) => {
+          const s = r.streams.find((x) => x.userLogin === stream.userLogin)
+          if (alive && s) setLive(s)
+        })
+        .catch(() => {})
+    }, LIVE_REFRESH)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [gameId, stream])
 
   // Échap : quitte le plein écran, sinon ferme (aussi quand le clavier est dans le lecteur ou le chat)
   useEffect(() => {
@@ -530,7 +636,7 @@ function TwitchTheater({ stream, onClose }: { stream: TwitchStream; onClose: () 
       className={`tw-theater${chat ? ' chat' : ''}${full ? ' full' : ''}`}
       role="dialog"
       aria-modal="true"
-      aria-label={t('twitch.theater.aria', { name: stream.userName })}
+      aria-label={t('twitch.theater.aria', { name: live.userName })}
       tabIndex={-1}
       data-testid="twitch-theater"
       data-channel={stream.userLogin}
@@ -541,15 +647,15 @@ function TwitchTheater({ stream, onClose }: { stream: TwitchStream; onClose: () 
             <i className="tw-dot" />
             {t('twitch.live')}
           </span>
-          <span className="tw-th-name">{stream.userName}</span>
-          <span className="tw-th-title" title={stream.title}>
-            {stream.title}
+          <span className="tw-th-name">{live.userName}</span>
+          <span className="tw-th-title" title={live.title} data-testid="twitch-theater-title">
+            {live.title}
           </span>
         </div>
         <div className="tw-th-tools">
-          <span className="tw-th-viewers cap" title={t('twitch.viewersTitle', { n: stream.viewers.toLocaleString(locale) })}>
+          <span className="tw-th-viewers cap" title={t('twitch.viewersTitle', { n: live.viewers.toLocaleString(locale) })}>
             <Eye />
-            {compact(stream.viewers, locale)}
+            {compact(live.viewers, locale)}
           </span>
           <span className="tsep" />
           <button
@@ -623,11 +729,27 @@ function TwitchTheater({ stream, onClose }: { stream: TwitchStream; onClose: () 
       </header>
       <div className="tw-th-body">
         <div className="tw-th-player">
-          <webview ref={playerRef as unknown as React.Ref<HTMLWebViewElement>} partition="persist:twitch" src={playerSrc} data-testid="twitch-player" />
+          <webview ref={playerRef as unknown as React.Ref<HTMLWebViewElement>} partition="persist:twitch" src={playerSrc} data-testid="twitch-player" {...POPUPS} />
         </div>
         {chat && (
           <div className="tw-th-chat">
-            <webview partition="persist:twitch" src={chatSrc} data-testid="twitch-chat" />
+            {/* le compte Twitch de l'app ne connecte pas le chat web : on le dit, et on renvoie vers twitch.tv pour écrire */}
+            <div className="tw-chat-note" data-testid="twitch-chat-readonly">
+              <span className="cap">{t('twitch.theater.chatReadOnly')}</span>
+              <button
+                type="button"
+                className="gd-more"
+                data-testid="twitch-chat-write"
+                title={t('twitch.theater.chatWriteTitle')}
+                onClick={() => window.essaim.openExternalLink(`https://www.twitch.tv/popout/${login}/chat`)}
+              >
+                <ExternalLink />
+                {t('twitch.theater.chatWrite')}
+              </button>
+            </div>
+            <div className="tw-chat-view">
+              <webview partition="persist:twitch" src={chatSrc} data-testid="twitch-chat" {...POPUPS} />
+            </div>
           </div>
         )}
       </div>
@@ -641,7 +763,7 @@ function StreamCard({ stream, now, onOpen, version }: { stream: TwitchStream; no
   const { t, locale } = useT()
   // les aperçus de Twitch changent toutes les 5 min environ : adresse renouvelée à chaque lecture
   const thumb = stream.thumbnail ? `${stream.thumbnail}?v=${version}` : null
-  const lang = languageName(stream.language, locale, t('twitch.language.other'))
+  const lang = languageName(stream.language, locale, t('twitch.language.other'), t('twitch.language.asl'))
   // la langue est déjà affichée à droite du nom : pas de mot-clé « English » en double
   const own = languageName(stream.language, stream.language, '')
   const same = (tag: string): boolean => [lang, own, stream.language].some((x) => x && tag.toLocaleLowerCase() === x.toLocaleLowerCase())
@@ -685,6 +807,8 @@ export function TwitchSection({ game }: { game: Game }): React.JSX.Element {
   const signedIn = !!tw?.user
   const [askSignIn, setAskSignIn] = useState(false)
   const [sort, setSort] = useState<Sort>('viewers')
+  /** filtre « Chaînes suivies », indépendant du tri */
+  const [followed, setFollowed] = useState(false)
   /** undefined : pas encore choisie (langue de l'app s'il y a des streams dans cette langue) */
   const [language, setLanguage] = useState<string | null | undefined>(undefined)
   const [languages, setLanguages] = useState<string[]>([])
@@ -696,6 +820,7 @@ export function TwitchSection({ game }: { game: Game }): React.JSX.Element {
   const [failed, setFailed] = useState<string | null>(null)
   const [picker, setPicker] = useState(false)
   const [playing, setPlaying] = useState<TwitchStream | null>(null)
+  const [signingOut, setSigningOut] = useState(false)
   const [tick, setTick] = useState(0)
   const [now, setNow] = useState(() => Date.now())
   const refreshNext = useRef(false)
@@ -707,7 +832,7 @@ export function TwitchSection({ game }: { game: Game }): React.JSX.Element {
     return () => clearInterval(timer)
   }, [])
 
-  // 1) langues présentes (échantillon des 100 streams les plus regardés) et langue par défaut
+  // 1) langues présentes (échantillon des 100 streams les plus regardés, mises en tête de la liste) et langue par défaut
   useEffect(() => {
     if (!signedIn) return
     let alive = true
@@ -729,30 +854,47 @@ export function TwitchSection({ game }: { game: Game }): React.JSX.Element {
     }
   }, [game.id, signedIn, tick, appLang])
 
-  // 2) streams affichés (langue et tri choisis) ; même lecture que (1) en cache chez le processus principal
+  // 2) streams affichés (langue, tri et filtre choisis) ; même lecture que (1) en cache chez le processus principal
   useEffect(() => {
     if (!signedIn || language === undefined) return
     const n = ++req.current
     const refresh = refreshNext.current
     refreshNext.current = false
     setLoading(true)
-    window.essaim
-      .getTwitchStreams(game.id, { language, followed: sort === 'followed', refresh })
-      .then((r) => {
+    void (async () => {
+      try {
+        const r = await window.essaim.getTwitchStreams(game.id, { language, followed, refresh })
         if (n !== req.current) return
+        // « Plus récents » : Twitch ne renvoie les streams que par spectateurs ; quelques pages de
+        // plus sont lues d'un coup pour trier un plus grand ensemble (la grille ne saute pas ensuite)
+        let extra: TwitchStream[] = []
+        let next = r.cursor
+        if (sort === 'recent' && !followed && r.status === 'ok') {
+          for (let page = 1; page < RECENT_PAGES && next; page++) {
+            const p = await window.essaim.getTwitchStreams(game.id, { language, cursor: next, refresh })
+            if (n !== req.current) return
+            if (p.status !== 'ok') break
+            extra = [...extra, ...p.streams]
+            next = p.cursor
+          }
+        }
         setData(r)
-        setMore([])
-        setCursor(r.cursor)
+        setMore(extra)
+        setCursor(next)
         setShown(PAGE)
         setFailed(null)
-      })
-      .catch((err) => {
+      } catch (err) {
         if (n === req.current) setFailed(errorText(err))
-      })
-      .finally(() => {
+      } finally {
         if (n === req.current) setLoading(false)
-      })
-  }, [game.id, signedIn, language, sort === 'followed', tick])
+      }
+    })()
+  }, [game.id, signedIn, language, sort, followed, tick])
+
+  // aucune catégorie trouvée : le choix s'ouvre de lui-même (et peut être refermé)
+  useEffect(() => {
+    if (data?.status === 'no-category') setPicker(true)
+  }, [data])
 
   const closeSignIn = useCallback(() => setAskSignIn(false), [])
 
@@ -769,20 +911,26 @@ export function TwitchSection({ game }: { game: Game }): React.JSX.Element {
     return sort === 'recent' ? unique.sort((a, b) => b.startedAt - a.startedAt) : unique
   }, [data, more, sort])
 
+  // « Plus récents » : tout est déjà lu (voir 2) ; « Afficher plus » ne fait que dévoiler la suite
+  const canFetch = !!cursor && sort === 'viewers' && !followed
+
   async function showMore(): Promise<void> {
     if (shown < all.length) {
       setShown((s) => s + PAGE)
       return
     }
-    if (!cursor || loading) return
+    if (!canFetch || loading) return
     const n = ++req.current
     setLoading(true)
     try {
       const r = await window.essaim.getTwitchStreams(game.id, { language, cursor })
       if (n !== req.current) return
-      setMore((m) => [...m, ...r.streams])
-      setCursor(r.cursor)
-      setShown((s) => s + PAGE)
+      if (r.status === 'error') setFailed(r.error ?? '')
+      else {
+        setMore((m) => [...m, ...r.streams])
+        setCursor(r.cursor)
+        setShown((s) => s + PAGE)
+      }
     } catch (err) {
       if (n === req.current) setFailed(errorText(err))
     } finally {
@@ -802,10 +950,22 @@ export function TwitchSection({ game }: { game: Game }): React.JSX.Element {
     reload()
   }
 
-  const langOptions = language && !languages.includes(language) ? [language, ...languages] : languages
+  const otherLabel = t('twitch.language.other')
+  const signLabel = t('twitch.language.asl')
+  // langues présentes dans ce jeu d'abord, puis toutes les autres langues de Twitch par ordre alphabétique
+  const langOptions = useMemo(() => {
+    const present = (language && !languages.includes(language) ? [language, ...languages] : languages).filter((code) => code !== 'other')
+    const rest = TWITCH_LANGUAGES.filter((code) => !present.includes(code) && code !== 'other').sort((a, b) =>
+      languageName(a, locale, otherLabel, signLabel).localeCompare(languageName(b, locale, otherLabel, signLabel), locale)
+    )
+    // « Autre » toujours en dernier
+    return [...present, ...rest, 'other']
+  }, [language, languages, locale, otherLabel, signLabel])
   const category = data?.category ?? null
   const visible = all.slice(0, shown)
-  const canMore = shown < all.length || (!!cursor && sort !== 'followed')
+  const canMore = shown < all.length || canFetch
+  const user = tw?.user ?? null
+  const userName = user ? accountName(user, t('twitch.settings.signedIn')) : ''
 
   // ---- contenu selon l'état ----
   let body: React.ReactNode
@@ -820,13 +980,17 @@ export function TwitchSection({ game }: { game: Game }): React.JSX.Element {
         </div>
       </div>
     )
-  else if (!tw.user)
+  // jetons illisibles (trousseau verrouillé, clé de chiffrement changée) : même bloc, avec le bouton
+  else if (!tw.user || data?.status === 'signed-out')
     body = (
-      <div className="tw-calm">
+      <div className="tw-calm" data-testid="twitch-signed-out">
         <TwitchGlyph className="lg" />
         <div className="tw-calm-txt">
           <p className="tw-calm-title">{t('twitch.signedOut.title', { name: game.name })}</p>
-          <p className="gd-quiet">{tw.error ?? t('twitch.signedOut.hint')}</p>
+          {/* chiffrement impossible (Linux sans trousseau…) : la raison du bouton grisé est dite ici aussi */}
+          <p className="gd-quiet" data-testid="twitch-signed-out-hint">
+            {!tw.canStore ? t('twitch.error.cantEncrypt') : tw.error ? t(tw.error) : t('twitch.signedOut.hint')}
+          </p>
         </div>
         <button
           type="button"
@@ -856,11 +1020,14 @@ export function TwitchSection({ game }: { game: Game }): React.JSX.Element {
       </div>
     )
   else if (data?.status === 'no-category')
-    body = <p className="gd-quiet">{t('twitch.category.notFound', { name: game.name })}</p>
-  else if (data?.status === 'signed-out') body = <p className="gd-quiet">{t('twitch.signedOut.hint')}</p>
+    body = (
+      <p className="gd-quiet" data-testid="twitch-no-category">
+        {t('twitch.category.notFound', { name: game.name })}
+      </p>
+    )
   else if (failed || data?.status === 'error')
     body = (
-      <div className="gd-banner" role="alert">
+      <div className="gd-banner" role="alert" data-testid="twitch-error">
         <TriangleAlert />
         <span className="msg">{t('twitch.error.load', { error: failed ?? data?.error ?? '' })}</span>
         <button type="button" className="btn btn-line btn-sm" disabled={loading} onClick={reload}>
@@ -872,10 +1039,10 @@ export function TwitchSection({ game }: { game: Game }): React.JSX.Element {
   else if (!all.length)
     body = (
       <p className="gd-quiet" data-testid="twitch-empty">
-        {sort === 'followed'
+        {followed
           ? t('twitch.empty.followed')
           : language
-            ? t('twitch.empty.language', { language: languageName(language, locale, t('twitch.language.other')) })
+            ? t('twitch.empty.language', { language: languageName(language, locale, otherLabel, signLabel) })
             : t('twitch.empty.all', { name: category?.name ?? game.name })}
       </p>
     )
@@ -887,6 +1054,11 @@ export function TwitchSection({ game }: { game: Game }): React.JSX.Element {
             <StreamCard key={s.userLogin} stream={s} now={now} version={Math.floor((data?.fetchedAt ?? 0) / 60_000)} onOpen={() => setPlaying(s)} />
           ))}
         </div>
+        {sort === 'recent' && !followed && !!cursor && (
+          <p className="gd-quiet tw-note" data-testid="twitch-recent-note">
+            {t('twitch.sort.recentNote')}
+          </p>
+        )}
         {canMore && (
           <button type="button" className="btn btn-line btn-sm tw-more" data-testid="twitch-more" disabled={loading} onClick={() => void showMore()}>
             {loading ? <LoaderCircle className="spin" /> : <ChevronDown />}
@@ -904,16 +1076,28 @@ export function TwitchSection({ game }: { game: Game }): React.JSX.Element {
         <TwitchGlyph />
         <h3 className="cap">{t('twitch.section')}</h3>
         <span className="rule" />
-        {ready && (
+        {ready && user && (
           <>
-            {tw?.user && (
-              <span className="tw-me" title={t('twitch.signedInAs', { name: tw.user.displayName })}>
-                <span className="tw-av sm">
-                  <Img src={tw.user.avatar} fallback={<UserRound />} />
-                </span>
-                <span className="nm">{tw.user.displayName}</span>
+            <span className="tw-me" title={t('twitch.signedInAs', { name: userName })} data-testid="twitch-me">
+              <span className="tw-av sm">
+                <Img src={user.avatar} fallback={<UserRound />} />
               </span>
-            )}
+              <span className="nm">{userName}</span>
+            </span>
+            <button
+              type="button"
+              className="btn btn-line gd-ibtn tw-ibtn"
+              data-testid="twitch-section-signout"
+              title={t('twitch.settings.signOut')}
+              aria-label={t('twitch.settings.signOut')}
+              disabled={signingOut}
+              onClick={() => {
+                setSigningOut(true)
+                void window.essaim.twitchSignOut().finally(() => setSigningOut(false))
+              }}
+            >
+              <LogOut />
+            </button>
             <button
               type="button"
               className="btn btn-line gd-ibtn tw-ibtn"
@@ -947,19 +1131,29 @@ export function TwitchSection({ game }: { game: Game }): React.JSX.Element {
             {t('twitch.category.change')}
           </button>
           <span className="spacer" />
+          <button
+            type="button"
+            className={`tw-tog${followed ? ' on' : ''}`}
+            data-testid="twitch-followed"
+            aria-pressed={followed}
+            title={t('twitch.followedTitle')}
+            onClick={() => setFollowed((f) => !f)}
+          >
+            <Heart />
+            {t('twitch.followed')}
+          </button>
           <label className="tw-sel" title={t('twitch.sort.aria')}>
             <span className="cap">{t('twitch.sort.cap')}</span>
             <span className="v">{t(`twitch.sort.${sort}`)}</span>
             <ChevronDown />
-            <select value={sort} data-testid="twitch-sort" aria-label={t('twitch.sort.aria')} onChange={(e) => setSort(e.target.value as Sort)}>
+            <select value={sort} data-testid="twitch-sort" aria-label={t('twitch.sort.aria')} onChange={(e) => setSort(e.target.value === 'recent' ? 'recent' : 'viewers')}>
               <option value="viewers">{t('twitch.sort.viewers')}</option>
               <option value="recent">{t('twitch.sort.recent')}</option>
-              <option value="followed">{t('twitch.sort.followed')}</option>
             </select>
           </label>
           <label className="tw-sel" title={t('twitch.language.aria')}>
             <span className="cap">{t('twitch.language.cap')}</span>
-            <span className="v">{language ? languageName(language, locale, t('twitch.language.other')) : t('twitch.language.all')}</span>
+            <span className="v">{language ? languageName(language, locale, otherLabel, signLabel) : t('twitch.language.all')}</span>
             <ChevronDown />
             <select
               value={language ?? ''}
@@ -970,7 +1164,7 @@ export function TwitchSection({ game }: { game: Game }): React.JSX.Element {
               <option value="">{t('twitch.language.all')}</option>
               {langOptions.map((code) => (
                 <option key={code} value={code}>
-                  {languageName(code, locale, t('twitch.language.other'))}
+                  {languageName(code, locale, otherLabel, signLabel)}
                 </option>
               ))}
             </select>
@@ -978,7 +1172,7 @@ export function TwitchSection({ game }: { game: Game }): React.JSX.Element {
         </div>
       )}
 
-      {ready && (picker || data?.status === 'no-category') && (
+      {ready && picker && (
         <CategoryPicker
           gameName={game.name}
           manual={!!data?.manual}
@@ -992,7 +1186,7 @@ export function TwitchSection({ game }: { game: Game }): React.JSX.Element {
 
       {/* hors de la page qui défile (animée, donc repère des éléments « fixed ») */}
       {askSignIn && tw && !tw.user && createPortal(<TwitchSignInDialog state={tw} onClose={closeSignIn} />, document.body)}
-      {playing && createPortal(<TwitchTheater stream={playing} onClose={() => setPlaying(null)} />, document.body)}
+      {playing && createPortal(<TwitchTheater stream={playing} gameId={game.id} onClose={() => setPlaying(null)} />, document.body)}
     </section>
   )
 }

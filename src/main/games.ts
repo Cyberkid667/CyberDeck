@@ -1,9 +1,9 @@
 // Bibliothèque de jeux : installation depuis un torrent, détection du jeu
 // installé, jeux des plateformes (Steam, Epic…), jaquettes Steam, lancement et
-// temps de jeu.
+// temps de jeu. Jeux web (page HTML) : joués dans une fenêtre CyberDeck (htmlGames.ts).
 import { app, nativeImage, net, shell } from 'electron'
 import { spawn, type ChildProcess } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import os from 'node:os'
@@ -15,6 +15,8 @@ import type {
   ActionResult,
   Game,
   GameInput,
+  GamePick,
+  HtmlGameSettings,
   InstallResult,
   LauncherPlatform,
   LibraryState,
@@ -30,6 +32,8 @@ import { steamLocalCover } from './platforms/steam'
 import { linuxSteamRunningAppId } from './platforms/steamLinux'
 import { cleanPsError, PS_RESTRICTED, PS_RESTRICTED_CHECK, runPs, startPs } from './powershell'
 import { startProcWatcher } from './procWatch'
+import { findHtmlEntry, htmlGameName, htmlKey, isHtmlPage, isInside as isInsideDir, localArt, rootRefusal } from './htmlFolder'
+import { clearHtmlSaves, focusHtmlGame, isKeyOpen, openHtmlGame, refreshHtmlNetwork } from './htmlGames'
 
 /** Windows. Linux : ni PowerShell ni registre ; lancement direct et surveillance par /proc (procWatch.ts). */
 const IS_WIN = process.platform === 'win32'
@@ -78,9 +82,32 @@ const platformKey = (platform: string, platformId: string | null): string => `${
 
 // ---------- Sauvegarde ----------
 
-/** Valeurs par défaut des champs ajoutés après la 0.2 (et des plateformes en 0.4). */
+/** Clé de partition d'un jeu web : 32 caractères hexadécimaux. */
+const HTML_KEY_RE = /^[a-f0-9]{32}$/
+
+/** Réglages web réparés : null si ce n'est pas un objet ou si le jeu ne lance pas une page. */
+function normalizeHtml(g: Game): HtmlGameSettings | null {
+  let raw = g.html as unknown
+  if (!isHtmlPage(g.exePath)) return null
+  // jeu local d'avant les jeux web qui lance déjà une page (.html) : devient un jeu web, Internet coupé
+  if (raw == null && g.platform === 'local') raw = { key: null, network: false, width: null, height: null, fullscreen: false }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const h = raw as Partial<HtmlGameSettings>
+  let key = typeof h.key === 'string' && HTML_KEY_RE.test(h.key) ? h.key : null
+  if (!key) {
+    try {
+      key = htmlKeyFor(g.installDir ?? path.dirname(g.exePath), g.exePath)
+    } catch {
+      key = randomBytes(16).toString('hex')
+    }
+  }
+  const dim = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= 320 && v <= 7680 ? v : null)
+  return { key, network: h.network === true, width: dim(h.width), height: dim(h.height), fullscreen: h.fullscreen === true }
+}
+
+/** Valeurs par défaut des champs ajoutés après la 0.2 (et des plateformes en 0.4, des jeux web en 0.14). */
 function normalizeGame(g: Partial<Game>): Game {
-  return {
+  const out = {
     args: null,
     coverHint: null,
     coverTriedAt: null,
@@ -106,8 +133,11 @@ function normalizeGame(g: Partial<Game>): Game {
     addedAt: 0,
     lastPlayedAt: null,
     playTimeSeconds: 0,
+    html: null,
     ...g
   } as Game
+  out.html = normalizeHtml(out)
+  return out
 }
 
 export function initLibrary(d: Deps): void {
@@ -553,7 +583,8 @@ async function guessInstalled(
   const iconExe = exeFromIcon(entry?.icon)
   if (isGameExe(iconExe) && fs.existsSync(iconExe)) return { name, exePath: iconExe, installDir: installDir ?? path.dirname(iconExe) }
 
-  if (installDir && fs.existsSync(installDir)) return { name, exePath: await largestExe(installDir), installDir }
+  // aucun programme : jeu web (index.html) s'il y en a un
+  if (installDir && fs.existsSync(installDir)) return { name, exePath: (await largestExe(installDir)) ?? findHtmlEntry(installDir), installDir }
   return { name, exePath: null, installDir: null }
 }
 
@@ -764,7 +795,28 @@ async function findCover(id: string, fresh: boolean): Promise<boolean> {
   try {
     let bytes: Buffer | null = null
     let appId: number | null = null
-    if (g0.platform === 'local') {
+    if (g0.html) {
+      // jeu web (local ou itch.io) : jeu Steam connu → image indiquée → image de son dossier →
+      // recherche Steam par nom exact → Wikipédia stricte (« Chercher sur Steam » : par nom directement)
+      if (!fresh && g0.steamAppId) {
+        appId = g0.steamAppId
+        bytes = await online(steamArt(appId))
+      }
+      if (!bytes && !fresh && g0.coverHint && /^https:\/\//i.test(g0.coverHint)) bytes = await online(fetchBytes(g0.coverHint))
+      if (!bytes && !fresh) {
+        appId = null
+        bytes = await htmlLocalCover(g0)
+      }
+      if (!bytes && (fresh || g0.steamAppId !== 0)) {
+        appId = await online(findSteamApp(name, true))
+        if (appId) bytes = await steamArt(appId)
+      }
+      if (!bytes) {
+        appId = null
+        const url = await online(wikipediaCover(name, true))
+        if (url) bytes = await fetchBytes(url)
+      }
+    } else if (g0.platform === 'local') {
       if (!fresh && g0.steamAppId) {
         appId = g0.steamAppId
         bytes = await steamArt(appId)
@@ -792,7 +844,7 @@ async function findCover(id: string, fresh: boolean): Promise<boolean> {
         if (appId) bytes = await steamArt(appId)
       }
     }
-    if (!bytes) {
+    if (!bytes && !g0.html) {
       appId = null
       const url = g0.platform === 'local' ? await wikipediaCover(name) : await online(wikipediaCover(name, true))
       if (url) bytes = await fetchBytes(url)
@@ -818,6 +870,18 @@ async function findCover(id: string, fresh: boolean): Promise<boolean> {
     else deps.log(`Recherche de jaquette impossible pour « ${name} » : ${err.message}`)
     return false
   }
+}
+
+/** Jaquette posée dans le dossier d'un jeu web (8 Mo au plus, PNG ou JPEG, 200 × 200 px au moins). */
+async function htmlLocalCover(g: Game): Promise<Buffer | null> {
+  const root = g.installDir ?? path.dirname(g.exePath)
+  for (const file of localArt(root, g.exePath).covers) {
+    const img = await localImage(file, 8 * 1024 * 1024)
+    if (!img) continue
+    const { width, height } = img.getSize()
+    if (width >= 200 && height >= 200) return img.toJPEG(90)
+  }
+  return null
 }
 
 // Une recherche à la fois, pour rester poli avec Steam et Wikipédia ; une
@@ -913,10 +977,54 @@ const exists = (p: string | null | undefined): Promise<boolean> =>
       () => false
     ) : Promise.resolve(false)
 
+/** PNG ou JPEG d'après ses premiers octets. */
+const isPngBytes = (b: Buffer): boolean => b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47
+const isJpegBytes = (b: Buffer): boolean => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff
+
+/**
+ * Image posée dans le dossier d'un jeu web (fichier non fiable) : taille limitée, octets PNG ou
+ * JPEG vérifiés (ICO lu par Windows seulement), image non vide.
+ */
+async function localImage(file: string, maxBytes: number): Promise<Electron.NativeImage | null> {
+  const st = await fsp.stat(file).catch(() => null)
+  if (!st || !st.isFile() || st.size > maxBytes) return null
+  let img: Electron.NativeImage | null = null
+  if (/\.ico$/i.test(file)) {
+    if (IS_WIN) img = nativeImage.createFromPath(file)
+  } else {
+    const bytes = await fsp.readFile(file).catch(() => null)
+    if (bytes && (isPngBytes(bytes) || isJpegBytes(bytes))) img = nativeImage.createFromBuffer(bytes)
+  }
+  return img && !img.isEmpty() ? img : null
+}
+
+/** Icône d'un jeu web : celle de sa page ou de son dossier (jamais l'icône du type .html). */
+async function loadHtmlIcon(g: Game): Promise<void> {
+  const root = g.installDir ?? path.dirname(g.exePath)
+  for (const file of localArt(root, g.exePath).icons) {
+    let img = await localImage(file, 1024 * 1024)
+    if (!img) continue
+    if (img.getSize().width > 128) img = img.resize({ width: 128, quality: 'best' })
+    if (!findGame(g.id)) return
+    await fsp.writeFile(iconFile(g.id), img.toPNG())
+    g.iconVersion++
+    changed()
+    return
+  }
+  // aucune icône : celle d'un ancien programme (jeu changé en jeu web) est retirée, la manette s'affiche
+  if (g.iconVersion > 0 && findGame(g.id)) {
+    await fsp.rm(iconFile(g.id), { force: true })
+    g.iconVersion = 0
+    changed()
+  }
+}
+
 async function loadIcon(id: string): Promise<void> {
   const g = findGame(id)
   if (!g) return
   try {
+    // jeu web (Windows et Linux) : icône posée dans son dossier, sinon la manette
+    if (g.html) return await loadHtmlIcon(g)
     // Linux : app.getFileIcon ne donne que l'icône générique du type de fichier (pas celle du
     // jeu) : jeu local sans icône (la manette s'affiche), jeu Steam avec l'icône de la boutique
     if (!IS_WIN && g.platform === 'local') return
@@ -1043,13 +1151,18 @@ export async function scanGamesFolder(dir: string): Promise<ScanCandidate[]> {
     const iconExe = exeFromIcon(entry?.icon)
     if (!exePath && isGameExe(iconExe) && inside(iconExe, root) && fs.existsSync(iconExe)) exePath = iconExe
     if (!exePath) exePath = ranked[0] ?? null
+    // jeu web (index.html…) : seul choix s'il n'y a aucun programme, sinon dernier choix
+    const page = isInstaller ? null : findHtmlEntry(root)
+    const webOnly = !exePath && !!page
+    if (webOnly) exePath = page
     const options = [...new Set([...(exePath ? [exePath] : []), ...ranked])].slice(0, 8)
+    if (page && !options.includes(page)) options.push(page)
     // Outil ou émulateur seul (pas de jeu installé par un installateur dans ce dossier).
     const isTool = !!exePath && !entry && TOOL_EXE.test(path.basename(exePath))
     result.push({
       folder: root,
       kind: isInstaller ? 'installer' : isTool ? 'tool' : exePath ? 'game' : 'empty',
-      name: entry?.name ? cleanGameName(entry.name) : cleanGameName(sub.name),
+      name: entry?.name ? cleanGameName(entry.name) : webOnly && page ? htmlGameName(page, root) : cleanGameName(sub.name),
       exePath: isInstaller ? null : exePath,
       args: link?.args || null,
       exeOptions: isInstaller ? [] : options,
@@ -1097,14 +1210,151 @@ function checkExe(exePath: string): void {
   if (!fs.existsSync(exePath)) throw new Error(tr('main.game.exeNotFound', { path: exePath }))
 }
 
+/** Dossier tel quel et son chemin réel (jonction, lien, SUBST). */
+function withReal(dirs: (string | null | undefined)[]): string[] {
+  const out = new Set<string>()
+  for (const d of dirs) {
+    if (!d) continue
+    out.add(path.resolve(d))
+    try {
+      out.add(fs.realpathSync.native(d))
+    } catch {
+      // dossier absent : le chemin connu suffit
+    }
+  }
+  return [...out]
+}
+
+/**
+ * Dossiers interdits comme dossier d'un jeu web (voir rootRefusal) : le dossier personnel, les
+ * données de CyberDeck, Windows, Program Files… et tous leurs parents ; les dossiers Bureau,
+ * Téléchargements, Documents… eux-mêmes (un de leurs sous-dossiers est accepté) ; l'intérieur de
+ * Windows et des données de CyberDeck.
+ */
+function htmlGuardDirs(): { ancestors: string[]; exact: string[]; inside: string[] } {
+  const windows = process.env.SystemRoot || process.env.windir
+  const env = (n: string): string | undefined => process.env[n] || undefined
+  const userData = app.getPath('userData')
+  return {
+    ancestors: withReal([
+      os.homedir(),
+      userData,
+      knownDir('appData'),
+      env('LOCALAPPDATA'),
+      os.tmpdir(),
+      windows,
+      env('ProgramFiles'),
+      env('ProgramFiles(x86)'),
+      env('ProgramData'),
+      app.getAppPath(),
+      process.resourcesPath,
+      path.dirname(process.execPath)
+    ]),
+    exact: withReal([
+      knownDir('desktop'),
+      knownDir('downloads'),
+      knownDir('documents'),
+      knownDir('pictures'),
+      knownDir('music'),
+      knownDir('videos'),
+      env('PUBLIC'),
+      ...(IS_WIN ? [] : ['/usr', '/usr/bin', '/usr/local', '/usr/local/bin', '/usr/games', '/usr/lib', '/opt', '/bin', '/tmp'])
+    ]),
+    inside: withReal([windows, userData])
+  }
+}
+
+type GameFileCheck = { html: false } | { html: true; root: string; realRoot: string; relEntry: string }
+
+/**
+ * Programme ou page d'un jeu local, vérifié avant l'ajout, la modification et le lancement.
+ * Page web : root = dossier lisible par le jeu (installDir s'il contient la page, sinon le dossier
+ * de la page), refusé s'il est trop large (racine, dossier personnel, Bureau…).
+ */
+function checkGameFile(exePath: string, installDir?: string | null): GameFileCheck {
+  if (!isHtmlPage(exePath)) {
+    checkExe(exePath)
+    return { html: false }
+  }
+  let isFile = false
+  try {
+    isFile = fs.statSync(exePath).isFile()
+  } catch {
+    isFile = false
+  }
+  if (!isFile) throw new Error(tr('main.game.pageNotFound', { path: exePath }))
+  let root = path.dirname(path.resolve(exePath))
+  if (installDir) {
+    let dirOk = false
+    try {
+      dirOk = fs.statSync(installDir).isDirectory()
+    } catch {
+      dirOk = false
+    }
+    if (dirOk && isInsideDir(path.resolve(exePath), path.resolve(installDir), IS_WIN)) root = path.resolve(installDir)
+  }
+  let realRoot: string
+  let realEntry: string
+  try {
+    realRoot = fs.realpathSync.native(root)
+    realEntry = fs.realpathSync.native(exePath)
+  } catch {
+    throw new Error(tr('main.game.pageNotFound', { path: exePath }))
+  }
+  const relEntry = path.relative(realRoot, realEntry)
+  if (!relEntry || relEntry === '..' || relEntry.startsWith('..' + path.sep) || path.isAbsolute(relEntry))
+    throw new Error(tr('main.game.htmlFolderRefused', { path: root }))
+  if (rootRefusal(realRoot, htmlGuardDirs(), IS_WIN)) throw new Error(tr('main.game.htmlFolderRefused', { path: root }))
+  return { html: true, root, realRoot, relEntry }
+}
+
+/** Clé de partition d'un jeu web d'après les chemins réels (repli : chemins tels quels). */
+function htmlKeyFor(root: string, entry: string): string {
+  const real = (p: string): string => {
+    try {
+      return fs.realpathSync.native(p)
+    } catch {
+      return path.resolve(p)
+    }
+  }
+  const realRoot = real(root)
+  return htmlKey(realRoot, path.relative(realRoot, real(entry)), IS_WIN)
+}
+
+/**
+ * Clé de partition propre à ce jeu : si une autre entrée, rangée dans un autre dossier, porte déjà
+ * cette clé (jeu déplacé qui a gardé la sienne), une nouvelle clé est tirée au hasard. Le même
+ * dossier ajouté deux fois garde la même clé (mêmes sauvegardes, une seule fenêtre).
+ */
+function uniqueHtmlKey(key: string, selfId: string | null, root: string): string {
+  const clash = games.some((x) => x.id !== selfId && x.html?.key === key && !sameDir(x.installDir, root))
+  return clash ? randomBytes(16).toString('hex') : key
+}
+
+/** Ce que l'interface affiche après le choix d'un fichier : nom proposé, dossier du jeu. */
+export function pickInfo(file: string): GamePick {
+  if (isHtmlPage(file)) return { path: file, html: true, name: htmlGameName(file, path.dirname(file)), installDir: path.dirname(file) }
+  return { path: file, html: false, name: cleanGameName(path.basename(path.dirname(file))), installDir: null }
+}
+
+/** Dossier d'un jeu choisi : son meilleur programme, sinon sa page web ; erreur traduite sinon. */
+export async function pickFromFolder(dir: string): Promise<GamePick> {
+  const best = rankExes(dir, await listExes(dir)).find((p) => !TOOL_EXE.test(path.basename(p)))
+  if (best) return { path: best, html: false, name: cleanGameName(path.basename(dir)), installDir: dir }
+  const entry = findHtmlEntry(dir)
+  if (entry) return { path: entry, html: true, name: htmlGameName(entry, dir), installDir: dir }
+  throw new Error(tr('main.game.folderNoGame'))
+}
+
 export function addGame(input: GameInput): Game {
-  checkExe(input.exePath)
+  const check = checkGameFile(input.exePath, input.installDir)
+  const web = check.html ? check : null
   const g: Game = normalizeGame({
     id: randomUUID(),
-    name: input.name.trim() || cleanGameName(path.basename(path.dirname(input.exePath))),
+    name: input.name.trim() || (web ? htmlGameName(input.exePath, web.root) : cleanGameName(path.basename(path.dirname(input.exePath)))),
     exePath: input.exePath,
-    args: input.args?.trim() || null,
-    installDir: input.installDir || path.dirname(input.exePath),
+    args: web ? null : input.args?.trim() || null,
+    installDir: web ? web.root : input.installDir || path.dirname(input.exePath),
     torrentId: input.torrentId ?? null,
     coverVersion: 0,
     coverShape: null,
@@ -1114,7 +1364,10 @@ export function addGame(input: GameInput): Game {
     coverTriedAt: null,
     addedAt: Date.now(),
     lastPlayedAt: null,
-    playTimeSeconds: 0
+    playTimeSeconds: 0,
+    html: web
+      ? { key: uniqueHtmlKey(htmlKey(web.realRoot, web.relEntry, IS_WIN), null, web.root), network: input.htmlNetwork === true, width: null, height: null, fullscreen: false }
+      : null
   })
   games.push(g)
   changed()
@@ -1139,16 +1392,45 @@ export function importGames(inputs: GameInput[]): number {
 export function updateGame(id: string, input: GameInput): Game | null {
   const g = findGame(id)
   if (!g) return null
-  // Jeu de plateforme : seul le nom se modifie (le lancement passe par la plateforme).
+  // Jeu de plateforme : seul le nom se modifie (le lancement passe par la plateforme) ;
+  // jeu web d'itch.io : aussi l'accès à Internet.
   if (g.platform !== 'local') {
     g.name = input.name.trim() || g.name
+    if (g.html && typeof input.htmlNetwork === 'boolean') g.html.network = input.htmlNetwork
     changed()
+    refreshHtmlNetwork()
     return g
   }
-  checkExe(input.exePath)
+  const check = checkGameFile(input.exePath, input.installDir)
+  const moved = input.exePath !== g.exePath
+  // jeu en cours : ni autre programme ou page, ni passage programme ↔ jeu web (sa fenêtre ne
+  // pourrait plus être affichée ni arrêtée)
+  if (running.has(id) && (moved || check.html !== !!g.html)) throw new Error(tr('main.game.closeBeforeEdit', { name: g.name }))
   g.name = input.name.trim() || g.name
+  if (check.html) {
+    // jeu web : taille et plein écran gardés ; dossier lisible remis à jour. La clé (ses
+    // sauvegardes) n'est gardée que si le jeu a seulement été déplacé : une autre page dont
+    // l'ancienne existe encore est un autre jeu, qui ne doit pas lire ces sauvegardes.
+    const dirMoved = !sameDir(g.installDir, check.root)
+    const fresh = htmlKey(check.realRoot, check.relEntry, IS_WIN)
+    const oldPage = g.exePath
+    g.exePath = input.exePath
+    g.args = null
+    g.installDir = check.root
+    if (!g.html) g.html = { key: fresh, network: false, width: null, height: null, fullscreen: false }
+    else if (g.html.key !== fresh && moved && fs.existsSync(oldPage)) g.html.key = fresh
+    g.html.key = uniqueHtmlKey(g.html.key, id, check.root)
+    if (typeof input.htmlNetwork === 'boolean') g.html.network = input.htmlNetwork
+    if (moved || dirMoved) void refreshIcon(id)
+    changed()
+    refreshHtmlNetwork()
+    return g
+  }
+  // programme : plus de réglages web (la clé reviendrait identique si la page est remise)
+  const wasHtml = !!g.html
+  g.html = null
   if (input.args !== undefined) g.args = input.args?.trim() || null
-  if (input.exePath !== g.exePath) {
+  if (moved || wasHtml) {
     g.exePath = input.exePath
     g.installDir = input.installDir || (g.installDir && inside(input.exePath, g.installDir) ? g.installDir : path.dirname(input.exePath))
     void refreshIcon(id)
@@ -1159,6 +1441,8 @@ export function updateGame(id: string, input: GameInput): Game | null {
 
 export function removeGame(id: string): void {
   const g = findGame(id)
+  // jeu web ouvert : sa fenêtre se ferme (ses sauvegardes restent, voir clearGameSaves)
+  if (g?.html && running.has(id)) stopGame(id)
   // Un jeu de plateforme retiré n'est pas rajouté par la détection suivante.
   if (g && g.platform !== 'local' && g.platformId) hidden.add(platformKey(g.platform, g.platformId))
   games = games.filter((x) => x.id !== id)
@@ -1313,8 +1597,8 @@ interface DirectLaunch {
 let psRestricted = false
 let psRestrictedTold = false
 
-/** Suit le script de lancement et de surveillance jusqu'à sa fin. */
-function followWatcher(id: string, watcher: ChildProcess, direct: DirectLaunch): void {
+/** Suit le script de lancement et de surveillance jusqu'à sa fin (direct : null pour un jeu web). */
+function followWatcher(id: string, watcher: ChildProcess, direct: DirectLaunch | null): void {
   let stderr = ''
   let launched = false
   readWatcherLines(watcher, (line) => {
@@ -1326,7 +1610,10 @@ function followWatcher(id: string, watcher: ChildProcess, direct: DirectLaunch):
   watcher.on('error', (err) => finishSession(id, watcher, tr('main.play.psStartFailed', { message: err.message })))
   watcher.on('close', (code) => {
     if (code === 4) finishSession(id, watcher, tr('main.play.adminDenied'))
-    else if (code === PS_RESTRICTED) launchRestricted(id, watcher, direct)
+    else if (code === PS_RESTRICTED) {
+      if (direct) launchRestricted(id, watcher, direct)
+      else finishSession(id, watcher, null)
+    }
     else if (code === 3) finishSession(id, watcher, cleanPsError(stderr) || tr('main.common.unknownError'))
     else if (code === 5) finishSession(id, watcher, null, true)
     // fin normale, script arrêté par CyberDeck, ou arrêté après avoir lancé le jeu
@@ -1404,6 +1691,11 @@ export async function playGame(id: string): Promise<void> {
   const g = findGame(id)
   if (!g) return
   const current = running.get(id)
+  // jeu web déjà ouvert : sa fenêtre passe au premier plan (bouton « Afficher »)
+  if (current && g.html) {
+    focusHtmlGame(id)
+    return
+  }
   if (current) {
     // Démarrage trop long, surveillance silencieuse : une nouvelle demande relance le jeu.
     if (current.expired && current.startedAt === null) {
@@ -1414,6 +1706,7 @@ export async function playGame(id: string): Promise<void> {
       return deps.notice({ level: 'info', message: waiting ? tr('main.play.starting', { name: g.name }) : tr('main.play.alreadyRunning', { name: g.name }) })
     }
   }
+  if (g.html) return playHtmlGame(g)
   if (g.platform !== 'local') return playPlatformGame(g)
   if (!fs.existsSync(g.exePath)) {
     return deps.notice({
@@ -1469,7 +1762,8 @@ function playPlatformGame(g: Game): void {
       message: tr(g.platform === 'steam' ? 'main.play.notInstalledSteam' : 'main.play.notInstalled', { name: g.name })
     })
   const launch = g.launch
-  if (!launch || !launch.target)
+  // page web sans réglages web (fichier retouché) : jamais ouverte par le navigateur par défaut
+  if (!launch || !launch.target || launch.kind === 'html')
     return deps.notice({ level: 'error', message: tr('main.play.launcherMissing', { platform: platformName }) })
   if (launch.kind === 'uri') {
     const scheme = launch.target.slice(0, launch.target.indexOf(':')).toLowerCase()
@@ -1509,6 +1803,91 @@ function playPlatformGame(g: Game): void {
   running.set(id, { startedAt: null, launchedAt, watcher, resumeTorrentId: null, expired: false, lastAliveAt: null })
   deps.log(`Lancement de ${g.name} par ${platformName} : ${launch.target}${launch.kind === 'exe' && launch.args ? ' ' + launch.args : ''}`)
   changed()
+}
+
+// ---------- Jeux web : fenêtre CyberDeck (htmlGames.ts) ----------
+
+/**
+ * Jeu web (local ou itch.io) : la page s'ouvre dans sa propre fenêtre CyberDeck, même chemin de
+ * code sous Windows et Linux (ni PowerShell, ni processus lancé, ni torrent mis en pause). Le
+ * temps de jeu court jusqu'à la fermeture de la fenêtre (plantage compris).
+ */
+function playHtmlGame(g: Game): void {
+  const fail = (error: string): void => deps.notice({ level: 'error', message: tr('main.play.failed', { error }) })
+  if (!g.installed) return deps.notice({ level: 'error', message: tr('main.play.notInstalled', { name: g.name }) })
+  if (!g.exePath || !fs.existsSync(g.exePath)) return deps.notice({ level: 'error', message: tr('main.play.pageMissing', { path: g.exePath }) })
+  let check: GameFileCheck
+  try {
+    check = checkGameFile(g.exePath, g.installDir)
+  } catch (err: any) {
+    return fail(err.message)
+  }
+  if (!check.html || !g.html) return fail(tr('main.common.unknownError'))
+  const html = g.html
+  if (!HTML_KEY_RE.test(html.key)) {
+    html.key = htmlKey(check.realRoot, check.relEntry, IS_WIN)
+    changedSoon()
+  }
+  // même dossier et même page ajoutés deux fois : une seule fenêtre (mêmes sauvegardes)
+  const other = games.find((x) => x.id !== g.id && x.html?.key === html.key && running.has(x.id))
+  if (other || isKeyOpen(html.key)) return deps.notice({ level: 'info', message: tr('main.play.alreadyRunning', { name: other?.name ?? g.name }) })
+  const id = g.id
+  const now = Date.now()
+  let watcher: ChildProcess
+  try {
+    watcher = openHtmlGame({
+      gameId: id,
+      name: g.name,
+      key: html.key,
+      realRoot: check.realRoot,
+      relEntry: check.relEntry,
+      iconFile: g.iconVersion > 0 && fs.existsSync(iconFile(id)) ? iconFile(id) : null,
+      bounds: { width: html.width, height: html.height, fullscreen: html.fullscreen },
+      network: () => !!findGame(id)?.html?.network,
+      onBounds: (b) => {
+        const cur = findGame(id)?.html
+        if (!cur) return
+        if (b.width && b.height) {
+          cur.width = Math.min(7680, Math.max(320, Math.round(b.width)))
+          cur.height = Math.min(7680, Math.max(320, Math.round(b.height)))
+        }
+        cur.fullscreen = b.fullscreen
+        // une fois par fermeture de fenêtre : enregistré tout de suite (CyberDeck peut quitter juste après)
+        changed()
+      }
+    }) as unknown as ChildProcess
+  } catch (err: any) {
+    return fail(err.message)
+  }
+  followWatcher(id, watcher, null)
+  running.set(id, { startedAt: now, launchedAt: now, watcher, resumeTorrentId: null, expired: false, lastAliveAt: null })
+  g.lastPlayedAt = now
+  deps.log(`Lancement du jeu web ${g.name} : ${g.exePath}`)
+  changed()
+}
+
+/** « Arrêter » : ferme la fenêtre d'un jeu web en cours (un programme n'est jamais arrêté). */
+export function stopGame(id: string): void {
+  const s = running.get(id)
+  const g = findGame(id)
+  if (!s || !g?.html) return
+  deps.log(`Arrêt du jeu web ${g.name}`)
+  s.watcher.kill()
+}
+
+/** Efface les sauvegardes d'un jeu web (sa partition), jamais pendant la partie. */
+export async function clearGameSaves(id: string): Promise<ActionResult> {
+  const g = findGame(id)
+  if (!g) return { ok: false, error: tr('main.common.gameNotFound') }
+  if (!g.html) return { ok: false, error: tr('main.html.savesFailed', { error: tr('main.common.unknownError') }) }
+  if (running.has(id) || isKeyOpen(g.html.key)) return { ok: false, error: tr('main.html.savesRunning', { name: g.name }) }
+  try {
+    await clearHtmlSaves(g.html.key)
+    deps.log(`Sauvegardes du jeu web ${g.name} supprimées`)
+    return { ok: true }
+  } catch (err: any) {
+    return { ok: false, error: tr('main.html.savesFailed', { error: err.message }) }
+  }
 }
 
 // ---------- Linux : lancement direct, surveillance par /proc ----------
@@ -1624,7 +2003,8 @@ function finishSession(id: string, watcher: ChildProcess, error: string | null, 
   changed()
 }
 
-// À la fermeture de CyberDeck : on compte le temps déjà joué (le jeu, lui, continue).
+// À la fermeture de CyberDeck : on compte le temps déjà joué (le jeu, lui, continue ; les jeux
+// web, eux, se ferment).
 export function stopAllSessions(): void {
   for (const [id, session] of running) {
     const g = findGame(id)
@@ -1739,13 +2119,16 @@ async function planUninstall(g: Game): Promise<UninstallPlan & { command?: Unins
     if (!deps.protocolAvailable('steam')) return none(tr('main.steam.notInstalled'))
     return { kind: 'launcher', launcher: 'Steam', target: null, error: null }
   }
-  const reg = await takeSnapshot([], false)
-  const entry = reg.ok ? matchUninstall(g, reg.uninstall) : null
+  // jeu web : jamais de désinstalleur (registre ou .exe de son dossier) ; un .exe fourni par le
+  // dossier du jeu serait lancé hors de sa fenêtre protégée. Seul son dossier est ouvert.
+  const web = !!g.html
+  const reg = web ? null : await takeSnapshot([], false)
+  const entry = reg?.ok ? matchUninstall(g, reg.uninstall) : null
   const cmd = entry ? splitCommand(entry.uninstall) : null
   if (cmd) return { kind: 'uninstaller', launcher: g.platform === 'local' ? null : PLATFORM_INFO[g.platform].name, target: cmd.exe, error: null, command: cmd }
   const open = openToUninstall()[g.platform]
   if (open && (!open.scheme || deps.protocolAvailable(open.scheme))) return { kind: 'open-launcher', launcher: open.name, target: null, error: null }
-  const own = uninstallerInFolder(g.installDir)
+  const own = web ? null : uninstallerInFolder(g.installDir)
   if (own) return { kind: 'uninstaller', launcher: null, target: own, error: null, command: { exe: own, args: '' } }
   const dir = g.installDir && fs.existsSync(g.installDir) && !tooBroad(g.installDir) ? g.installDir : null
   if (dir) return { kind: 'folder', launcher: null, target: dir, error: null }
@@ -1787,7 +2170,7 @@ export async function startUninstaller(exe: string, args: string, timeoutMs = 30
  * (vérifié toutes les 5 s pendant 15 min), le jeu est retiré de la bibliothèque. Les jeux de
  * plateforme passent « Non installé » à la lecture suivante de leur plateforme.
  */
-function followLocalUninstall(id: string): void {
+function followLocalUninstall(id: string, savesKey: string | null): void {
   const startedAt = Date.now()
   const timer = setInterval(() => {
     const g = findGame(id)
@@ -1796,12 +2179,15 @@ function followLocalUninstall(id: string): void {
     if (!gone) return
     clearInterval(timer)
     removeGame(id)
+    // jeu web : sauvegardes effacées aussi si demandé
+    if (savesKey)
+      void clearHtmlSaves(savesKey).catch((err) => deps.log(`Sauvegardes de ${g.name} non supprimées : ${(err as Error).message}`))
     deps.log(`Désinstallé : ${g.name}`)
     deps.notice({ level: 'success', message: tr('main.uninstall.done', { name: g.name }) })
   }, 5000)
 }
 
-export async function uninstallGame(id: string, removeFromList: boolean): Promise<ActionResult> {
+export async function uninstallGame(id: string, removeFromList: boolean, deleteSaves = false): Promise<ActionResult> {
   const g = findGame(id)
   if (!g) return { ok: false, error: tr('main.common.gameNotFound') }
   if (running.has(id)) return { ok: false, error: tr('main.uninstall.running', { name: g.name }) }
@@ -1821,6 +2207,10 @@ export async function uninstallGame(id: string, removeFromList: boolean): Promis
       case 'folder': {
         const error = await shell.openPath(plan.target!)
         if (error) return { ok: false, error: tr('main.uninstall.folderMissing', { error }) }
+        if (removeFromList && deleteSaves && g.html) {
+          const cleared = await clearGameSaves(id)
+          if (!cleared.ok) return cleared
+        }
         if (removeFromList) removeGame(id)
         deps.log(`Désinstallation de ${g.name} : dossier ouvert (${plan.target})${removeFromList ? ', retiré de la bibliothèque' : ''}`)
         return { ok: true }
@@ -1830,7 +2220,7 @@ export async function uninstallGame(id: string, removeFromList: boolean): Promis
         const started = await startUninstaller(exe, args)
         if (!started.ok) return started
         deps.log(`Désinstalleur lancé pour ${g.name} : ${exe}${args ? ' ' + args : ''}`)
-        if (g.platform === 'local') followLocalUninstall(id)
+        if (g.platform === 'local') followLocalUninstall(id, null)
         return { ok: true }
       }
       default:
@@ -1892,7 +2282,12 @@ function gameFromDetected(d: DetectedGame): Game {
     platformPlayTimeSeconds: d.playTimeSeconds ?? null,
     platformLastPlayedAt: d.lastPlayedAt ?? null,
     platformState: d.state ?? null,
-    iconHint: d.iconHint ?? null
+    iconHint: d.iconHint ?? null,
+    // jeu web d'itch.io : Internet coupé par défaut
+    html:
+      d.launch.kind === 'html' && d.exePath
+        ? { key: htmlKeyFor(d.installDir ?? path.dirname(d.exePath), d.exePath), network: false, width: null, height: null, fullscreen: false }
+        : null
   })
 }
 
@@ -1928,6 +2323,18 @@ function updateFromDetected(g: Game, d: DetectedGame): [boolean, boolean] {
   if (d.playTimeSeconds !== undefined && d.playTimeSeconds !== null) set('platformPlayTimeSeconds', d.playTimeSeconds)
   if (d.lastPlayedAt) set('platformLastPlayedAt', Math.max(d.lastPlayedAt, g.platformLastPlayedAt ?? 0))
   set('platformState', d.state ?? null)
+  // jeu web : réglages créés une fois (Internet, taille et plein écran jamais écrasés par la détection)
+  if (d.launch.kind === 'html' && isHtmlPage(g.exePath)) {
+    if (!g.html) {
+      g.html = { key: htmlKeyFor(g.installDir ?? path.dirname(g.exePath), g.exePath), network: false, width: null, height: null, fullscreen: false }
+      dirty = true
+      icon = true
+    }
+  } else if (g.html) {
+    g.html = null
+    dirty = true
+    icon = true
+  }
   // nom provisoire (« App 123456 ») remplacé par le vrai nom
   if (/^App \d+$/.test(g.name) && d.name && !/^App \d+$/.test(d.name)) set('name', d.name)
   return [dirty, icon]

@@ -39,6 +39,9 @@ jobs:
       - name: Linux unit checks (Steam paths, /proc watcher)
         run: node tests/tools/linux-checks.mjs
 
+      - name: Web game checks (file serving, folder guards, network rules)
+        run: node tests/tools/html-checks.mjs
+
       - name: Build
         run: npx electron-vite build
 

@@ -1,6 +1,7 @@
 import { ExternalLink, FolderOpen, LoaderCircle, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { t } from '../../../shared/i18n'
+import { isHtmlGame } from '../../../shared/platforms'
 import type { Game, UninstallPlan } from '../../../shared/types'
 import { errorText } from '../format'
 import { useT } from '../i18n'
@@ -12,6 +13,8 @@ import type { ToastOptions } from './Toasts'
 // principal comment faire (Steam, désinstalleur déclaré dans Windows, lanceur à ouvrir, ou
 // dossier), on le dit clairement, puis on lance au clic. CyberDeck ne supprime jamais un dossier
 // lui-même : un gros dossier peut dépasser la Corbeille et être effacé pour de bon.
+// Jeu web local : case « Supprimer aussi les sauvegardes » (décochée par défaut ; en 'folder',
+// seulement avec « Retirer de la bibliothèque »).
 // Focus initial sur Annuler.
 
 interface Props {
@@ -56,6 +59,7 @@ export function UninstallDialog({ game, onClose, onToast }: Props): React.JSX.El
   const [plan, setPlan] = useState<UninstallPlan | null>(null)
   const [busy, setBusy] = useState(false)
   const [removeFromList, setRemoveFromList] = useState(true)
+  const [deleteSaves, setDeleteSaves] = useState(false)
   const [ring, setRing] = useState(true)
   const cancelRef = useRef<HTMLButtonElement>(null)
 
@@ -74,7 +78,7 @@ export function UninstallDialog({ game, onClose, onToast }: Props): React.JSX.El
     if (!plan || busy) return
     setBusy(true)
     try {
-      const res = await window.essaim.uninstallGame(game.id, removeFromList)
+      const res = await window.essaim.uninstallGame(game.id, removeFromList, savesShown && savesOn && deleteSaves)
       if (!res.ok) {
         onToast('error', res.error ?? t('library.uninstall.failed'), { detail: game.name })
         return setBusy(false)
@@ -97,6 +101,9 @@ export function UninstallDialog({ game, onClose, onToast }: Props): React.JSX.El
     }
   }
 
+  // sauvegardes d'un jeu web local : effacées avec le jeu si demandé
+  const savesShown = !!plan && isHtmlGame(game) && game.platform === 'local' && (plan.kind === 'folder' || plan.kind === 'uninstaller')
+  const savesOn = plan?.kind !== 'folder' || removeFromList
   const label =
     plan?.kind === 'open-launcher'
       ? t('library.uninstall.btnOpenLauncher', { launcher: plan.launcher ?? '' })
@@ -140,6 +147,21 @@ export function UninstallDialog({ game, onClose, onToast }: Props): React.JSX.El
                 <CheckMark />
               </span>
               <span className="txt">{t('library.uninstall.removeFromList')}</span>
+            </label>
+          )}
+          {savesShown && (
+            <label className={`check${deleteSaves && savesOn ? ' on' : ''}${savesOn ? '' : ' dis'}`}>
+              <span className="cbox">
+                <input
+                  type="checkbox"
+                  checked={deleteSaves && savesOn}
+                  disabled={!savesOn || busy}
+                  data-testid="uninstall-delete-saves"
+                  onChange={(e) => setDeleteSaves(e.target.checked)}
+                />
+                <CheckMark />
+              </span>
+              <span className="txt">{t('library.uninstall.deleteSaves')}</span>
             </label>
           )}
         </>

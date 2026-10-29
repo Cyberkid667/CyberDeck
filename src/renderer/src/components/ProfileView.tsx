@@ -307,7 +307,7 @@ function badgeName(b: SteamProfileBadge, t: (k: string) => string): string {
 const formatMonth = (ts: number, locale: string): string => new Date(ts).toLocaleDateString(locale, { month: 'short', year: 'numeric' })
 
 function Badges({ p }: { p: SteamProfile }): React.JSX.Element {
-  const { t, tn, locale } = useT()
+  const { t, locale } = useT()
   const known = p.level !== null
   return (
     <Section id="badges" title={t('profile.badges')} testId="profile-badges">
@@ -317,7 +317,6 @@ function Badges({ p }: { p: SteamProfile }): React.JSX.Element {
         <>
           <p className="prf-badge-sum">
             <span className="hi">{t('profile.badges.summary', { level: p.level!, xp: (p.xp ?? 0).toLocaleString() })}</span>
-            {p.badgeCount !== null && <span> · {tn('profile.badges.earned', p.badgeCount)}</span>}
             {p.xpToNext ? <span> · {t('profile.badges.toNext', { xp: p.xpToNext.toLocaleString(), next: p.level! + 1 })}</span> : null}
           </p>
           {!p.badges.length ? (

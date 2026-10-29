@@ -57,3 +57,6 @@ export function gameLastPlayedAt(g: Game): number | null {
   const b = g.platformLastPlayedAt ?? 0
   return Math.max(a, b) || null
 }
+
+/** Jeu web : page HTML jouée dans une fenêtre protégée de CyberDeck. */
+export const isHtmlGame = (g: Pick<Game, 'html'>): boolean => !!g.html

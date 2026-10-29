@@ -1,6 +1,6 @@
-import { Blocks, Download, FolderInput, FolderOpen, Gamepad2, Info, LoaderCircle, PackageX, Pencil, Play, Plus, Trash2, X } from 'lucide-react'
+import { AppWindow, Blocks, Download, FolderInput, FolderOpen, Gamepad2, Info, LoaderCircle, PackageX, Pencil, Play, Plus, Square, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { gameLastPlayedAt, gamePlayTimeSeconds } from '../../../shared/platforms'
+import { gameLastPlayedAt, gamePlayTimeSeconds, isHtmlGame } from '../../../shared/platforms'
 import type { ActionResult, DownloadProgress, Game, LibraryState, PlatformsState } from '../../../shared/types'
 import { errorText, formatClock, formatClockText, formatDay, formatPercent, formatPlayTime, formatWhen } from '../format'
 import { barcodeCSS } from '../fx/barcode'
@@ -10,7 +10,6 @@ import { useT } from '../i18n'
 import {
   canPlayState,
   gameFolder,
-  gamesWord,
   gameState,
   inFilter,
   inShow,
@@ -27,7 +26,7 @@ import { Cover, coverSrc, ExeIcon } from './Cover'
 import { DownloadPanel, downloadFraction } from './DownloadPanel'
 import { Dust } from './Dust'
 import { GameCard } from './GameCard'
-import { GameDetailView } from './GameDetailView'
+import { GameDetailView, HtmlLiveButtons } from './GameDetailView'
 import { ImportDialog } from './ImportDialog'
 import { PixelMatrix } from './PixelMatrix'
 import { PlatformTag } from './PlatformTag'
@@ -185,10 +184,13 @@ function Hero({ game: g, state, startedAt, launchedAt, now, download, onPlay, on
   let main: React.ReactNode
   if (live)
     main = (
-      <span className="live-chip" role="status" title={t('library.hero.runningTitle', { name: g.name })}>
-        <span className="live-dot" />
-        {t('library.state.running')}
-      </span>
+      <>
+        <span className="live-chip" role="status" title={t('library.hero.runningTitle', { name: g.name })}>
+          <span className="live-dot" />
+          {t('library.state.running')}
+        </span>
+        {isHtmlGame(g) && <HtmlLiveButtons game={g} prefix="hero" />}
+      </>
     )
   else if (state === 'launching' || state === 'downloading')
     main = (
@@ -368,7 +370,7 @@ export function LibraryView({
   onToast,
   navKey = 0
 }: Props): React.JSX.Element {
-  const { t, tn, locale } = useT()
+  const { t, locale } = useT()
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortMode>('recent')
   const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null)
@@ -530,7 +532,9 @@ export function LibraryView({
     onToast(
       'info',
       g.platform === 'local'
-        ? t('library.view.removedLocal')
+        ? isHtmlGame(g)
+          ? t('library.view.removedHtml')
+          : t('library.view.removedLocal')
         : g.installed
           ? t('library.view.removedInstalled', { platform: platformName(g.platform) })
           : t('library.view.removed'),
@@ -543,7 +547,11 @@ export function LibraryView({
     const s = gameState(g, library)
     const items: (MenuItem | 'sep')[] = []
     if (s === 'installable') items.push({ label: t('library.view.menuInstallSteam'), icon: <Download />, onClick: () => void install(g) })
-    else if (s !== 'absent' && s !== 'downloading') items.push({ label: playLabel(g), icon: <Play />, disabled: !canPlayState(s), onClick: () => play(g) })
+    else if (s === 'running' && isHtmlGame(g)) {
+      // jeu web en cours : sa fenêtre au premier plan, ou fermée
+      items.push({ label: t('library.common.show'), icon: <AppWindow />, onClick: () => window.essaim.playGame(g.id) })
+      items.push({ label: t('library.common.stop'), icon: <Square />, onClick: () => window.essaim.stopGame(g.id) })
+    } else if (s !== 'absent' && s !== 'downloading') items.push({ label: playLabel(g), icon: <Play />, disabled: !canPlayState(s), onClick: () => play(g) })
     if (detailId !== g.id) items.push({ label: t('library.details.menu'), icon: <Info />, onClick: () => openDetail(g) })
     if (g.platform === 'local' || onThisPc(g))
       items.push({ label: t('library.common.openFolder'), icon: <FolderOpen />, disabled: !gameFolder(g), onClick: () => window.essaim.openGameFolder(g.id) })
@@ -597,7 +605,6 @@ export function LibraryView({
   }
 
   const title = filter === 'all' ? t('library.view.myGames') : platformName(filter)
-  const absentCount = show === 'owned' ? listGames.filter((g) => !onThisPc(g)).length : 0
   // filtre de plateforme vide dans « Installés » alors que la plateforme a des jeux possédés
   const ownedElsewhere =
     canShowAll && show === 'installed' && filter !== 'all' && library.games.some((g) => g.platform === filter && inShow(g, 'owned'))
@@ -715,23 +722,6 @@ export function LibraryView({
             )}
             <div className="sect">
               <span className="cap">{filter === 'all' ? t('library.view.collection') : platformName(filter)}</span>
-              <span className="cap">
-                {query ? (
-                  <>
-                    <b>{games.length}</b> {gamesWord(games.length)} {t('library.view.ofTotal', { total })}
-                  </>
-                ) : (
-                  <>
-                    <b>{total}</b> {gamesWord(total)}
-                    {absentCount > 0 && (
-                      <>
-                        {' '}
-                        · <b>{absentCount}</b> {tn('library.view.notInstalledCount', absentCount)}
-                      </>
-                    )}
-                  </>
-                )}
-              </span>
               <span className="rule" />
               {canShowAll && (
                 // bascule compacte « Installés | Tous » (compte Steam relié) : au bout du filet, avant le tri

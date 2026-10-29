@@ -1,7 +1,7 @@
 {
   "name": "cyberdeck",
   "productName": "CyberDeck",
-  "version": "0.13.1",
+  "version": "0.14.0",
   "description": "CyberDeck: one game library for every launcher on Windows (Steam, Epic, GOG, EA, Ubisoft, Xbox...) with Steam on Linux, plus an optional torrent client",
   "author": "Cyberkid667",
   "license": "MIT",

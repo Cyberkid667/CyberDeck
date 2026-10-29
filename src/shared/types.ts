@@ -623,6 +623,9 @@ export interface TwitchCategory {
   boxArt: string | null
 }
 
+/** Recherche de catégories : une panne (hors ligne, limite d'appels…) n'est pas « aucune catégorie ». */
+export type TwitchCategorySearch = { ok: true; categories: TwitchCategory[] } | { ok: false; error: string }
+
 export interface TwitchStream {
   id: string
   userId: string
@@ -794,8 +797,9 @@ export type LauncherPlatform = Exclude<GamePlatform, 'local'>
 export interface GameLaunch {
   /** 'uri' : adresse ouverte par Windows (steam://…, com.epicgames.launcher://…) ;
    *  'exe' : programme + options (lanceur de la plateforme, explorer.exe shell:AppsFolder\…,
-   *  ou le jeu lui-même pour GOG sans Galaxy et itch.io). */
-  kind: 'uri' | 'exe'
+   *  ou le jeu lui-même pour GOG sans Galaxy et itch.io) ;
+   *  'html' : jeu web d'itch.io (target = page, cwd = dossier du jeu), joué dans une fenêtre CyberDeck. */
+  kind: 'uri' | 'exe' | 'html'
   target: string
   /** ligne d'options brute pour 'exe' */
   args: string | null
@@ -813,6 +817,19 @@ export interface GameWatch {
 }
 
 // ---------- Bibliothèque de jeux ----------
+
+/** Réglages d'un jeu web (page HTML jouée dans une fenêtre protégée de CyberDeck). */
+export interface HtmlGameSettings {
+  /** partition des sauvegardes persist:cdgame-<key> ; /^[a-f0-9]{32}$/ ; fixée à la création, jamais vue par le jeu */
+  key: string
+  /** accès à Internet (https et wss publics seulement) ; false par défaut */
+  network: boolean
+  /** dernière taille du contenu de la fenêtre ; null = 1280×720 */
+  width: number | null
+  height: number | null
+  /** rouvrir en plein écran */
+  fullscreen: boolean
+}
 
 export interface Game {
   id: string
@@ -860,6 +877,8 @@ export interface Game {
   platformState: 'downloading' | 'updating' | null
   /** icône à télécharger quand il n'y a pas de programme (jeu Steam possédé non installé) */
   iconHint: string | null
+  /** jeu web : exePath = page .html/.htm, installDir = dossier lisible par le jeu ; null = comme avant */
+  html: HtmlGameSettings | null
 }
 
 export interface LibraryState {
@@ -994,6 +1013,16 @@ export interface GameInput {
   torrentId?: string | null
   steamAppId?: number | null
   coverHint?: string | null
+  /** jeu web : accès à Internet (ignoré pour un jeu qui n'est pas web) */
+  htmlNetwork?: boolean
+}
+
+/** Fichier ou dossier de jeu choisi : chemin à lancer, page web ou non, nom proposé, dossier du jeu. */
+export interface GamePick {
+  path: string
+  html: boolean
+  name: string
+  installDir: string | null
 }
 
 // Un sous-dossier trouvé par « Importer un dossier ».
@@ -1074,7 +1103,14 @@ export interface EssaimApi {
   openGameFolder(id: string): void
   searchCover(id: string): Promise<boolean>
   setCoverFromFile(id: string, file: string): Promise<boolean>
-  pickExe(defaultPath?: string): Promise<string | null>
+  /** choisit le programme (.exe) ou la page (.html) d'un jeu ; null si annulé */
+  pickGameFile(defaultPath?: string): Promise<GamePick | null>
+  /** choisit le dossier d'un jeu (programme, sinon page web) ; rejette avec le texte traduit */
+  pickGameFolder(defaultPath?: string): Promise<GamePick | null>
+  /** jeu web en cours : ferme sa fenêtre (un programme n'est jamais arrêté) */
+  stopGame(id: string): void
+  /** efface les sauvegardes d'un jeu web (refusé pendant la partie) */
+  clearGameSaves(id: string): Promise<ActionResult>
   pickImage(): Promise<string | null>
   scanGamesFolder(dir: string): Promise<ScanCandidate[]>
   importGames(inputs: GameInput[]): Promise<number>
@@ -1111,8 +1147,9 @@ export interface EssaimApi {
   // ---- Désinstallation ----
   /** comment le jeu serait désinstallé (lit le registre de Windows) */
   uninstallPlan(id: string): Promise<UninstallPlan>
-  /** lance la désinstallation décrite par uninstallPlan ; removeFromList : 'folder' seulement */
-  uninstallGame(id: string, removeFromList: boolean): Promise<ActionResult>
+  /** lance la désinstallation décrite par uninstallPlan ; removeFromList : 'folder' seulement ;
+   *  deleteSaves : jeu web local, efface aussi ses sauvegardes */
+  uninstallGame(id: string, removeFromList: boolean, deleteSaves?: boolean): Promise<ActionResult>
 
   // ---- Page détaillée d'un jeu et téléchargements ----
   /** infos de la page d'un jeu (cache sur le disque ; refresh : relit tout) */
@@ -1176,7 +1213,7 @@ export interface EssaimApi {
   /** streams en direct du jeu (catégorie trouvée par son nom ; cache 60 s) */
   getTwitchStreams(gameId: string, query?: TwitchStreamsQuery): Promise<TwitchStreams>
   /** recherche de catégories (« Pas ce jeu ? ») */
-  searchTwitchCategories(query: string): Promise<TwitchCategory[]>
+  searchTwitchCategories(query: string): Promise<TwitchCategorySearch>
   /** catégorie choisie pour le jeu ; null : revient à la recherche automatique */
   setTwitchCategory(gameId: string, category: TwitchCategory | null): Promise<void>
   /** Échap pressé dans le lecteur ou le chat Twitch (le clavier y reste sinon) */

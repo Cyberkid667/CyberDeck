@@ -39,7 +39,10 @@ const api: EssaimApi = {
   openGameFolder: (id) => ipcRenderer.send('library:open-folder', id),
   searchCover: (id) => ipcRenderer.invoke('library:search-cover', id),
   setCoverFromFile: (id, file) => ipcRenderer.invoke('library:cover-file', id, file),
-  pickExe: (defaultPath) => ipcRenderer.invoke('dialog:exe', defaultPath),
+  pickGameFile: (defaultPath) => ipcRenderer.invoke('dialog:game-file', defaultPath),
+  pickGameFolder: (defaultPath) => ipcRenderer.invoke('dialog:game-folder', defaultPath),
+  stopGame: (id) => ipcRenderer.send('library:stop', id),
+  clearGameSaves: (id) => ipcRenderer.invoke('library:clear-saves', id),
   pickImage: () => ipcRenderer.invoke('dialog:image'),
   scanGamesFolder: (dir) => ipcRenderer.invoke('library:scan-folder', dir),
   importGames: (inputs) => ipcRenderer.invoke('library:import', inputs),
@@ -62,7 +65,7 @@ const api: EssaimApi = {
   openUpdate: () => ipcRenderer.send('update:open'),
 
   uninstallPlan: (id) => ipcRenderer.invoke('library:uninstall-plan', id),
-  uninstallGame: (id, removeFromList) => ipcRenderer.invoke('library:uninstall', id, removeFromList),
+  uninstallGame: (id, removeFromList, deleteSaves) => ipcRenderer.invoke('library:uninstall', id, removeFromList, deleteSaves === true),
 
   getGameDetails: (id, refresh) => ipcRenderer.invoke('details:get', id, refresh === true),
   getDownloads: () => ipcRenderer.invoke('downloads:get'),

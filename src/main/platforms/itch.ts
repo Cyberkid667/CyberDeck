@@ -1,13 +1,15 @@
 // itch.io : jeux installés par l'application itch, lus dans sa base butler.db
 // (copie temporaire, node:sqlite intégré). La table profiles (jeton du compte)
 // n'est jamais lue. Pas d'adresse publique pour lancer un jeu : le programme du
-// jeu est lancé directement (comme le fait l'application itch).
+// jeu est lancé directement (comme le fait l'application itch). Jeu web (HTML) :
+// sa page se joue dans une fenêtre CyberDeck (launch.kind 'html').
 import fs from 'node:fs'
 import path from 'node:path'
 import type { PlatformScan, ScanContext } from './types'
 import { withSqliteCopy, tableColumns } from './sqlite'
 import { t } from '../../shared/i18n'
-import { cleanDir, cleanTitle, isDir, isFile, largestExeSync, localAppData, normDir, roamingAppData, skip } from './util'
+import { findHtmlEntry } from '../htmlFolder'
+import { cleanDir, cleanTitle, isDir, isFile, largestExeSync, localAppData, normDir, roamingAppData, skip, verdictFiles } from './util'
 
 /**
  * Programme d'itch dans son dossier d'installation. Ancienne version : itch.exe à la racine ;
@@ -50,27 +52,14 @@ export function itchClient(ctx: ScanContext): string | null {
   return null
 }
 
-interface Candidate {
-  path?: string
-  flavor?: string
-  arch?: string
-  depth?: number
+/** Programme Windows désigné par le verdict de butler (amd64 d'abord, jamais hors du dossier). */
+function exeFromVerdict(installDir: string, verdict: unknown): string | null {
+  return verdictFiles(installDir, verdict, /^windows/i)[0] ?? null
 }
 
-function exeFromVerdict(installDir: string, verdict: unknown): string | null {
-  let v: { basePath?: string; candidates?: Candidate[] } | null = null
-  try {
-    v = typeof verdict === 'string' && verdict ? JSON.parse(verdict) : null
-  } catch {
-    v = null
-  }
-  const list = (v?.candidates ?? []).filter((c) => c.path && /^windows/i.test(c.flavor ?? ''))
-  list.sort((a, b) => (a.arch === 'amd64' ? 0 : 1) - (b.arch === 'amd64' ? 0 : 1) || (a.depth ?? 9) - (b.depth ?? 9))
-  for (const c of list) {
-    const p = path.join(installDir, c.path!.replace(/\//g, '\\'))
-    if (isFile(p)) return p
-  }
-  return null
+/** Page web désignée par le verdict de butler (flavor « html »). */
+function htmlFromVerdict(installDir: string, verdict: unknown): string | null {
+  return verdictFiles(installDir, verdict, /^html$/i).find((p) => /\.html?$/i.test(p)) ?? null
 }
 
 export async function scanItch(ctx: ScanContext): Promise<PlatformScan> {
@@ -95,7 +84,8 @@ export async function scanItch(ctx: ScanContext): Promise<PlatformScan> {
         `SELECT c.id AS cave_id, c.game_id AS game_id, ${col(caves, 'c', 'verdict')} AS verdict,
                 ${col(caves, 'c', 'custom_install_folder')} AS custom_folder, ${col(caves, 'c', 'install_folder_name')} AS folder_name,
                 ${join ? 'l.path' : 'NULL'} AS location, ${col(games, 'g', 'title')} AS title,
-                ${col(games, 'g', 'classification')} AS classification, ${col(games, 'g', 'cover_url')} AS cover_url
+                ${col(games, 'g', 'classification')} AS classification, ${col(games, 'g', 'cover_url')} AS cover_url,
+                ${col(games, 'g', 'type')} AS game_type
            FROM caves c JOIN games g ON g.id = c.game_id ${join}`
       )
     })
@@ -115,22 +105,42 @@ export async function scanItch(ctx: ScanContext): Promise<PlatformScan> {
     const base = typeof r.location === 'string' && r.location ? r.location : path.join(roamingAppData(), 'itch', 'apps')
     const installDir = custom ? cleanDir(custom) : typeof r.folder_name === 'string' && r.folder_name ? cleanDir(path.join(base, r.folder_name)) : null
     if (!installDir || !isDir(installDir) || seen.has(normDir(installDir))) continue
-    const exe = exeFromVerdict(installDir, r.verdict) ?? largestExeSync(installDir)
-    if (!exe) continue // jeu navigateur (HTML) ou sans programme Windows
+    // programme du verdict, page du verdict, jeu « html » d'itch, plus gros programme, page du dossier
+    const exe = exeFromVerdict(installDir, r.verdict)
+    const verdictPage = exe ? null : htmlFromVerdict(installDir, r.verdict)
+    const typePage = exe || verdictPage || String(r.game_type ?? '') !== 'html' ? null : findHtmlEntry(installDir)
+    const bigExe = exe || verdictPage || typePage ? null : largestExeSync(installDir)
+    const page = verdictPage ?? typePage ?? (exe || bigExe ? null : findHtmlEntry(installDir))
+    if (!exe && !bigExe && !page) continue // ni programme Windows ni page web
     seen.add(normDir(installDir))
-    scan.games.push({
-      platform: 'itch',
+    const program = exe ?? bigExe
+    const common = {
+      platform: 'itch' as const,
       platformId: String(r.cave_id ?? r.game_id),
       name: cleanTitle(String(r.title ?? '') || path.basename(installDir)),
       installDir,
-      exePath: exe,
-      launch: { kind: 'exe', target: exe, args: null, cwd: path.dirname(exe) },
-      watchDirs: [installDir],
-      processNames: [path.basename(exe)],
       installed: true,
       steamAppId: null,
       coverHint: typeof r.cover_url === 'string' && /^https:\/\//.test(r.cover_url) ? r.cover_url : null
-    })
+    }
+    if (program) {
+      scan.games.push({
+        ...common,
+        exePath: program,
+        launch: { kind: 'exe', target: program, args: null, cwd: path.dirname(program) },
+        watchDirs: [installDir],
+        processNames: [path.basename(program)]
+      })
+    } else if (page) {
+      // jeu web : joué dans une fenêtre CyberDeck, aucun processus à surveiller
+      scan.games.push({
+        ...common,
+        exePath: page,
+        launch: { kind: 'html', target: page, args: null, cwd: installDir },
+        watchDirs: [],
+        processNames: []
+      })
+    }
   }
   return scan
 }

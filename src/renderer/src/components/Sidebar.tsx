@@ -3,20 +3,20 @@ import { useEffect, useRef } from 'react'
 import type { GamePlatform } from '../../../shared/types'
 import { filterLabel, type Filter } from '../format'
 import { useT } from '../i18n'
-import { gamesWord, platformName, type LibraryFilter } from '../platformUi'
+import { platformName, type LibraryFilter } from '../platformUi'
 import { useScrollFade } from '../useScrollFade'
 import { PlatformLogo } from './PlatformLogo'
 import { Scope } from './Scope'
 
 // Barre latérale en faux verre : une seule section « BIBLIOTHÈQUE » avec deux
-// rubriques sur le même modèle, compteurs, point vivant quand un jeu tourne,
+// rubriques sur le même modèle, sans aucun compteur (choix de l'utilisateur), point vivant quand un jeu tourne,
 // oscilloscope « TRAFIC · 60 S ». Sous « Mes jeux », un filtre par
-// plateforme qui a des jeux (logo de la plateforme, nom, nombre de jeux) ;
+// plateforme qui a des jeux (logo de la plateforme et nom) ;
 // sous « Torrents », En cours / Terminés / En partage quand ils contiennent quelque
 // chose (ou que le filtre est choisi). La rubrique Torrents n'existe que si les torrents
 // sont activés (Réglages), et l'oscilloscope n'apparaît que dans la vue Torrents. Puis
 // « Lanceurs » (page des lanceurs : installer, désinstaller, compte Steam) et « Réglages » : toujours visibles, hors de la
-// liste qui défile. Sous 1100 px : rail de 60 px (icône au-dessus du compteur,
+// liste qui défile. Sous 1100 px : rail de 60 px (icône seule,
 // logo seul pour les plateformes, libellés en title), sans oscilloscope ni pied. Si la
 // liste ne tient pas en hauteur, elle défile (sans barre visible, fondu en bas).
 
@@ -40,16 +40,15 @@ export interface Traffic {
 
 export interface LibNavItem {
   id: GamePlatform
-  /** jeux de cette plateforme dans la vue choisie (Installés / Tous) */
+  /** jeux de cette plateforme dans la vue choisie (Installés / Tous) : sert seulement à masquer les plateformes vides, jamais affiché */
   count: number
 }
 
 interface Props {
   view: View
   filter: Filter
+  /** torrents par filtre : sert seulement à masquer les sous-rubriques vides, jamais affiché */
   counts: Record<Filter, number>
-  /** jeux de la vue choisie (« Mes jeux ») */
-  gameCount: number
   playing: boolean
   onFilter: (f: Filter) => void
   /** filtre de la bibliothèque (tous les jeux ou une plateforme) */
@@ -72,7 +71,6 @@ export function Sidebar({
   view,
   filter,
   counts,
-  gameCount,
   playing,
   onFilter,
   libFilter,
@@ -116,7 +114,6 @@ export function Sidebar({
           <Gamepad2 />
           <span className="label">{t('shell.sidebar.myGames')}</span>
           {playing && <span className="live-dot" title={t('shell.sidebar.gameRunning')} />}
-          <span className="count">{gameCount}</span>
         </button>
         {libNav.length > 0 && (
           <div className="side-tree" role="group" aria-label={t('shell.sidebar.filterPlatform')}>
@@ -128,15 +125,14 @@ export function Sidebar({
                   key={item.id}
                   type="button"
                   className={`nav sub${on ? ' on' : ''}`}
-                  title={`${name} · ${item.count} ${gamesWord(item.count)}`}
-                  aria-label={`${name}, ${item.count} ${gamesWord(item.count)}`}
+                  title={name}
+                  aria-label={name}
                   aria-current={on ? 'page' : undefined}
                   data-testid={`nav-platform-${item.id}`}
                   onClick={() => onLibrary(item.id)}
                 >
                   <PlatformLogo platform={item.id} />
                   <span className="label">{name}</span>
-                  <span className="count">{item.count}</span>
                 </button>
               )
             })}
@@ -153,7 +149,6 @@ export function Sidebar({
           >
             <ArrowDownUp />
             <span className="label">Torrents</span>
-            <span className="count">{counts.all}</span>
           </button>
         )}
         {torrentNav.length > 0 && (
@@ -166,15 +161,14 @@ export function Sidebar({
                   key={s.id}
                   type="button"
                   className={`nav sub${on ? ' on' : ''}`}
-                  title={`${label} · ${counts[s.id]}`}
-                  aria-label={`${label}, ${counts[s.id]}`}
+                  title={label}
+                  aria-label={label}
                   aria-current={on ? 'page' : undefined}
                   data-testid={`nav-filter-${s.id}`}
                   onClick={() => onFilter(s.id)}
                 >
                   <s.icon className="plogo" aria-hidden="true" />
                   <span className="label">{label}</span>
-                  <span className="count">{counts[s.id]}</span>
                 </button>
               )
             })}

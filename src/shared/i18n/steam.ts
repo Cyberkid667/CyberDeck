@@ -43,8 +43,8 @@ const messages: Messages = {
     'steam.list.rowTitle': '{name} — click: game page · double-click: {action}',
     'steam.list.actPlay': 'play',
     'steam.list.actInstall': 'install',
-    'steam.list.dynamic.one': '{n} dynamic collection isn’t shown',
-    'steam.list.dynamic.other': '{n} dynamic collections aren’t shown',
+    'steam.list.dynamic.one': 'A dynamic collection isn’t shown',
+    'steam.list.dynamic.other': 'Dynamic collections aren’t shown',
 
     // accueil
     'steam.home.aria': 'Steam home',
@@ -68,8 +68,8 @@ const messages: Messages = {
     'steam.dl.aria': 'Steam downloads',
     'steam.dl.cap': 'Downloads',
     'steam.dl.idle': 'Nothing in progress',
-    'steam.dl.more.one': '+{n} more',
-    'steam.dl.more.other': '+{n} more',
+    'steam.dl.more.one': 'and another',
+    'steam.dl.more.other': 'and more',
     'steam.dl.openTitle': 'Open the page of {name}',
 
     // profil (onglet PROFIL)
@@ -103,8 +103,6 @@ const messages: Messages = {
     'profile.recent.storeTitle': 'Open {name} on the Steam Store',
     'profile.badges': 'Badges',
     'profile.badges.summary': 'Level {level} · {xp} XP',
-    'profile.badges.earned.one': '{n} badge earned',
-    'profile.badges.earned.other': '{n} badges earned',
     'profile.badges.toNext': '{xp} XP to level {next}',
     'profile.badges.none': 'No badge yet. Craft one from the trading cards of a game, in Steam.',
     'profile.badges.private': 'Badges are hidden by your Steam privacy settings.',
@@ -367,8 +365,8 @@ const messages: Messages = {
     'steam.list.rowTitle': '{name} — clic : page du jeu · double-clic : {action}',
     'steam.list.actPlay': 'jouer',
     'steam.list.actInstall': 'installer',
-    'steam.list.dynamic.one': '{n} collection dynamique n’est pas affichée',
-    'steam.list.dynamic.other': '{n} collections dynamiques ne sont pas affichées',
+    'steam.list.dynamic.one': 'Une collection dynamique n’est pas affichée',
+    'steam.list.dynamic.other': 'Des collections dynamiques ne sont pas affichées',
 
     'steam.home.aria': 'Accueil Steam',
     'steam.home.cap': 'Steam · Accueil',
@@ -390,8 +388,8 @@ const messages: Messages = {
     'steam.dl.aria': 'Téléchargements Steam',
     'steam.dl.cap': 'Téléchargements',
     'steam.dl.idle': 'Rien en cours',
-    'steam.dl.more.one': '+{n} autre',
-    'steam.dl.more.other': '+{n} autres',
+    'steam.dl.more.one': 'et un autre',
+    'steam.dl.more.other': 'et d’autres',
     'steam.dl.openTitle': 'Ouvrir la page de {name}',
 
     'profile.aria': 'Ton profil Steam',
@@ -424,8 +422,6 @@ const messages: Messages = {
     'profile.recent.storeTitle': 'Ouvrir {name} dans le magasin Steam',
     'profile.badges': 'Badges',
     'profile.badges.summary': 'Niveau {level} · {xp} XP',
-    'profile.badges.earned.one': '{n} badge obtenu',
-    'profile.badges.earned.other': '{n} badges obtenus',
     'profile.badges.toNext': 'encore {xp} XP pour le niveau {next}',
     'profile.badges.none': 'Pas encore de badge. Fabrique-en un avec les cartes à échanger d’un jeu, dans Steam.',
     'profile.badges.private': 'Les badges sont cachés par tes paramètres de confidentialité Steam.',

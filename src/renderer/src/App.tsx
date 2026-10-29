@@ -543,7 +543,6 @@ export function App(): React.JSX.Element {
   const canShowAll = useMemo(() => canShowOwned(platforms, library.games), [platforms, library.games])
   const libView: LibraryShow = canShowAll ? libShow : 'installed'
   const viewCounts = useMemo(() => platformCounts(library.games, libView), [library.games, libView])
-  const libCount = useMemo(() => [...viewCounts.values()].reduce((a, b) => a + b, 0), [viewCounts])
   // Jeux de la vue Steam (installés, en téléchargement ou possédés, quelle que soit la vue Installés / Tous)
   const steamTotal = useMemo(() => library.games.filter((g) => g.platform === 'steam' && (onThisPc(g) || g.owned !== false)).length, [library.games])
   // Un filtre par plateforme qui a des jeux (et le filtre actif, même vide) ; rien s'il n'y a qu'une sorte
@@ -681,12 +680,17 @@ export function App(): React.JSX.Element {
     toast('info', t('shell.app.launching'), { detail: g.name })
   }
   const addToLibrary = async (tor: TorrentSummary): Promise<void> => {
-    const exe = await api.pickExe(`${tor.savePath}\\${tor.name}`)
-    if (exe) setGameDialog({ mode: 'add', preset: { name: cleanGameName(tor.name), exePath: exe, installDir: null, torrentId: tor.id } })
+    // programme ou page web (nom du jeu web lu dans sa page par le processus principal)
+    const pick = await api.pickGameFile(`${tor.savePath}\\${tor.name}`)
+    if (pick)
+      setGameDialog({
+        mode: 'add',
+        preset: { name: pick.html ? pick.name : cleanGameName(tor.name), exePath: pick.path, installDir: pick.installDir, torrentId: tor.id }
+      })
   }
   const addManualGame = async (): Promise<void> => {
-    const exe = await api.pickExe()
-    if (exe) setGameDialog({ mode: 'add', preset: { name: '', exePath: exe, installDir: null, torrentId: null } })
+    const pick = await api.pickGameFile()
+    if (pick) setGameDialog({ mode: 'add', preset: { name: pick.name, exePath: pick.path, installDir: pick.installDir, torrentId: null } })
   }
 
   // Pastille à droite du nom (SPEC 5.5) : installateur ouvert → INSTALLATION… ; jeu de la
@@ -1125,7 +1129,6 @@ export function App(): React.JSX.Element {
           view={showTorrents ? 'torrents' : showLaunchers ? 'launchers' : 'library'}
           filter={filter}
           counts={counts}
-          gameCount={libCount}
           playing={Object.keys(library.running).length > 0}
           onFilter={(f) => {
             setFilter(f)

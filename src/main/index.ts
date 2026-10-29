@@ -25,6 +25,7 @@ import type {
 import {
   addGame,
   applyPlatformScans,
+  clearGameSaves,
   defaultGamesFolder,
   forgetSteamOwned,
   hiddenCount,
@@ -36,6 +37,8 @@ import {
   installPlatformGame,
   libraryState,
   openGameFolder,
+  pickFromFolder,
+  pickInfo,
   playGame,
   removeGame,
   restoreHiddenGames,
@@ -43,6 +46,7 @@ import {
   setCoverFromFile,
   steamOwnedCounts,
   stopAllSessions,
+  stopGame,
   uninstallGame,
   uninstallPlan,
   updateGame
@@ -69,6 +73,7 @@ import { getStoreApp, getStoreHome, getStoreList, initSteamStore, searchStore } 
 import { getSteamFriends, getSteamProfile, initSteamProfile } from './steamProfile'
 import { getCommunityArticle, getCommunityNews, getWorkshopGames, getWorkshopItem, getWorkshopPage, initSteamCommunity } from './steamCommunity'
 import { isLang, setLang, t, tn } from '../shared/i18n'
+import { closeAllHtmlGames, initHtmlGames } from './htmlGames'
 import {
   cancelTwitchSignIn,
   getTwitchStreams,
@@ -200,8 +205,11 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 // essaim://cover/<id> et essaim://icon/<id> : images de la bibliothèque.
+// cdgame://game/… : fichiers d'un jeu web, servis seulement dans la session de sa fenêtre (htmlGames.ts).
+// Un seul appel : registerSchemesAsPrivileged ne garde que la dernière liste.
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'essaim', privileges: { standard: true, secure: true, supportFetchAPI: true } }
+  { scheme: 'essaim', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+  { scheme: 'cdgame', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }
 ])
 
 let win: BrowserWindow | null = null
@@ -517,7 +525,8 @@ function syncEngine(): Promise<void> {
   return engineOp
 }
 
-// Quelle que soit la façon de quitter, le moteur enregistre la liste avant de s'arrêter.
+// Quelle que soit la façon de quitter, le moteur enregistre la liste avant de s'arrêter, et les
+// jeux web se ferment proprement (leurs sauvegardes sont écrites sur le disque).
 function quitGracefully(): void {
   if (quitting) return
   quitting = true
@@ -525,7 +534,9 @@ function quitGracefully(): void {
   stopSteamDownloads()
   stopAllSessions()
   if (win && !win.isDestroyed()) win.hide()
-  stopEngine().then(() => app.exit(0))
+  void Promise.all([stopEngine(), closeAllHtmlGames(3000).catch((err) => log(`Fermeture des jeux web : ${(err as Error)?.message ?? err}`))]).then(() =>
+    app.exit(0)
+  )
 }
 
 // ---------- Fenêtre ----------
@@ -583,6 +594,40 @@ function createWindow(): void {
 }
 
 // ---------- IPC ----------
+
+/** Texte venu de l'interface : longueur limitée, jamais de caractère nul. */
+function cleanText(v: unknown, max: number): string | null {
+  if (typeof v !== 'string' || v.length > max || v.includes('\0')) return null
+  return v
+}
+
+/**
+ * Ce que l'interface envoie pour ajouter, modifier ou importer un jeu : champs connus seulement,
+ * types et longueurs vérifiés (exePath vide permis : jeu Steam non installé en modification).
+ */
+function sanitizeGameInput(raw: unknown): GameInput {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const out: GameInput = {
+    name: typeof r.name === 'string' ? r.name.slice(0, 200) : '',
+    exePath: cleanText(r.exePath, 4096) ?? ''
+  }
+  if (r.args !== undefined) out.args = cleanText(r.args, 4096)
+  if (r.installDir !== undefined) out.installDir = cleanText(r.installDir, 4096)
+  if (r.torrentId !== undefined) out.torrentId = cleanText(r.torrentId, 128)
+  if (r.steamAppId !== undefined) {
+    const n = r.steamAppId
+    out.steamAppId = typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 ? n : null
+  }
+  if (r.coverHint !== undefined) {
+    const hint = cleanText(r.coverHint, 2048)
+    out.coverHint = hint && /^https:\/\//i.test(hint) ? hint : null
+  }
+  if (typeof r.htmlNetwork === 'boolean') out.htmlNetwork = r.htmlNetwork
+  return out
+}
+
+/** Erreur traduite pour l'interface (le texte passe tel quel par ipcRenderer.invoke). */
+const ipcError = (err: unknown): Error => new Error((err as Error)?.message ?? String(err))
 
 function registerIpc(): void {
   ipcMain.handle('settings:get', () => settings)
@@ -710,8 +755,8 @@ function registerIpc(): void {
     const t = lastSnapshot?.torrents.find((x) => x.id === torrentId)
     if (t) void installFromTorrent(t)
   })
-  ipcMain.handle('library:add', (_e, input: GameInput) => addGame(input))
-  ipcMain.handle('library:update', (_e, id: string, input: GameInput) => updateGame(id, input))
+  ipcMain.handle('library:add', (_e, input: unknown) => addGame(sanitizeGameInput(input)))
+  ipcMain.handle('library:update', (_e, id: unknown, input: unknown) => updateGame(String(id), sanitizeGameInput(input)))
   // un jeu de plateforme retiré change le nombre de jeux retirés (fenêtre Plateformes, « Remettre »)
   ipcMain.on('library:remove', (_e, id: string) => {
     removeGame(id)
@@ -727,7 +772,10 @@ function registerIpc(): void {
   ipcMain.on('library:open-folder', (_e, id: string) => openGameFolder(id))
   ipcMain.handle('library:search-cover', (_e, id: string) => searchCover(id, true))
   ipcMain.handle('library:scan-folder', (_e, dir: string) => scanGamesFolder(dir))
-  ipcMain.handle('library:import', (_e, inputs: GameInput[]) => importGames(inputs))
+  ipcMain.handle('library:import', (_e, inputs: unknown) => importGames(Array.isArray(inputs) ? inputs.slice(0, 500).map(sanitizeGameInput) : []))
+  // jeu web en cours : « Arrêter » ferme sa fenêtre ; ses sauvegardes s'effacent jeu fermé
+  ipcMain.on('library:stop', (_e, id: unknown) => stopGame(String(id)))
+  ipcMain.handle('library:clear-saves', (_e, id: unknown) => clearGameSaves(String(id)))
   // dossier choisi dans Réglages (s'il existe encore), sinon C:\Games ou Documents
   ipcMain.handle('library:default-folder', () =>
     settings.gamesFolder && fs.existsSync(settings.gamesFolder) ? settings.gamesFolder : defaultGamesFolder()
@@ -754,7 +802,9 @@ function registerIpc(): void {
   ipcMain.on('steam:open-key-page', () => void shell.openExternal('https://steamcommunity.com/dev/apikey'))
 
   ipcMain.handle('library:uninstall-plan', (_e, id: unknown) => uninstallPlan(String(id)))
-  ipcMain.handle('library:uninstall', (_e, id: unknown, removeFromList: unknown) => uninstallGame(String(id), removeFromList === true))
+  ipcMain.handle('library:uninstall', (_e, id: unknown, removeFromList: unknown, deleteSaves: unknown) =>
+    uninstallGame(String(id), removeFromList === true, deleteSaves === true)
+  )
 
   // ---------- Page détaillée d'un jeu et téléchargements Steam ----------
 
@@ -815,15 +865,39 @@ function registerIpc(): void {
   ipcMain.handle('update:check', () => checkUpdates(true))
   ipcMain.on('update:open', () => openReleasePage(update))
 
-  ipcMain.handle('dialog:exe', async (_e, defaultPath?: string) => {
+  // Programme (.exe) ou page web (.html) d'un jeu : nom proposé et dossier calculés ici
+  ipcMain.handle('dialog:game-file', async (_e, defaultPath?: unknown) => {
     const res = await dialog.showOpenDialog(win!, {
-      title: t('main.dialog.exeTitle'),
-      defaultPath,
+      title: t('main.dialog.gameTitle'),
+      defaultPath: typeof defaultPath === 'string' && defaultPath ? defaultPath : undefined,
       // Linux : binaires sans extension, AppImage, scripts : tous les fichiers
-      ...(process.platform === 'win32' ? { filters: [{ name: t('main.dialog.exeFilter'), extensions: ['exe'] }] } : {}),
+      ...(process.platform === 'win32'
+        ? {
+            filters: [
+              { name: t('main.dialog.gameFilter'), extensions: ['exe', 'html', 'htm'] },
+              { name: t('main.dialog.exeFilter'), extensions: ['exe'] },
+              { name: t('main.dialog.htmlFilter'), extensions: ['html', 'htm'] }
+            ]
+          }
+        : {}),
       properties: ['openFile']
     })
-    return res.canceled ? null : res.filePaths[0]
+    return res.canceled || !res.filePaths[0] ? null : pickInfo(res.filePaths[0])
+  })
+
+  // Dossier d'un jeu : son programme, sinon sa page web (erreur traduite si rien)
+  ipcMain.handle('dialog:game-folder', async (_e, defaultPath?: unknown) => {
+    const res = await dialog.showOpenDialog(win!, {
+      title: t('main.dialog.gameFolderTitle'),
+      defaultPath: typeof defaultPath === 'string' && defaultPath ? defaultPath : undefined,
+      properties: ['openDirectory']
+    })
+    if (res.canceled || !res.filePaths[0]) return null
+    try {
+      return await pickFromFolder(res.filePaths[0])
+    } catch (err) {
+      throw ipcError(err)
+    }
   })
 
   ipcMain.handle('dialog:image', async () => {
@@ -905,6 +979,16 @@ app.whenReady().then(() => {
     log(`Plateformes indisponibles : ${(err as Error)?.stack ?? err}`)
   }
   initLaunchers({ log, broadcast: (s) => send('launchers', s) })
+  // jeux web : fenêtre protégée par jeu (liens https ouverts tels quels dans le navigateur,
+  // jamais changés en steam:// comme ceux de openExternalLink)
+  initHtmlGames({
+    log,
+    notice: sendNotice,
+    appIcon: icon,
+    openExternal: (url) => void shell.openExternal(url).catch((err) => log(`Lien d'un jeu web non ouvert : ${(err as Error)?.message ?? err}`)),
+    quiet: !!process.env.CYBERDECK_TEST_QUIET,
+    devTools: !app.isPackaged
+  })
   registerImageProtocol()
   registerIpc()
   createWindow()

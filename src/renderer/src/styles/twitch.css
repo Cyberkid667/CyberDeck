@@ -44,6 +44,14 @@
 .tw-sel svg.i { width: 13px; height: 13px; color: var(--tx-3); }
 .tw-sel select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font: 400 12px var(--font-mono); }
 .tw-sel select option { background: #111; color: var(--tx-1); }
+/* filtre « Chaînes suivies » : bouton à bascule, même cadre que les menus ; allumé = blanc */
+.tw-tog { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r-2); background: var(--bg-1);
+  font: 400 12px/1 var(--font-mono); color: var(--tx-2); white-space: nowrap; cursor: pointer; transition: border-color .12s, background .12s, color .12s; }
+.tw-tog svg.i { width: 13px; height: 13px; color: var(--tx-3); }
+.tw-tog:hover { border-color: var(--line-3); color: var(--tx-1); }
+.tw-tog:focus-visible { box-shadow: var(--focus-ring); }
+.tw-tog.on { border-color: rgba(255,255,255,.6); background: rgba(255,255,255,.08); color: var(--tx-1); }
+.tw-tog.on svg.i { color: var(--tw); fill: var(--tw); }
 
 /* ---------- Choix de la catégorie ---------- */
 .tw-picker { margin: 0 0 16px; padding: 12px; border: 1px solid var(--line-2); border-radius: var(--r-3); background: var(--bg-1); }
@@ -85,6 +93,7 @@
 .tw-tags { display: flex; flex-wrap: wrap; gap: 4px; max-height: 18px; overflow: hidden; }
 .tw-tags .tag { height: 18px; padding: 0 6px; font-size: 10px; color: var(--tx-3); }
 .btn.tw-more { display: flex; margin: 18px auto 0; }
+.tw-note { margin: 14px 0 0; text-align: center; }
 .tw-sk { display: block; aspect-ratio: 16 / 9; border-radius: var(--r-2); }
 .tw-card.sk-card { pointer-events: none; }
 .tw-card.sk-card .sk.line { margin-top: 4px; }
@@ -145,8 +154,14 @@
 .tw-th-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
 .tw-theater.chat .tw-th-body { grid-template-columns: minmax(0, 1fr) 340px; }
 .tw-th-player, .tw-th-chat { position: relative; min-width: 0; min-height: 0; background: #000; }
-.tw-th-chat { border-left: 1px solid var(--line); background: #0e0e10; }
+.tw-th-chat { border-left: 1px solid var(--line); background: #0e0e10; display: flex; flex-direction: column; }
 .tw-theater webview { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+/* chat en lecture seule : dit au-dessus du chat, avec le lien pour écrire sur twitch.tv */
+.tw-chat-note { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; height: 34px; padding: 0 10px 0 12px; border-bottom: 1px solid var(--line); background: var(--bg-0); }
+.tw-chat-note .cap { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tw-chat-note .gd-more { flex: none; }
+.tw-chat-note .gd-more svg.i { width: 12px; height: 12px; }
+.tw-chat-view { position: relative; flex: 1; min-height: 0; }
 @media (max-width: 1279px) { .tw-theater.chat .tw-th-body { grid-template-columns: minmax(0, 1fr) 300px; } }
 @media (max-width: 1099px) {
   .tw-th-title, .tw-th-viewers, .tw-th-tools .tsep:first-of-type { display: none; }

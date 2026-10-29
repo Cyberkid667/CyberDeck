@@ -38,7 +38,7 @@ What works on Linux:
 
 - **Steam**: native, Flatpak and Snap installs (`~/.steam/steam`, `~/.local/share/Steam`, `~/.var/app/com.valvesoftware.Steam`, `~/snap/steam`), every Steam library, native Linux games and Proton games, "In game" and play time, download progress, owned games with your Steam API key, collections. Games start, install and uninstall through Steam (`steam://` links).
 - The **Store, Library, Community and Profile** Steam tabs, game pages and **Twitch**.
-- **Your own games**: add a native program, an AppImage or a `.sh` script with **Add a game**, or import a folder (for example `~/Games`).
+- **Your own games**: add a native program, an AppImage, a `.sh` script or a web game (HTML) with **Add a game**, or import a folder (for example `~/Games`).
 - **Torrents** (optional, off by default). Windows installers (`setup.exe`) found in a torrent can't be run.
 
 Not on Linux: Epic Games, GOG, EA, Ubisoft Connect, Battle.net, Rockstar, Xbox, itch.io, Amazon Games and Riot, and installing launchers with winget. To uninstall Steam, use your package manager (or Flatpak / Snap).
@@ -56,6 +56,7 @@ Your data is in `~/.config/CyberDeck`.
 - **Download progress**: follow a Steam download or update from CyberDeck (progress, speed, time remaining).
 - **Uninstall games**: right-click a game › Uninstall. CyberDeck goes through the game's launcher (Steam…) or its own uninstaller, and never deletes a folder by itself.
 - **Your other games**: add a game by hand, or import a whole folder (for example `D:\Games`) with a review window before anything is added.
+- **Web games**: add an HTML game (an `index.html` file or its folder, for example a Godot, Unity WebGL, RPG Maker or itch.io web export). Each one opens in its own sealed window with its own saves, kept even if you remove the game. Internet is off for the game unless you allow it, and your local network is always out of reach. itch.io web games are added automatically.
 - **Owned Steam games** (optional): with your Steam Web API key, you also see games you own but haven't installed.
 - **Torrents** (optional, off by default): a small torrent client, to enable in Settings. Its peers globe places each peer in its real country: drag to rotate, scroll to zoom, hover a peer for its country, client and speed.
 - **Languages**: English by default, French in Settings › Language.
@@ -83,6 +84,7 @@ A game is missing? Add it by hand with **Add a game**, or open an issue on GitHu
 - **Game pages**: opening a game's page asks the Steam store and news API about that game (its Steam id), or Wikipedia when it isn't on Steam, and loads their images. With your Steam API key, your achievements and your friends list are read from Valve too. Pages are cached in `%APPDATA%\CyberDeck\details`.
 - **Only if you sign in with Twitch**: you approve CyberDeck on twitch.tv in your own browser, so CyberDeck never sees your Twitch password. Twitch then receives the game's name (to find its category) and your Twitch access token with each request; the player and chat come straight from Twitch. The tokens are encrypted on disk by Windows (`%APPDATA%\CyberDeck\twitch.json`) and revoked when you sign out.
 - **Installing a launcher**: CyberDeck asks winget, Windows' package manager, to download the launcher from its official source. Nothing is installed unless you click Install.
+- **Web games** run without internet access unless you tick "Allow internet" for that game; they can never reach your local network, CyberDeck itself or your files outside the game's folder.
 - Other platforms are read **on your PC only**.
 - **Torrents**: as with any torrent client, your IP address is visible to other peers. The peers globe finds each peer's country **offline**, in a database shipped with CyberDeck: peer addresses are never sent anywhere.
 - Everything else (library, settings, log) stays in `%APPDATA%\CyberDeck`.

@@ -1,4 +1,5 @@
-// Petits outils partagés par les modules de plateformes (sans Electron).
+// Petits outils partagés par les modules de plateformes (sans Electron ; verdictFiles est testé
+// par tests/tools/html-checks.mjs).
 import fs from 'node:fs'
 import path from 'node:path'
 import type { GamePlatform, PlatformSkipReason } from '../../shared/types'
@@ -161,6 +162,42 @@ export function largestExeSync(root: string, maxDepth = 3): string | null {
   }
   walk(root, 0)
   return (best as { p: string } | null)?.p ?? null
+}
+
+/** Candidat du verdict de butler (itch.io) : fichier lançable trouvé dans le dossier du jeu. */
+interface VerdictCandidate {
+  path?: unknown
+  flavor?: unknown
+  arch?: unknown
+  depth?: unknown
+}
+
+/**
+ * Fichiers du verdict de butler (JSON de la base d'itch) dont la « flavor » correspond (windows…,
+ * html), du moins profond au plus profond, amd64 d'abord. Un chemin qui remonte (« .. ») ou sort
+ * du dossier du jeu est refusé ; seuls les fichiers existants sont gardés.
+ */
+export function verdictFiles(installDir: string, verdict: unknown, flavor: RegExp): string[] {
+  let v: { candidates?: unknown } | null = null
+  try {
+    v = typeof verdict === 'string' && verdict ? JSON.parse(verdict) : null
+  } catch {
+    v = null
+  }
+  const raw = Array.isArray(v?.candidates) ? (v!.candidates as VerdictCandidate[]) : []
+  const list = raw.filter((c) => !!c && typeof c.path === 'string' && c.path && flavor.test(String(c.flavor ?? '')))
+  const depth = (c: VerdictCandidate): number => (typeof c.depth === 'number' ? c.depth : 9)
+  list.sort((a, b) => (a.arch === 'amd64' ? 0 : 1) - (b.arch === 'amd64' ? 0 : 1) || depth(a) - depth(b))
+  const base = normDir(installDir)
+  const out: string[] = []
+  for (const c of list) {
+    const segs = (c.path as string).split(/[\\/]/).filter(Boolean)
+    if (!segs.length || segs.some((s) => s === '..')) continue
+    const p = path.join(installDir, ...segs)
+    if (!normDir(p).startsWith(base + (isWindows() ? '\\' : '/'))) continue
+    if (isFile(p) && !out.includes(p)) out.push(p)
+  }
+  return out
 }
 
 export const env = (name: string, fallback: string): string => process.env[name] || fallback

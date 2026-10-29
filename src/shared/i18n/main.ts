@@ -12,8 +12,12 @@ const messages: Messages = {
     'main.dialog.torrentTitle': 'Choose a .torrent file',
     'main.dialog.torrentFilter': 'Torrent files',
     'main.dialog.folderTitle': 'Destination folder',
-    'main.dialog.exeTitle': 'Choose the game’s program',
+    'main.dialog.gameTitle': 'Choose the game (program or web page)',
+    'main.dialog.gameFilter': 'Games (.exe, .html)',
     'main.dialog.exeFilter': 'Programs',
+    'main.dialog.htmlFilter': 'Web pages (.html)',
+    'main.dialog.gameFolderTitle': 'Choose the game’s folder',
+    'main.dialog.saveFromGame': 'Save a file from {name}',
     'main.dialog.imageTitle': 'Choose a cover',
     'main.dialog.imageFilter': 'Images',
 
@@ -44,8 +48,8 @@ const messages: Messages = {
     'main.engine.trackerNoReply': 'No response',
     'main.engine.clientError': 'Engine error: {message}',
     'main.engine.actionFailed': 'Action failed: {message}',
-    'main.trash.failed.one': '{n} file couldn’t be moved to the Recycle Bin.',
-    'main.trash.failed.other': '{n} files couldn’t be moved to the Recycle Bin.',
+    'main.trash.failed.one': 'A file couldn’t be moved to the Recycle Bin.',
+    'main.trash.failed.other': 'Some files couldn’t be moved to the Recycle Bin.',
 
     // ---------- Page détaillée d'un jeu ----------
     'main.details.offline': 'You’re offline: showing the info saved last time.',
@@ -75,8 +79,27 @@ const messages: Messages = {
     'main.install.steamNoReply': 'Steam isn’t responding: {message}',
 
     // ---------- Ajouter, modifier un jeu ----------
-    'main.game.chooseExe': 'Choose an .exe program.',
+    'main.game.chooseExe': 'Choose an .exe program or an .html page.',
     'main.game.exeNotFound': 'Program not found: {path}',
+    'main.game.pageNotFound': 'Page not found: {path}',
+    'main.game.folderNoGame':
+      'No game found in this folder (no program and no index.html page). If the game is a .zip file, extract it first.',
+    'main.game.htmlFolderRefused':
+      'A web game can’t be given access to this folder ({path}). Put the game in a folder of its own, then add it again.',
+
+    // ---------- Jeux web (fenêtre CyberDeck) ----------
+    'main.html.loadFailed': 'the game’s page didn’t load ({error})',
+    'main.html.crashed': '{name} stopped unexpectedly.',
+    'main.html.netBlocked':
+      '{name} tried to use the internet, which is off for this game. To allow it: Edit… › Allow internet access, then restart the game.',
+    'main.html.downloadBlocked': '{name} tried to save a file that could run programs on this PC ({file}). It was blocked.',
+    'main.html.savesRunning': 'Close {name} before deleting its saves.',
+    'main.game.closeBeforeEdit': 'Close {name} before changing its program or page.',
+    'main.html.savesFailed': 'The saves couldn’t be deleted ({error}).',
+    'main.html.leaveTitle': 'Leave {name}?',
+    'main.html.leaveDetail': 'The game says some progress may not be saved yet.',
+    'main.html.leave': 'Leave',
+    'main.html.stay': 'Keep playing',
 
     // ---------- Lancer un jeu ----------
     'main.play.failed': 'Can’t launch the game: {error}',
@@ -93,6 +116,7 @@ const messages: Messages = {
     'main.play.alreadyRunning': '{name} is already running.',
     'main.play.exeMissing': 'Program not found: {path}. Click Edit to choose the right .exe.',
     'main.play.notInstalled': '{name} isn’t installed.',
+    'main.play.pageMissing': 'The game’s page can’t be found: {path}',
     'main.play.notInstalledSteam': '{name} isn’t installed. Click Install.',
     'main.play.launcherMissing': 'The {platform} launcher can’t be found: install it or run platform detection again.',
     'main.play.protocolMissing': '{platform} isn’t installed on this PC (Windows doesn’t know the {scheme}: address).',
@@ -120,8 +144,8 @@ const messages: Messages = {
     'main.steam.cantEncryptNotSaved': 'Windows can’t encrypt the key on this PC: it wasn’t saved.',
     'main.steam.keyUnreadable': 'The saved key can’t be read on this PC: save it again.',
     'main.steam.checking': 'Reading the list of owned games…',
-    'main.steam.ownedSummary.one': '{n} game owned ({notInstalled} not installed on this PC).',
-    'main.steam.ownedSummary.other': '{n} games owned, {notInstalled} of them not installed on this PC.',
+    'main.steam.ownedSummary.one': 'Owned game read from your Steam account.',
+    'main.steam.ownedSummary.other': 'Owned games read from your Steam account.',
     'main.steam.noKey': 'No key saved.',
     'main.steam.keyFormat': 'A Steam key is 32 characters long (digits and letters A to F).',
     'main.steam.accountNotFound': 'Steam account not found on this PC.',
@@ -132,8 +156,8 @@ const messages: Messages = {
     'main.steam.noGames': 'No games on this account.',
     'main.steam.private':
       'This account’s game details are private: in Steam, go to Profile › Edit Profile › Privacy Settings and set “Game details” to Public.',
-    'main.steam.gameCount.one': '{n} game or app on this account.',
-    'main.steam.gameCount.other': '{n} games and apps on this account.',
+    'main.steam.gameCount.one': 'A game or app found on this account.',
+    'main.steam.gameCount.other': 'Games and apps found on this account.',
 
     // ---------- Lecture des plateformes ----------
     'main.scan.failed': 'Read failed: {error}',
@@ -198,8 +222,12 @@ const messages: Messages = {
     'main.dialog.torrentTitle': 'Choisir un fichier .torrent',
     'main.dialog.torrentFilter': 'Fichiers torrent',
     'main.dialog.folderTitle': 'Dossier de destination',
-    'main.dialog.exeTitle': 'Choisir le programme du jeu',
+    'main.dialog.gameTitle': 'Choisir le jeu (programme ou page web)',
+    'main.dialog.gameFilter': 'Jeux (.exe, .html)',
     'main.dialog.exeFilter': 'Programmes',
+    'main.dialog.htmlFilter': 'Pages web (.html)',
+    'main.dialog.gameFolderTitle': 'Choisir le dossier du jeu',
+    'main.dialog.saveFromGame': 'Enregistrer un fichier de {name}',
     'main.dialog.imageTitle': 'Choisir une jaquette',
     'main.dialog.imageFilter': 'Images',
 
@@ -230,8 +258,8 @@ const messages: Messages = {
     'main.engine.trackerNoReply': 'Pas de réponse',
     'main.engine.clientError': 'Erreur du moteur : {message}',
     'main.engine.actionFailed': 'Action impossible : {message}',
-    'main.trash.failed.one': '{n} fichier n’a pas pu aller à la corbeille.',
-    'main.trash.failed.other': '{n} fichiers n’ont pas pu aller à la corbeille.',
+    'main.trash.failed.one': 'Un fichier n’a pas pu aller à la corbeille.',
+    'main.trash.failed.other': 'Des fichiers n’ont pas pu aller à la corbeille.',
 
     // ---------- Page détaillée d'un jeu ----------
     'main.details.offline': 'Hors ligne : voici les infos enregistrées la dernière fois.',
@@ -261,8 +289,28 @@ const messages: Messages = {
     'main.install.steamNoReply': 'Steam ne répond pas : {message}',
 
     // ---------- Ajouter, modifier un jeu ----------
-    'main.game.chooseExe': 'Choisis un programme .exe.',
+    'main.game.chooseExe': 'Choisis un programme .exe ou une page .html.',
     'main.game.exeNotFound': 'Programme introuvable : {path}',
+    'main.game.pageNotFound': 'Page introuvable : {path}',
+    'main.game.folderNoGame':
+      'Aucun jeu trouvé dans ce dossier (ni programme ni page index.html). Si le jeu est un fichier .zip, décompresse-le d’abord.',
+    'main.game.htmlFolderRefused':
+      'Un jeu web ne peut pas avoir accès à ce dossier ({path}). Range le jeu dans un dossier à lui, puis ajoute-le de nouveau.',
+
+    // ---------- Jeux web (fenêtre CyberDeck) ----------
+    'main.html.loadFailed': 'la page du jeu ne s’est pas chargée ({error})',
+    'main.html.crashed': '{name} s’est arrêté brusquement.',
+    'main.html.netBlocked':
+      '{name} a essayé d’utiliser Internet, coupé pour ce jeu. Pour l’autoriser : Modifier… › Autoriser l’accès à Internet, puis relance le jeu.',
+    'main.html.downloadBlocked':
+      '{name} a essayé d’enregistrer un fichier qui pourrait lancer des programmes sur ce PC ({file}). C’est bloqué.',
+    'main.html.savesRunning': 'Ferme {name} avant de supprimer ses sauvegardes.',
+    'main.game.closeBeforeEdit': 'Ferme {name} avant de changer son programme ou sa page.',
+    'main.html.savesFailed': 'Les sauvegardes n’ont pas pu être supprimées ({error}).',
+    'main.html.leaveTitle': 'Quitter {name} ?',
+    'main.html.leaveDetail': 'Le jeu indique qu’une partie de la progression n’est peut-être pas encore enregistrée.',
+    'main.html.leave': 'Quitter',
+    'main.html.stay': 'Continuer à jouer',
 
     // ---------- Lancer un jeu ----------
     'main.play.failed': 'Impossible de lancer le jeu : {error}',
@@ -280,6 +328,7 @@ const messages: Messages = {
     'main.play.alreadyRunning': '{name} est déjà lancé.',
     'main.play.exeMissing': 'Programme introuvable : {path}. Clique sur Modifier pour choisir le bon .exe.',
     'main.play.notInstalled': '{name} n’est pas installé.',
+    'main.play.pageMissing': 'La page du jeu est introuvable : {path}',
     'main.play.notInstalledSteam': '{name} n’est pas installé. Clique sur Installer.',
     'main.play.launcherMissing': 'Le lanceur {platform} est introuvable : installe-le ou relance la détection des plateformes.',
     'main.play.protocolMissing': '{platform} n’est pas installé sur ce PC (adresse {scheme}: inconnue de Windows).',
@@ -307,8 +356,8 @@ const messages: Messages = {
     'main.steam.cantEncryptNotSaved': 'Windows ne peut pas chiffrer la clé sur ce PC : elle n’est pas enregistrée.',
     'main.steam.keyUnreadable': 'La clé enregistrée ne peut pas être relue sur ce PC : enregistre-la à nouveau.',
     'main.steam.checking': 'Lecture de la liste des jeux possédés…',
-    'main.steam.ownedSummary.one': '{n} jeu possédé, dont {notInstalled} pas installé sur ce PC.',
-    'main.steam.ownedSummary.other': '{n} jeux possédés, dont {notInstalled} pas installés sur ce PC.',
+    'main.steam.ownedSummary.one': 'Jeu possédé lu sur ton compte Steam.',
+    'main.steam.ownedSummary.other': 'Jeux possédés lus sur ton compte Steam.',
     'main.steam.noKey': 'Aucune clé enregistrée.',
     'main.steam.keyFormat': 'Une clé Steam fait 32 caractères (chiffres et lettres A à F).',
     'main.steam.accountNotFound': 'Compte Steam introuvable sur ce PC.',
@@ -319,8 +368,8 @@ const messages: Messages = {
     'main.steam.noGames': 'Aucun jeu sur ce compte.',
     'main.steam.private':
       'Le détail des jeux de ce compte est privé : dans Steam, Profil › Modifier › Confidentialité, mets « Détails des jeux » sur Public.',
-    'main.steam.gameCount.one': '{n} jeu ou application sur ce compte.',
-    'main.steam.gameCount.other': '{n} jeux et applications sur ce compte.',
+    'main.steam.gameCount.one': 'Un jeu ou une application trouvé sur ce compte.',
+    'main.steam.gameCount.other': 'Jeux et applications trouvés sur ce compte.',
 
     // ---------- Lecture des plateformes ----------
     'main.scan.failed': 'Lecture impossible : {error}',

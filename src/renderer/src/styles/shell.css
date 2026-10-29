@@ -85,15 +85,13 @@ body.side-closing .sidebar { opacity: .35; transition: opacity .12s; }
 .nav svg.i { color: var(--tx-3); transition: color .12s; }
 /* line-height plus haut que la police : overflow hidden rognait les jambages (g de « Réglages », j, p) */
 .nav .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; }
-.nav .count { margin-left: auto; font: 400 11px/1 var(--font-mono); color: var(--tx-3); }
 .nav:hover { background: rgba(255,255,255,.045); color: var(--tx-1); }
 .nav:hover svg.i { color: var(--tx-1); }
 .nav:focus-visible { box-shadow: var(--focus-ring); }
 .nav.on { color: var(--tx-1); background: linear-gradient(90deg, rgba(255,255,255,.095), rgba(255,255,255,.018)); }
-.nav.on svg.i, .nav.on .count { color: var(--tx-1); }
+.nav.on svg.i { color: var(--tx-1); }
 .nav.on::before { content: ''; position: absolute; left: -10px; top: 9px; bottom: 9px; width: 2px; border-radius: 0 2px 2px 0; background: #fff; box-shadow: var(--glow-sm); }
 .nav .live-dot { margin-left: auto; }
-.nav .live-dot + .count { margin-left: 10px; }
 .side-gap { height: 18px; flex: none; }
 .side-fill { flex: 1; min-height: 12px; }
 /* Liste de navigation : défile si la fenêtre est trop basse (barre invisible, fondu en bas tant qu'il en reste).
@@ -135,16 +133,14 @@ body.side-closing .sidebar { opacity: .35; transition: opacity .12s; }
   .side-sec .cap { display: none; }
   .nav { width: 46px; height: 46px; padding: 0; flex-direction: column; justify-content: center; gap: 4px; }
   .nav .label { display: none; }
-  .nav .count { margin: 0; font-size: 10px; }
   .nav.on::before { left: -7px; }
   .nav .live-dot { position: absolute; top: 6px; right: 8px; margin: 0; width: 5px; height: 5px; }
-  .nav .live-dot + .count { margin: 0; }
   .scope { display: none; }
   .side-nav { align-self: stretch; align-items: center; margin: -4px -7px 0; padding: 4px 7px; }
-  /* plateformes : logo seul, nom et nombre dans la bulle */
+  /* plateformes : logo seul, nom dans la bulle */
   .side-tree { align-items: center; margin: 0 0 2px; }
   .nav.sub { width: 46px; height: 34px; margin-bottom: 2px; padding: 0; flex-direction: row; justify-content: center; gap: 0; }
-  .nav.sub .label, .nav.sub .count { display: none; }
+  .nav.sub .label { display: none; }
   .nav.sub svg.plogo { width: 20px; height: 20px; }
   .nav.sub.on::before { left: -7px; top: 8px; bottom: 8px; }
   .plat-nav { margin-top: 4px; }

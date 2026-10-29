@@ -12,9 +12,7 @@
 /* ---------- Barre d'outils ---------- */
 .lch-toolbar { gap: 10px; }
 .lch-toolbar .tsep { margin: 0 6px; }
-.lch-count { white-space: nowrap; padding: 0 12px 0 0; font: 400 12px/1 var(--font-mono); color: var(--tx-2); }
 .lch-resync { height: 28px; }
-@media (max-width: 899px) { .lch-count { display: none; } }
 
 /* ---------- Zone qui défile (même trame que la bibliothèque) ---------- */
 .lch { flex: 1; min-height: 0; overflow: auto; overflow-x: hidden; scrollbar-gutter: stable; outline: none; position: relative;

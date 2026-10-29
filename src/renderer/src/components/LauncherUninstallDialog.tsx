@@ -50,9 +50,7 @@ export function LauncherUninstallDialog({ id, name, uninstallKind, gameCount, on
             <span className="nm ell" title={name}>
               {name}
             </span>
-            <span className="mono">
-              {gameCount} {tn('library.games.word', gameCount)}
-            </span>
+            {gameCount > 0 && <span className="mono">{t('library.launchers.confirm.gamesTag')}</span>}
           </li>
         </ul>
         <div className={`banner lch-warn${gameCount ? ' hot' : ''}`} data-testid="launcher-confirm-games">

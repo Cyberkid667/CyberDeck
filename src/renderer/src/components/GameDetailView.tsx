@@ -1,4 +1,5 @@
 import {
+  AppWindow,
   ArrowLeft,
   ArrowUpRight,
   Download,
@@ -12,13 +13,14 @@ import {
   Pencil,
   Play,
   RefreshCw,
+  Square,
   Trophy,
   TriangleAlert,
   UserRound
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { t } from '../../../shared/i18n'
-import { gameLastPlayedAt, gamePlayTimeSeconds } from '../../../shared/platforms'
+import { gameLastPlayedAt, gamePlayTimeSeconds, isHtmlGame } from '../../../shared/platforms'
 import type { DownloadProgress, Game, GameAchievement, GameDetails, GameFriend, GameLink, PlatformsState } from '../../../shared/types'
 import { errorText, formatClock, formatDay, formatLastPlayed, formatPercent, formatPlayTime, formatWhen, percentVar } from '../format'
 import { useT } from '../i18n'
@@ -76,6 +78,38 @@ const FRIENDS_MAX = 18
 /** Contenus additionnels listés. */
 const DLC_MAX = 6
 
+/**
+ * Jeu web en cours : « Afficher » (sa fenêtre au premier plan, via playGame que le processus
+ * principal transforme en mise au premier plan) et « Arrêter » (ferme sa fenêtre).
+ */
+export function HtmlLiveButtons({ game: g, prefix }: { game: Game; prefix: 'hero' | 'detail' }): React.JSX.Element {
+  const { t } = useT()
+  return (
+    <>
+      <button
+        type="button"
+        className="btn btn-line"
+        data-testid={`${prefix}-show`}
+        title={t('library.hero.showTitle', { name: g.name })}
+        onClick={() => window.essaim.playGame(g.id)}
+      >
+        <AppWindow />
+        <span className="lbl">{t('library.common.show')}</span>
+      </button>
+      <button
+        type="button"
+        className="btn btn-line"
+        data-testid={`${prefix}-stop`}
+        title={t('library.hero.stopTitle', { name: g.name })}
+        onClick={() => window.essaim.stopGame(g.id)}
+      >
+        <Square />
+        <span className="lbl">{t('library.common.stop')}</span>
+      </button>
+    </>
+  )
+}
+
 /** Ouvre un lien de la page (le processus principal n'accepte que http(s) et les protocoles des lanceurs). */
 function openLink(url: string): void {
   try {
@@ -106,17 +140,15 @@ function Img({ src, className, alt = '', fallback = null }: { src: string | null
   return <img className={className} src={src} alt={alt} loading="lazy" decoding="async" draggable={false} referrerPolicy="no-referrer" onError={() => setFailed(src)} />
 }
 
-/** En-tête d'un encart : légende, compteur, filet terminé par un petit trait, action à droite. */
+/** En-tête d'un encart : légende, filet terminé par un petit trait, action à droite (aucun compteur). */
 function Panel({
   title,
-  count,
   action,
   className = '',
   testId,
   children
 }: {
   title: string
-  count?: React.ReactNode
   action?: React.ReactNode
   className?: string
   testId?: string
@@ -126,7 +158,6 @@ function Panel({
     <section className={`gd-panel${className ? ` ${className}` : ''}`} data-testid={testId}>
       <header className="gd-ph">
         <h3 className="cap">{title}</h3>
-        {count !== undefined && <span className="cap n">{count}</span>}
         <span className="rule" />
         {action}
       </header>
@@ -240,13 +271,13 @@ function Achievements({ data, link }: { data: NonNullable<GameDetails['achieveme
   return (
     <Panel
       title={t('library.details.achievements')}
-      count={`${data.unlocked} / ${data.total}`}
       className="gd-ach"
       testId="detail-achievements"
       action={link ? <MoreLink url={link.url} label={t('library.details.achAll')} /> : undefined}
     >
       <div className="gd-ach-sum">
-        <span className="v">{t('library.details.achUnlocked', { n: data.unlocked, total: data.total })}</span>
+        {/* barre de progression et pourcentage seulement, sans « x sur y » */}
+        <span className="v">{t('library.details.achProgress')}</span>
         <span className="pct">{formatPercent(p)}</span>
       </div>
       <div className="gd-meter">
@@ -261,12 +292,12 @@ function Achievements({ data, link }: { data: NonNullable<GameDetails['achieveme
           ))}
           {rest > 0 &&
             (link ? (
-              <button type="button" className="ach more" title={t('library.details.achMoreTitle', { n: rest })} onClick={() => openLink(link.url)}>
-                +{rest}
+              <button type="button" className="ach more" title={t('library.details.achMoreTitle')} onClick={() => openLink(link.url)}>
+                …
               </button>
             ) : (
-              <span className="ach more" title={t('library.details.achMoreTitle', { n: rest })}>
-                +{rest}
+              <span className="ach more" title={t('library.details.achMoreTitle')}>
+                …
               </span>
             ))}
         </div>
@@ -284,7 +315,7 @@ function Avatar({ friend, size = 'md' }: { friend: GameFriend; size?: 'md' | 'sm
 }
 
 function Friends({ data }: { data: NonNullable<GameDetails['friends']> }): React.JSX.Element {
-  const { t, tn } = useT()
+  const { t } = useT()
   const played = data.played.slice(0, FRIENDS_MAX)
   const rest = data.played.length - played.length
   return (
@@ -293,7 +324,6 @@ function Friends({ data }: { data: NonNullable<GameDetails['friends']> }): React
         <p className="gd-quiet">{t('library.details.friendsNone')}</p>
       ) : (
         <>
-          <p className="gd-friends-sum">{tn('library.details.friendsCount', data.total)}</p>
           {data.playingNow.length > 0 && (
             <div className="gd-fgroup">
               <span className="cap">{t('library.details.friendsPlayingNow')}</span>
@@ -539,6 +569,7 @@ export function GameDetailView({
           {h}:{m}
           <span className="s">:{s}</span>
         </span>
+        {isHtmlGame(g) && <HtmlLiveButtons game={g} prefix="detail" />}
       </div>
     )
   else if (state === 'launching' || state === 'downloading')
@@ -653,6 +684,11 @@ export function GameDetailView({
           <div className="gd-hero-body">
             <div className="gd-hero-cap">
               <PlatformTag platform={g.platform} />
+              {isHtmlGame(g) && (
+                <span className="cap" data-testid="detail-web-game">
+                  {t('library.details.webGame')}
+                </span>
+              )}
               {details?.releaseDate && <span className="cap">{details.releaseDate}</span>}
             </div>
             <h1 className={`gd-name${logoUrl ? ' logo' : ''}`} title={g.name}>

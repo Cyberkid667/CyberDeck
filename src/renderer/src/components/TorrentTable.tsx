@@ -70,7 +70,7 @@ interface Props {
   selected: Set<string>
   /** ligne dont on voit les détails */
   focusId?: string | null
-  /** nombre total de torrents (pied « 03 TORRENTS SUR 8 » ; 0 = liste vide : ni repères ni pied) */
+  /** nombre total de torrents (0 = liste vide : ni repères ni pied) */
   total?: number
   /** recherche en cours (texte nettoyé) */
   query?: string
@@ -107,7 +107,7 @@ function actionSig(node: ReactNode): string {
 }
 
 export function TorrentTable(p: Props): React.JSX.Element {
-  const { t, tn, locale } = useT()
+  const { t, locale } = useT()
   const handlers = useRef<RowHandlers>(p)
   useLayoutEffect(() => {
     handlers.current = p
@@ -116,8 +116,6 @@ export function TorrentTable(p: Props): React.JSX.Element {
 
   const total = p.total ?? p.torrents.length
   const count = p.torrents.length
-  const filtered = !!p.query || (p.filter !== undefined && p.filter !== 'all')
-  const nSel = p.selected.size
 
   // Flèches haut / bas (+ Maj pour étendre), Début / Fin : même effet qu'un clic sur la ligne ;
   // Entrée ouvre le dossier (comme un double-clic).
@@ -211,12 +209,7 @@ export function TorrentTable(p: Props): React.JSX.Element {
         {total > 0 && (
           <>
             <div className="tfoot">
-              <b>{count}</b>
-              {`${tn('shell.table.foot.torrents', count)}${filtered ? t('shell.table.foot.of', { total }) : ''}`}
-              <span className="dot">·</span>
-              <b>{nSel}</b>
-              {tn('shell.table.foot.selected', nSel)}
-              <span className="dot">·</span>
+              {/* aucun compteur (choix de l'utilisateur) : seulement le tri */}
               {t('shell.table.foot.sort')}
               <b>
                 {t(`shell.table.sort.${p.sort.key}`)} {p.sort.dir === 1 ? '↑' : '↓'}

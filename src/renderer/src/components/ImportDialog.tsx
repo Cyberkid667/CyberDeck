@@ -10,7 +10,7 @@ import { CheckMark, DialogFrame, DialogHead } from './AddDialog'
 // Chaque ligne : case (cochée par défaut pour un jeu qui n'est pas déjà dans la
 // bibliothèque), nom modifiable, menu du programme à lancer, nom du dossier,
 // étiquette (déjà dans la bibliothèque, outil ou émulateur, installateur, aucun
-// programme). Pied : compteur + Importer.
+// programme, jeu web). Pied : compteur + Importer.
 
 interface Row extends ScanCandidate {
   checked: boolean
@@ -44,6 +44,8 @@ function Tag({ row }: { row: Row }): React.JSX.Element | null {
         {t('library.import.tagNoExe')}
       </span>
     )
+  // page .html : jeu web, joué dans une fenêtre CyberDeck
+  if (row.exePath && /\.html?$/i.test(row.exePath)) return <span className="tag">{t('library.import.tagWeb')}</span>
   return null
 }
 
@@ -86,7 +88,8 @@ export function ImportDialog({ onClose, onToast }: Props): React.JSX.Element {
   }
 
   async function chooseExe(i: number, row: Row): Promise<void> {
-    const exe = await window.essaim.pickExe(row.folder)
+    const pick = await window.essaim.pickGameFile(row.folder)
+    const exe = pick?.path
     if (exe) update(i, { exePath: exe, exeOptions: [exe, ...row.exeOptions.filter((o) => o !== exe)], checked: true })
   }
 
@@ -123,9 +126,6 @@ export function ImportDialog({ onClose, onToast }: Props): React.JSX.Element {
       <div className="field">
         <div className="lab">
           <span className="cap">{t('library.import.folderLabel')}</span>
-          {rows && (
-            <span className="cap">{tn('library.import.subfolders', rows.length)}</span>
-          )}
         </div>
         <div className="path-row">
           <input
@@ -218,7 +218,7 @@ export function ImportDialog({ onClose, onToast }: Props): React.JSX.Element {
 
       <div className="dfoot">
         <span className="cap count" aria-live="polite">
-          {rows ? (n ? tn('library.import.selected', n) : t('library.import.noneSelected')) : ''}
+          {rows && !n ? t('library.import.noneSelected') : ''}
         </span>
         <button type="button" className="btn btn-line" disabled={busy} data-testid="dialog-cancel" onClick={onClose}>
           {t('library.common.cancel')}

@@ -133,9 +133,10 @@
 .prf-private svg.big { width: 22px; height: 22px; color: var(--tx-2); stroke-width: 1.25; }
 .prf-private h4 { margin: 0; font: 400 16px/1.3 var(--font-mono); letter-spacing: -0.01em; color: var(--tx-1); }
 .prf-private p { margin: 0; font: 400 12.5px/1.5 var(--font-sans); color: var(--tx-2); }
-.prf-private ol { margin: 2px 0 8px; padding: 0; list-style: none; counter-reset: st; display: flex; flex-direction: column; gap: 6px; }
-.prf-private li { counter-increment: st; display: flex; gap: 10px; align-items: baseline; font: 500 11.5px/1.35 var(--font-mono); color: var(--tx-1); }
-.prf-private li::before { content: counter(st); flex: none; display: grid; place-items: center; width: 18px; height: 18px; border: 1px solid var(--line-3); border-radius: 50%; font-size: 10px; color: var(--tx-2); }
+.prf-private ol { margin: 2px 0 8px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.prf-private li { display: flex; gap: 10px; align-items: baseline; font: 500 11.5px/1.35 var(--font-mono); color: var(--tx-1); }
+/* petite pastille à la place d'un numéro d'étape (aucune numérotation) */
+.prf-private li::before { content: ''; flex: none; align-self: center; width: 5px; height: 5px; border-radius: 50%; background: var(--tx-3); }
 
 /* ---------- Panneaux calmes : pas de clé, pas de compte, erreur ---------- */
 .prf-calm { flex: 1; display: grid; place-items: center; min-height: 0; overflow: auto; padding: 24px; position: relative;
