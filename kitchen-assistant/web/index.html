@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Cuistot</title>
+  <meta name="theme-color" content="#1d2b30">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Cuistot">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="brand-name" id="assistantName">Cuistot</span>
+      <span class="brand-sub" id="listTitle">Liste de courses</span>
+    </div>
+    <button class="icon-btn" id="settingsBtn" aria-label="Réglages" aria-expanded="false" aria-controls="settings">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1l-.4-2.6h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L4.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>
+    </button>
+  </header>
+
+  <section class="settings" id="settings" hidden>
+    <label class="row">
+      <span>Mode mains libres<small>Écoute en continu le mot d'activation. Marche mieux sur Android / Chrome.</small></span>
+      <input type="checkbox" id="handsFree">
+    </label>
+    <label class="row">
+      <span>Mot d'activation</span>
+      <input type="text" id="wakeWord" autocomplete="off" spellcheck="false">
+    </label>
+    <label class="row">
+      <span>Voix</span>
+      <select id="voiceSelect"></select>
+    </label>
+    <label class="row">
+      <span>Jeton d'accès<small>Seulement si le serveur en demande un (ASSISTANT_TOKEN).</small></span>
+      <input type="password" id="tokenInput" autocomplete="off">
+    </label>
+  </section>
+
+  <main class="layout">
+    <section class="talk">
+      <button class="mic" id="micBtn" aria-label="Parler">
+        <span class="ring"></span>
+        <svg viewBox="0 0 24 24" width="64" height="64" aria-hidden="true"><path fill="currentColor" d="M12 14.5a3.5 3.5 0 0 0 3.5-3.5V5a3.5 3.5 0 1 0-7 0v6a3.5 3.5 0 0 0 3.5 3.5zm6-3.5a6 6 0 0 1-12 0H4.2a7.8 7.8 0 0 0 6.9 7.7V22h1.8v-3.3a7.8 7.8 0 0 0 6.9-7.7z"/></svg>
+      </button>
+      <p class="status" id="status" aria-live="polite">Appuie et parle</p>
+      <p class="interim" id="interim"></p>
+
+      <ol class="chat" id="chat" aria-live="polite"></ol>
+
+      <form class="type" id="typeForm" autocomplete="off">
+        <input type="text" id="typeInput" placeholder="Ou écris : y'a plus de beurre" enterkeyhint="send">
+        <button type="submit" class="icon-btn" aria-label="Envoyer">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M3 20.5 21 12 3 3.5v6.6l12 1.9-12 1.9z"/></svg>
+        </button>
+      </form>
+    </section>
+
+    <section class="list">
+      <h2><span>À acheter</span> <span class="count" id="count"></span></h2>
+      <ul id="items"></ul>
+      <p class="empty" id="empty" hidden>La liste est vide.</p>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
